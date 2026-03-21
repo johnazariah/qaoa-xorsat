@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "QAOA-XORSAT: Exact QAOA Performance on D-Regular Max-k-XORSAT"
+authors:
+  - family-names: Azariah
+    given-names: "John S"
+    orcid: "https://orcid.org/0009-0007-9870-1970"
+    affiliation: "Centre for Quantum Software and Information, School of Computer Science, Faculty of Engineering & Information Technology, University of Technology Sydney, NSW 2007, Australia"
+    email: "john.azariah@student.uts.edu.au"
+version: 0.1.0
+date-released: 2026-03-21
+license: MIT
+repository-code: https://github.com/johnazariah/qaoa-xorsat
+keywords:
+  - quantum computing
+  - QAOA
+  - quantum approximate optimization algorithm
+  - XORSAT
+  - tensor network
+  - Julia
+type: software

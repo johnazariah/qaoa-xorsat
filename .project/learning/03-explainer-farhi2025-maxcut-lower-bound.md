@@ -14,7 +14,7 @@ Key facts:
 - They compute **exact** QAOA performance, with no $O(1/D)$ approximations
 - They push to $p=17$ on 3-regular MaxCut using clever tensor network contraction
 - Their code is written in C++ with OpenMP parallelisation and the Eigen/LBFGS++ libraries
-- The computational cost scales as $O(4^p)$ in both time and space, **independent of $D$**
+- The computational cost scales as $O(p \cdot 4^p)$ time, $O(4^p)$ space, **independent of $D$**
 
 ---
 
@@ -24,16 +24,32 @@ They compute $\tilde{c}_{\text{edge}}(p)$ — the optimal QAOA cut fraction — 
 
 | $p$ | $\tilde{c}_{\text{edge}}(p)$ | Required girth $g$ |
 |-----|------------------------------|---------------------|
-| 1   | 0.7500                       | $\geq 4$            |
-| 5   | 0.8333                       | $\geq 12$           |
-| 7   | 0.8536                       | $\geq 16$           |
-| 11  | 0.8765                       | $\geq 24$           |
-| 15  | 0.8914                       | $\geq 32$           |
+| 1   | 0.6924                       | $\geq 4$            |
+| 2   | 0.7559                       | $\geq 6$            |
+| 3   | 0.7923                       | $\geq 8$            |
+| 4   | 0.8168                       | $\geq 10$           |
+| 5   | 0.8363                       | $\geq 12$           |
+| 6   | 0.8498                       | $\geq 14$           |
+| 7   | 0.8597                       | $\geq 16$           |
+| 8   | 0.8673                       | $\geq 18$           |
+| 9   | 0.8734                       | $\geq 20$           |
+| 10  | 0.8784                       | $\geq 22$           |
+| 11  | 0.8825                       | $\geq 24$           |
+| 12  | 0.8859                       | $\geq 26$           |
+| 13  | 0.8888                       | $\geq 28$           |
+| 14  | 0.8913                       | $\geq 30$           |
+| 15  | 0.8935                       | $\geq 32$           |
+| 16  | 0.8954                       | $\geq 34$           |
 | 17  | 0.8971                       | $\geq 36$           |
+
+> **Verified (2026-03-21):** All values confirmed against Table 1 of the paper
+> (extracted via `pdftotext`). The previous version had wrong values at p=1
+> (was 0.7500, actually 0.6924) and other depths. Now includes the complete
+> table for p=1 through p=17.
 
 The result at $p \geq 7$ **improves on all previously known lower bounds** for $M_g$ (the worst-case max cut fraction on 3-regular graphs of girth $\geq g$) when $g \geq 16$.
 
-The asymptotic target is $\lim_{g\to\infty} M_g \geq 0.912$ (from other work). Their results approach but don't yet reach this — whether QAOA at large $p$ exceeds 0.912 remains an open question.
+The asymptotic target is $\lim_{g\to\infty} M_g \geq 0.912$ (from Refs. [5] and [6] in the paper). Their results approach but don't yet reach this — Figure 4 plots $\tilde{c}_{\text{edge}}$ vs $1/p$ and shows the values trending toward 0.912 from below. The upper bound on the expected cut fraction of large random 3-regular graphs is 0.9239 [16]. Whether QAOA at large $p$ exceeds 0.912 remains an open question.
 
 ---
 
@@ -65,7 +81,7 @@ The computation of $\langle \boldsymbol{\gamma}, \boldsymbol{\beta} | Z_i Z_j | 
 Each qubit $q$ has gates acting on it through $p$ rounds of $(U(C,\gamma_l), U(B,\beta_l))$. These contribute tensors:
 
 - **Initial state tensor** ($|+\rangle$): a vector $\frac{1}{\sqrt{2}}(1, 1)$
-- **Problem gate tensor** ($e^{-i\gamma Z_q Z_{q'}/2}$): a diagonal 2-index tensor with entries $e^{\pm i\gamma}$
+- **Problem gate tensor** ($e^{i\gamma Z_q Z_{q'}}$): a diagonal 2-index tensor with entries $e^{\pm i\gamma}$
 - **Mixer gate tensor** ($e^{-i\beta X_q}$): a $2\times 2$ matrix $\begin{pmatrix}\cos\beta & -i\sin\beta \\ -i\sin\beta & \cos\beta\end{pmatrix}$
 - **Observable tensor** ($Z_i Z_j$ at the central edge): a diagonal 2-index tensor  
 
@@ -230,6 +246,13 @@ The paper defines four basic tensors:
 | Problem gate | $e^{i\gamma Z_iZ_j}$ diagonal gate | $e^{i\gamma}$ if $a=b$, $e^{-i\gamma}$ if $a \neq b$ |
 | Mixer gate | $e^{-i\beta X}$ rotation | $\cos\beta$ if $a=b$, $-i\sin\beta$ if $a \neq b$ |
 | Observable | $Z_iZ_j$ measurement | $+1$ if $a=b=0$, $-1$ if $a=b=1$, $0$ otherwise |
+
+> **Convention note:** The paper defines the cost function as $C = \sum_{(j,k)\in E} \frac{1-Z_jZ_k}{2}$
+> (Eq. 4) and the cost unitary as $U(C,\gamma) = e^{-i\gamma C}$, following the standard
+> Farhi 2014 convention. The per-edge gate is therefore $e^{i\gamma Z_jZ_k/2}$ (up to a
+> global phase from the constant $1/2$ term). The tensor entries $e^{\pm i\gamma}$ shown
+> in the explainer use a rescaled $\gamma$ that absorbs the factor of 2 for notational
+> convenience. Both parametrisations are equivalent.
 
 ### The "sandwich" structure
 

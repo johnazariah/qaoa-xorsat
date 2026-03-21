@@ -1,8 +1,5 @@
 FROM mcr.microsoft.com/devcontainers/base:bookworm
 
-# Julia version
-ARG JULIA_VERSION=1.11.4
-
 # Install system dependencies
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     && apt-get install -y --no-install-recommends \
@@ -13,6 +10,9 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
         ca-certificates \
         gnupg \
         lsb-release \
+        # PDF text extraction (for paper analysis)
+        poppler-utils \
+        python3-pip \
         # LaTeX (for paper writing / figures)
         texlive-base \
         texlive-latex-recommended \
@@ -23,6 +23,9 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
         latexmk \
         biber \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Install Python PDF libraries
+RUN pip3 install --break-system-packages --no-cache-dir pymupdf
 
 # Install GitHub CLI
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
@@ -37,16 +40,12 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
 RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install Julia
-RUN ARCH=$(dpkg --print-architecture) \
-    && if [ "$ARCH" = "arm64" ]; then JULIA_ARCH="aarch64"; else JULIA_ARCH="x86_64"; fi \
-    && JULIA_MINOR=$(echo ${JULIA_VERSION} | cut -d. -f1-2) \
-    && curl -fsSL "https://julialang-s3.julialang.org/bin/linux/${JULIA_ARCH}/${JULIA_MINOR}/julia-${JULIA_VERSION}-linux-${JULIA_ARCH}.tar.gz" \
-        | tar -xz -C /opt \
-    && ln -s /opt/julia-${JULIA_VERSION}/bin/julia /usr/local/bin/julia
-
 # Switch to non-root user
 USER vscode
+
+# Install Julia via juliaup (official version manager)
+RUN curl -fsSL https://install.julialang.org | sh -s -- --yes
+ENV PATH="/home/vscode/.juliaup/bin:${PATH}"
 
 # Pre-install common Julia packages into a shared depot
 RUN julia -e 'using Pkg; Pkg.add(["Revise", "OhMyREPL", "BenchmarkTools"])'

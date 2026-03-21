@@ -129,13 +129,13 @@ The calculation proceeds:
 
 Since this involves only 6 qubits ($2^6 = 64$ amplitudes), it's easily computed analytically. The result is a trigonometric expression in $\gamma_1$ and $\beta_1$.
 
-Optimising over $\gamma_1$ and $\beta_1$ yields the optimal cut fraction:
+Optimising over $\gamma_1$ and $\beta_1$ yields the optimal per-edge cut fraction:
 
-$$\tilde{c}_{\text{edge}}(p=1) = 0.7500 \text{ (for 3-regular)}$$
+$$\tilde{c}_{\text{edge}}(p=1) \approx 0.6924 \text{ (for 3-regular)}$$
 
-Wait — but the famous number is 0.6924. Let me clarify. The 0.6924 is the **approximation ratio** (fraction of the optimal cut), not the cut fraction directly. For 3-regular graphs, the optimal cut is at most $|E|$ (all edges cut), so on some graphs the optimal cut fraction is less than 1. The guarantee is: QAOA at $p=1$ achieves a cut that is $\geq 0.6924$ times the optimal, regardless of the specific 3-regular graph.
+This means QAOA at $p=1$ cuts approximately **69.24%** of edges on a large-girth 3-regular graph. This is also the **approximation ratio guarantee**: since for any 3-regular graph we have $\text{MaxCut} \leq |E|$, the QAOA achieves at least a fraction $0.6924$ of the maximum cut. The bound is tight for bipartite 3-regular graphs (where $\text{MaxCut} = |E|$), while for non-bipartite graphs (where $\text{MaxCut} < |E|$) the actual approximation ratio is even better.
 
-The cut fraction $\tilde{c}_{\text{edge}}(1)$ on the tree (large-girth graph) is a specific number that serves as a lower bound on $M_g$ (the worst-case cut fraction over all 3-regular graphs of girth $\geq g$).
+For comparison, the paper also analyses a warm-up problem called the **"Ring of Disagrees"** (Section IV) — MaxCut on a cycle (2-regular graph) — where the $p=1$ optimal cut fraction is exactly $3/4 = 0.75$. This 3/4 value applies to cycles, not to 3-regular graphs.
 
 ---
 
@@ -147,7 +147,7 @@ At $p=2$: the tree grows — each leaf of the $p=1$ tree sprouts 2 more neighbou
 
 At $p=3$: about 30 qubits → $2^{30} \approx 10^9$ amplitudes → feasible but large.
 
-At $p=10$: about $2^{11} - 2 = 2046$ qubits → $2^{2046}$ amplitudes → completely impossible by brute force!
+At $p=10$: about $2^{12} - 2 = 4094$ qubits → $2^{4094}$ amplitudes → completely impossible by brute force!
 
 **But we don't need brute force.** The tree structure allows us to contract from leaves to root, which is the subject of the later papers. The original paper does direct computation at small $p$, and the later papers develop efficient contraction methods.
 
