@@ -1,7 +1,10 @@
 module QaoaXorsat
 
 # Tree structure
-# export FactorTree, build_tree, tree_size
+include("tree.jl")
+export TreeParams
+export branching_factor, variable_count_at_level, constraint_count_at_level
+export total_variables, total_constraints, total_nodes, leaf_count
 
 # Tensor network
 # export build_tensor_network, contract

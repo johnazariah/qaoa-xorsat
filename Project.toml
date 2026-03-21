@@ -3,5 +3,11 @@ uuid = "f8a3c5e7-1b2d-4e6a-9c0f-3d8b7a5e2f14"
 
 [deps]
 
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
+
 [compat]
 julia = "1.11"
