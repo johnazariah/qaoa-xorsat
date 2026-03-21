@@ -1,0 +1,7 @@
+name = "QaoaXorsat"
+uuid = "f8a3c5e7-1b2d-4e6a-9c0f-3d8b7a5e2f14"
+
+[deps]
+
+[compat]
+julia = "1.11"
