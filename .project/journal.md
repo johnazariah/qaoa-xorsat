@@ -1,5 +1,60 @@
 # Project Journal
 
+## Entry 11 — P1.2 Tensor Network Primitives (21 March 2026)
+
+### What was done
+
+Implemented the Spec P1.2 tensor-network foundation in Julia, in a way that is
+consistent with the raw tensor objects in Farhi et al. 2025 rather than the
+draft spec's placeholder type assumptions.
+
+### Code changes
+
+1. Added `src/tensors.jl` with:
+   - `QAOAAngles` and `depth`
+   - hyperindex helpers: `hyperindex_dimension`, `round_bit_positions`,
+     `hyperindex_bit`, `hyperindex_parity`
+   - `leaf_tensor`
+   - `mixer_tensor`
+   - `problem_tensor`
+   - `observable_tensor`
+
+2. Updated `src/QaoaXorsat.jl` to include and export the tensor API.
+
+3. Added `test/test_tensors.jl` with coverage for:
+   - angle construction/validation
+   - hyperindex utilities
+   - tensor dimensions
+   - zero-angle behaviour
+   - periodicity
+   - hand-derived `p=1` values for mixer/problem/observable slices
+
+4. Added `learning/05-tensor-derivation.md` documenting:
+   - the adopted interleaved hyperindex convention
+   - why the leaf tensor is angle-independent
+   - the raw complex mixer/problem tensor formulas
+   - the root observable formula
+   - the contraction-ordering notes needed for P1.3
+
+### Important clarification
+
+The spec text says that all tensors in the sandwich representation should be
+real-valued. That is true only after the **full expectation value** has been
+contracted. The raw local mixer and problem tensors are naturally complex; this
+matches Eq. (13) of Farhi et al. 2025 and keeps the implementation faithful to
+the underlying circuit. The leaf tensor and observable tensor remain real.
+
+### Impact on project
+
+- P1.2 is now implemented at the raw-tensor level.
+- P1.3 can build on this by turning these raw local tensors into the effective
+  branch-transfer recursion used by the `O(4^p)` contraction.
+- The contraction-ordering question is now partially pinned down: round `p`
+  lives at the leaf boundary and round `1` at the root slice under the adopted
+  root-to-leaf indexing.
+
+---
+
 ## Entry 10 — Audit of Basso 2021 Explainer (26 July 2025)
 
 ### What was done

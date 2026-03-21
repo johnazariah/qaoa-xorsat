@@ -4,10 +4,11 @@ uuid = "f8a3c5e7-1b2d-4e6a-9c0f-3d8b7a5e2f14"
 [deps]
 
 [extras]
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test"]
+test = ["Test", "LinearAlgebra"]
 
 [compat]
 julia = "1.11"
