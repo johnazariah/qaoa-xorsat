@@ -63,6 +63,9 @@
   - At depth p the tree has a computable (but exponentially growing) number of leaves.
 - [ ] Characterise the tree structure precisely for (k=3, D=4) and determine tree sizes for p=1,2,…,12+.
 - [ ] Write down the QAOA unitary decomposition on the tree and the resulting expectation value as a function of (γ₁,…,γₚ, β₁,…,βₚ).
+- [x] Implement the raw tensor-network primitives for the light-cone sandwich (Spec P1.2):
+  - `src/tensors.jl` now defines `QAOAAngles`, hyperindex utilities, and raw leaf/mixer/problem/observable tensors
+  - `learning/05-tensor-derivation.md` records the hyperindex convention and contraction-ordering notes needed for P1.3
 
 ## Phase 2 — Literature Deep Dive & Existing Code
 
