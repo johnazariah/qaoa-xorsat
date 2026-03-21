@@ -43,4 +43,4 @@ Collaboration with Dr. Stephen Jordan. The goal is to produce precise, quantitat
 
 ## Plan
 
-> See [PLAN.md](PLAN.md) for the detailed work plan.
+> See [.project/PLAN.md](.project/PLAN.md) for the detailed work plan, and [.project/journal.md](.project/journal.md) for the development journal.
