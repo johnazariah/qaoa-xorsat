@@ -7,7 +7,7 @@
 
 ## The One-Paragraph Summary
 
-Stephen Jordan has numerical results for a quantum information-theoretic method called **DQI (Dissipative Quantum Information)** applied to Max-3-XORSAT on 4-regular hypergraphs. He wants to compare these against QAOA at various depths $p$. The existing QAOA analysis (Basso et al.) is only accurate for large $D$ and gives $O(1/D)$ errors — too imprecise at $D=4$. The Farhi et al. 2025 paper demonstrates an exact tensor network method for MaxCut ($k=2$) that works at any $D$. Our job is to **adapt that exact method to k=3 XORSAT on D=4 regular hypergraphs** and compute QAOA performance at each depth $p$, pushing $p$ as high as computationally feasible.
+Stephen Jordan — lead author of the DQI (Decoded Quantum Interferometry) paper published in Nature — wants to compare QAOA against DQI on Max-3-XORSAT on 4-regular hypergraphs at specific small $(k,D)$, particularly $(k{=}3, D{=}4)$. The existing QAOA analysis (Basso et al.) is only accurate for large $D$ and gives $O(1/D)$ errors — too imprecise at $D=4$. The Farhi et al. 2025 paper demonstrates an exact tensor network method for MaxCut ($k=2$) that works at any $D$. Our job is to **adapt that exact method to k=3 XORSAT on D=4 regular hypergraphs** and compute QAOA performance at each depth $p$, pushing $p$ as high as computationally feasible.
 
 ---
 
@@ -56,6 +56,57 @@ For problems with algebraic structure (e.g., polynomial optimisation over finite
 Stephen has DQI performance numbers for Max-k-XORSAT at specific $(k, D)$ values. The comparison question is: **how does QAOA at depth $p$ compare against DQI?** Does QAOA match or surpass DQI performance at some feasible $p$?
 
 This comparison is significant because QAOA and DQI are fundamentally different quantum approaches to the same problem — comparing them illuminates which structural features each exploits.
+
+### How DQI works in more detail
+
+The DQI pipeline for Max-$k$-XORSAT:
+
+1. **Prepare a resource state** — a superposition over Dicke states (states with a fixed number of 1s), weighted by coefficients $w_0, \ldots, w_\ell$. This is instance-independent.
+2. **Encode the problem** — apply phases $(-1)^{\mathbf{v} \cdot \mathbf{y}}$ encoding the target vector $\mathbf{v}$, then compute the syndrome $B^T \mathbf{y}$ into an ancilla register (where $B$ is the constraint matrix of the XORSAT instance).
+3. **Decode** — use a reversible classical decoder for the code $C^\perp = \{\mathbf{d} : B^T \mathbf{d} = \mathbf{0}\}$ to recover $\mathbf{y}$ from $B^T\mathbf{y}$ and uncompute the error. This is syndrome decoding with a Hamming weight constraint $|\mathbf{y}| \le \ell$.
+4. **Hadamard transform** — apply $H^{\otimes n}$ to obtain a state $\sum_{\mathbf{x}} P(f(\mathbf{x})) |\mathbf{x}\rangle$, where $P$ is a degree-$\ell$ polynomial biasing toward high objective values.
+5. **Measure** — sample $\mathbf{x}$ with probability $\propto P(f(\mathbf{x}))^2$.
+
+The key parameter is $\ell$ — the decoding radius. Higher $\ell$ means stronger bias toward optimal solutions, but the decoder must be able to correct $\ell$ errors.
+
+### The semicircle law
+
+DQI's central performance guarantee: for Max-XORSAT, the expected satisfaction fraction is governed by the **semicircle law**:
+
+$$\frac{\langle s \rangle}{m} = \frac{1}{2} + \sqrt{\frac{\ell}{m}\left(1 - \frac{\ell}{m}\right)}$$
+
+where $\ell$ is the number of decodable errors and $m$ is the number of constraints. At the Shannon limit of decoding, this gives an information-theoretic ceiling on DQI's performance.
+
+### DQI's limitations on unstructured Max-k-XORSAT
+
+A series of follow-up papers (see below) have shown:
+
+- **DQI requires structure** (Anschuetz, Gamarnik, Lu — arXiv:2509.14509): On random Gallager-ensemble LDPC instances, DQI is blocked by the **overlap gap property (OGP)** — a topological barrier that prevents any "stable" (Lipschitz) algorithm from finding near-optimal solutions. Classical AMP (approximate message passing) matches or exceeds DQI.
+- **No quantum advantage for MaxCut** (Parekh — arXiv:2509.19966): For Max-2-XORSAT, the dual code $C^\perp$ is a cycle code with minimum distance $O(\log n)$, severely limiting DQI's decoding radius. QAOA at $p=17$ achieves 0.8971 on 3-regular graphs; DQI's upper bound is $1/2 + 1/(2\sqrt{D-1})$.
+- **DQI's power lies in algebraic structure**: Reed-Solomon/OPI problems, where the dual code has large minimum distance, are where DQI achieves superpolynomial speedup.
+
+### What this means for $(k=3, D=4)$
+
+From the original DQI paper (Fig. 13 and §13): $(k=3, D=4)$ is in the regime (the "orange region") where **even the information-theoretic upper bound on DQI with classical decoders is exceeded by simulated annealing and QAOA**. The paper explicitly states that QAOA exceeds DQI's upper bound at $k=2$ and $k=3$.
+
+So Stephen likely wants precise QAOA numbers to **quantify by how much** QAOA exceeds DQI at this specific point — not to discover whether it does, but to measure the gap precisely.
+
+---
+
+## The Known Landscape at (k=3, D=4)
+
+Before we even compute anything, here's what's already known:
+
+| Algorithm | Expected SAT fraction | Source |
+|-----------|-----------------------|--------|
+| Random guessing | $0.5$ | Trivial |
+| DQI + BP (classical decoder) | $\lesssim 0.5 + O(1/\sqrt{D})$ | Jordan et al. 2025, limited by BP threshold |
+| DQI (Shannon limit, ceiling) | $\le 0.5 + \sqrt{H_2^{-1}(3/4)(1-H_2^{-1}(3/4))} \approx 0.919$ | Information-theoretic max; unachievable in practice |
+| Simulated annealing | $\approx 0.5 + c/D^{0.45}$ | Empirical (Jordan et al. Fig. 13) |
+| QAOA (Basso et al., large $D$) | Approximate, $O(1/D)$ error | arXiv:2110.14206 |
+| **QAOA (exact, our target)** | **???** | **This project** |
+
+Our computation fills in the "???" row with precise numbers at each depth $p$.
 
 ---
 
@@ -191,15 +242,19 @@ The global phase $e^{-i\gamma/2}$ is irrelevant. The essential gate is $e^{-i\ga
 
 ## Key Questions to Discuss with Stephen
 
-1. **DQI data:** Can you share the specific DQI numbers for $(k=3, D=4)$? This will help us know what $p$ we need to target.
+1. **DQI data:** Can you share the specific DQI numbers for $(k=3, D=4)$? From your Nature paper Fig. 13, $(k=3, D=4)$ appears to be in the regime where QAOA exceeds DQI — are you looking to quantify the precise gap, or has the picture changed?
 
-2. **Target precision:** How many digits of precision do you need in the QAOA fraction? The exact method gives essentially arbitrary precision (limited only by floating-point arithmetic), but optimisation might not find the perfect angles.
+2. **DQI depth parameter:** DQI has a decoding radius $\ell$ analogous to QAOA's depth $p$. Are you comparing at a specific $\ell$, or at DQI's optimal $\ell$, or against the Shannon-limit ceiling?
 
-3. **Existing code:** Do you know of any public implementations of the exact tensor-network QAOA evaluation (from Farhi et al. 2025 or related work)?
-6. **DQI depth dependence:** Does your DQI comparison involve a single number for each $(k,D)$, or does DQI also have a depth/resource parameter analogous to QAOA's $p$?
-4. **Other $(k,D)$ values:** Beyond $(3,4)$, are there other $(k,D)$ pairs you want to compare? The same code should work for any $(k,D)$ — only the tree structure and problem gates change.
+3. **Which decoder?** The DQI numbers depend heavily on the decoder (BP, Prange, Shannon limit). Which comparison point matters most?
 
-5. **XORSAT target bits:** Do the DQI bounds depend on the specific choice of $b_\alpha$ values, or are they averaged over random instances? (This determines whether we can simplify by fixing all $b_\alpha = 0$.)
+4. **Existing code:** Do you know of any public implementations of the exact tensor-network QAOA evaluation (from Farhi et al. 2025 or related work)? Their code is C++/OpenMP — is it available?
+
+5. **Other $(k,D)$ values:** Beyond $(3,4)$, are there other $(k,D)$ pairs you want to compare? The same code should work for any $(k,D)$ — only the tree structure and problem gates change.
+
+6. **XORSAT target bits:** Do the DQI bounds depend on the specific choice of $b_\alpha$ values, or are they averaged over random instances? (This determines whether we can simplify by fixing all $b_\alpha = 0$.)
+
+7. **The "structure" question:** Given the results of Anschuetz et al. (DQI requires structure), is the comparison specifically about *unstructured* random instances, or instances where the constraint matrix has particular coding-theoretic properties?
 
 ---
 
@@ -251,6 +306,21 @@ Bonus outcomes:
 - Results for other $(k,D)$ values
 - Published paper or contribution to Stephen's paper
 - Open-source code that others can use
+
+---
+
+## Further Reading: DQI Papers
+
+In addition to the three QAOA papers and the original DQI paper, these follow-up papers provide crucial context:
+
+| Paper | Key finding |
+|-------|-------------|
+| **Anschuetz, Gamarnik, Lu** (arXiv:2509.14509) | DQI is blocked by OGP on random LDPC instances; classical AMP matches/exceeds DQI |
+| **Parekh** (arXiv:2509.19966) | No quantum advantage for DQI on MaxCut; QAOA far exceeds DQI's ceiling |
+| **Khattar, Shutty, et al. + Jordan** (arXiv:2510.10967) | Optimised DQI circuits for OPI — where DQI's power actually lies (structured problems) |
+| **Kramer, Schubert, Eisert** (arXiv:2603.04540) | Tight inapproximability: no algorithm beats $r/q$ without exploiting structure |
+
+PDFs of all these are in `../papers/`.
 
 ---
 

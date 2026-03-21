@@ -33,18 +33,24 @@
   - Why this is the method we want to adapt for k-XORSAT
 
 ### 0c. Connecting the Dots
-- [ ] Write `learning/04-our-problem.md` — how everything connects to our specific task:
+- [x] Write `learning/04-our-problem.md` — how everything connects to our specific task:
   - What is Max-k-XORSAT vs. MaxCut
   - What changes when k>2 (hypergraphs instead of graphs)
-  - What is DQI and why Stephen wants the comparison
+  - What is DQI (Decoded Quantum Interferometry) and why Stephen wants the comparison
+  - The known landscape at (k=3, D=4): DQI semicircle law, OGP barrier, SA/AMP baselines
   - The specific challenge at (k=3, D=4)
   - What "fraction of constraints satisfied" means precisely
 
 ### 0d. Papers (PDFs for reference)
 - [x] Downloaded to `papers/`:
-  - `farhi2014-original-qaoa.pdf` (arXiv:1411.4028)
-  - `basso2021-qaoa-high-depth.pdf` (arXiv:2110.14206)
-  - `farhi2025-maxcut-lower-bound.pdf` (arXiv:2503.12789)
+  - `farhi2014-original-qaoa.pdf` (arXiv:1411.4028) — Original QAOA
+  - `basso2021-qaoa-high-depth.pdf` (arXiv:2110.14206) — QAOA at high depth, iterative formula
+  - `farhi2025-maxcut-lower-bound.pdf` (arXiv:2503.12789) — Exact tensor network method
+  - `jordan2024-dqi-nature.pdf` (arXiv:2408.08292) — Original DQI paper (Nature 2025)
+  - `2509.14509-dqi-requires-structure.pdf` — DQI blocked by OGP on random instances
+  - `2509.19966-no-advantage-maxcut.pdf` — No DQI advantage for MaxCut
+  - `2510.10967-optimized-dqi-circuits.pdf` — Optimised DQI circuits (Jordan co-author)
+  - `2603.04540-tight-inapproximability.pdf` — Tight limits of DQI on max-LINSAT
 
 ---
 
