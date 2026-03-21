@@ -93,20 +93,51 @@ So Stephen likely wants precise QAOA numbers to **quantify by how much** QAOA ex
 
 ---
 
-## The Known Landscape at (k=3, D=4)
+## The Known Landscape: Stephen's Current Data
 
-Before we even compute anything, here's what's already known:
+Stephen has shared performance data across multiple $(k,D)$ values. Here are the actual numbers (bold = best for each row):
 
-| Algorithm | Expected SAT fraction | Source |
-|-----------|-----------------------|--------|
-| Random guessing | $0.5$ | Trivial |
-| DQI + BP (classical decoder) | $\lesssim 0.5 + O(1/\sqrt{D})$ | Jordan et al. 2025, limited by BP threshold |
-| DQI (Shannon limit, ceiling) | $\le 0.5 + \sqrt{H_2^{-1}(3/4)(1-H_2^{-1}(3/4))} \approx 0.919$ | Information-theoretic max; unachievable in practice |
-| Simulated annealing | $\approx 0.5 + c/D^{0.45}$ | Empirical (Jordan et al. Fig. 13) |
-| QAOA (Basso et al., large $D$) | Approximate, $O(1/D)$ error | arXiv:2110.14206 |
-| **QAOA (exact, our target)** | **???** | **This project** |
+| $(k,D)$ | Prange | Simulated Annealing | DQI+BP | Regev+FGUM |
+|---------|--------|-------------------|--------|------------|
+| **(3,4)** | 0.875 | **0.9366** | 0.87065 | 0.89187 |
+| (3,5) | 0.8 | **0.9005** | 0.81648 | 0.83607 |
+| (3,6) | 0.75 | **0.8712** | 0.77562 | 0.78361 |
+| (3,7) | 0.71428 | **0.8492** | 0.74727 | 0.76024 |
+| (3,8) | 0.6875 | **0.8287** | 0.72351 | 0.72943 |
+| (4,5) | 0.9 | **0.9279** | 0.8597 | 0.92158 |
+| (4,6) | 0.83333 | **0.9024** | 0.82062 | 0.86144 |
+| (4,7) | 0.78571 | **0.8771** | 0.78862 | 0.82645 |
+| (4,8) | 0.75 | **0.8587** | 0.76539 | 0.79021 |
+| (5,6) | 0.91667 | 0.9190 | 0.84305 | **0.93123** |
+| (5,7) | 0.85714 | **0.8965** | 0.81422 | 0.88529 |
+| (5,8) | 0.8125 | **0.8740** | 0.78752 | 0.84403 |
+| (6,7) | 0.92857 | 0.9051 | 0.82759 | **0.94271** |
+| (6,8) | 0.875 | 0.8875 | 0.80327 | **0.89619** |
+| (7,8) | 0.9375 | 0.8951 | 0.813 | **0.94810** |
 
-Our computation fills in the "???" row with precise numbers at each depth $p$.
+### Algorithms explained
+
+- **Prange** = $1/2 + k/(2D)$ — trivial baseline from random coding theory (DQI with Prange decoder, i.e., random codeword selection)
+- **Simulated Annealing** — classical heuristic; dominates at small $k$ relative to $D$
+- **DQI+BP** — DQI with belief propagation decoder; never the best at any $(k,D)$ in this table
+- **Regev+FGUM** — another quantum/quantum-inspired method; dominates when $k/D$ is large (close to 1)
+
+### Key observations
+
+1. **DQI+BP is never the winner** — always beaten by SA or Regev+FGUM
+2. **SA dominates at small $k$** ($k=3,4$): the gap is substantial (e.g., 0.9366 vs 0.89187 at $(3,4)$)
+3. **Regev+FGUM dominates at large $k/D$** (when $k \approx D$): $(5,6), (6,7), (6,8), (7,8)$
+4. **The crossover** is around $k/D \approx 0.8$
+
+### What QAOA needs to achieve
+
+For our primary target $(k=3, D=4)$:
+- Beat Prange (0.875) — should be easy at modest $p$
+- Beat DQI+BP (0.87065) — should also be easy
+- Beat Regev+FGUM (0.89187) — likely achievable at moderate $p$
+- **Beat SA (0.9366)** — this is the real target; requires significant $p$
+
+Our computation adds a **QAOA** column to this table, with precise values at each depth $p$.
 
 ---
 
