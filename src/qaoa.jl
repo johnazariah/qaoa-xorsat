@@ -153,17 +153,15 @@ function root_parity_expectation(state::Vector{ComplexF64}, root_clause)
 end
 
 """
-    parity_expectation(params, angles; clause_sign=1) -> Float64
+    reference_parity_expectation(params, angles; clause_sign=1) -> Float64
 
 Evaluate the exact root-clause parity correlator `⟨Z₁⋯Z_k⟩` on the physical
-light-cone tree defined by `params`.
+light-cone tree defined by `params` by explicit statevector simulation.
 
-This is a correctness-first reference implementation that explicitly simulates
-the finite light cone. It is intentionally guarded to small trees until the
-intended O(4^p) transfer-tensor contraction is derived from the current raw
-P1.2 tensor partition.
+This path is retained as a correctness reference and is intentionally guarded to
+small trees.
 """
-function parity_expectation(
+function reference_parity_expectation(
     params::TreeParams,
     angles::QAOAAngles;
     clause_sign::Int = 1,
@@ -173,13 +171,28 @@ function parity_expectation(
 end
 
 """
+    parity_expectation(params, angles; clause_sign=1) -> Float64
+
+Evaluate the exact finite-D root-clause parity correlator `⟨Z₁⋯Z_k⟩` using the
+Tier 2 branch-transfer contraction in the physical `γ/2` convention.
+"""
+function parity_expectation(
+    params::TreeParams,
+    angles::QAOAAngles;
+    clause_sign::Int = 1,
+)::Float64
+    basso_parity_expectation(params, angles; clause_sign)
+end
+
+"""
     qaoa_expectation(params, angles; clause_sign=1) -> Float64
 
 Evaluate the exact expected satisfaction of the root clause
 
 `(1 + clause_sign * Z₁⋯Z_k) / 2`
 
-on the physical light-cone tree defined by `params`.
+using the exact finite-D Tier 2 branch-transfer contraction in the physical
+`γ/2` convention.
 
 Set `clause_sign = -1` for odd clauses such as MaxCut edges.
 """
@@ -188,6 +201,5 @@ function qaoa_expectation(
     angles::QAOAAngles;
     clause_sign::Int = 1,
 )::Float64
-    parity = parity_expectation(params, angles; clause_sign)
-    0.5 * (1 + clause_sign * parity)
+    basso_expectation(params, angles; clause_sign)
 end

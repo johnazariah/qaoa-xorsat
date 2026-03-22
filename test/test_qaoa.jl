@@ -202,6 +202,10 @@ end
         ]
             params = TreeParams(k, D, p)
 
+            @test parity_expectation(params, angles; clause_sign) ≈
+                  basso_parity_expectation(params, angles; clause_sign) atol = 1e-10
+            @test qaoa_expectation(params, angles; clause_sign) ≈
+                  basso_expectation(params, angles; clause_sign) atol = 1e-10
             @test basso_parity_expectation(params, angles; clause_sign) ≈
                   parity_expectation(params, angles; clause_sign) atol = 1e-10
             @test basso_expectation(params, angles; clause_sign) ≈
@@ -209,9 +213,17 @@ end
         end
     end
 
-    @testset "exact light-cone guard" begin
+    @testset "Tier 2 removes public light-cone guard" begin
         params = TreeParams(3, 4, 2)
         angles = QAOAAngles([0.1, 0.2], [0.3, 0.4])
-        @test_throws ArgumentError qaoa_expectation(params, angles)
+
+        @test isfinite(parity_expectation(params, angles))
+        @test 0.0 ≤ qaoa_expectation(params, angles) ≤ 1.0
+    end
+
+    @testset "reference light-cone guard" begin
+        params = TreeParams(3, 4, 2)
+        angles = QAOAAngles([0.1, 0.2], [0.3, 0.4])
+        @test_throws ArgumentError QaoaXorsat.reference_parity_expectation(params, angles)
     end
 end
