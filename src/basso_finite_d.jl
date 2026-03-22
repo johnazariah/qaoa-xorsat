@@ -268,7 +268,6 @@ function basso_root_message(
         "branch tensor length $(length(branch_tensor)) does not match configuration count $(configuration_count)",
     ))
 
-    root_bit = basso_root_bit_index(params.p)
     ComplexF64[
         f_function(angles, configuration) * ComplexF64(branch_tensor[configuration + 1])
         for configuration in 0:configuration_count-1
@@ -383,6 +382,14 @@ end
 
 Iterate the exact finite-D Basso branch tensor for `steps` levels, starting from
 `H_D^(0) = 1`.
+
+This object lives in the proof's expanded `(2p + 1)`-bit branch basis
+
+`(a^[1], …, a^[p], a^[0], a^[-p], …, a^[-1])`
+
+after inserting complete sets along the variable line. It should be interpreted
+as a partially contracted subtree partition function in that basis, not as a
+raw parent-facing hyperindex-space transfer message.
 """
 function basso_branch_tensor(
     params::TreeParams,
