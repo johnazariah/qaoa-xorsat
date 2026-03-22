@@ -1,5 +1,52 @@
 # Project Journal
 
+## Entry 18 — P1.3 Exact Finite-D Contraction Landed (22 March 2026)
+
+### What was completed
+
+Closed P1.3 as an implementation task rather than leaving it as an unfinished
+derivation track. The exact finite-D branch-transfer evaluator now matches the
+reference light-cone oracle on the current validated overlap cases, and the
+repo's public evaluation API routes through that Tier 2 path.
+
+### Code and doc changes
+
+1. Implemented the physical-convention finite-D evaluator in
+   `src/basso_finite_d.jl`:
+   - branch kernel uses the repo's physical `γ/2` convention
+   - root message carries the center-bit parity factor
+   - root contraction uses the k-fold XOR sine kernel
+
+2. Exported the Tier 2 public helpers and routed the main public API through
+   them in `src/qaoa.jl`.
+
+3. Added overlap regressions covering:
+   - `(k=3, D=2, p=1)` with both clause signs
+   - MaxCut `(k=2, D=3, p=1,2)`
+
+4. Cleaned up the P1.3 spec and implementation note so they now describe the
+   implemented exact finite-D path rather than the earlier unresolved root
+   interface.
+
+### Why this matters
+
+The remaining mismatch turned out not to be a root-only observable issue. The
+root XOR-convolution structure was correct, but the branch/root phase
+normalization had to be expressed in the repo's physical convention rather than
+the earlier branch-degree-normalized one.
+
+With that convention fixed, the exact finite-D evaluator is no longer a side
+experiment. It is now the production contraction path for `parity_expectation`
+and `qaoa_expectation`, while the explicit light-cone simulator remains as a
+guarded reference oracle for small trees.
+
+### Result
+
+- P1.3 is no longer blocking later computation work.
+- The codebase now has both a correctness oracle and a faster exact finite-D
+  contraction path.
+- The project record is aligned with the implemented state.
+
 ## Entry 17 — WHT Factorisation Reframes P1.3 (22 March 2026)
 
 ### What was learned

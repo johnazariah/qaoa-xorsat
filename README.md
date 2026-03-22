@@ -29,6 +29,7 @@ Collaboration with Dr. Stephen Jordan. The goal is to produce precise, quantitat
 - In this repo, the branch-transfer / WHT contraction is now implemented in the physical finite-D convention, not just the large-D normalization.
 - Cost O(p² · 4ᵖ) from the exact branch/root XOR convolutions.
 - Validated against the exact light-cone oracle on current anchor cases including `(k=3, D=2, p=1)` and MaxCut `(k=2, D=3, p=1,2)`.
+- The public `parity_expectation` and `qaoa_expectation` API now routes through this exact finite-D evaluator.
 
 ## Key References
 

@@ -56,11 +56,12 @@
 
 ## Phase 1 — Mathematical Foundation
 
-- [ ] Derive the QAOA expectation value formula for a single k-XORSAT constraint on a D-regular k-uniform hypergraph, at depth p, via the light-cone / local-tree method.
+- [x] Derive the QAOA expectation value formula for a single k-XORSAT constraint on a D-regular k-uniform hypergraph, at depth p, via the light-cone / local-tree method.
   - For MaxCut (k=2), the light cone at depth p is a tree of depth p rooted at the edge. Each vertex at the boundary is in the uniform superposition state.
   - For k-XORSAT, the light cone is a tree of depth p rooted at a **hyperedge** connecting k variable nodes, each of which has D-1 other neighbouring hyperedges, each of which connects to k-1 other variable nodes, etc., out to depth p.
   - The tree structure alternates: hyperedge → variable → hyperedge → variable → …
   - At depth p the tree has a computable (but exponentially growing) number of leaves.
+  - The repo now contains both an explicit exact light-cone oracle and an exact finite-D branch-transfer evaluator, with the public API routed through the Tier 2 contraction on validated overlap cases.
 - [ ] Characterise the tree structure precisely for (k=3, D=4) and determine tree sizes for p=1,2,…,12+.
 - [ ] Write down the QAOA unitary decomposition on the tree and the resulting expectation value as a function of (γ₁,…,γₚ, β₁,…,βₚ).
 - [x] Implement the raw tensor-network primitives for the light-cone sandwich (Spec P1.2):
@@ -88,13 +89,14 @@
   - **Python + NumPy/JAX** — JAX for auto-diff of angles + GPU, but may be slow for tree enumeration
   - **C++/Rust** — for maximum performance on the exponential tree computation
   - **Hybrid** — Julia or Python driver with C/Rust core for the inner loop
-- [ ] Implement the core computation:
+- [x] Implement the core computation:
   1. Build the (k,D,p) tree structure (factor graph: variable nodes ↔ hyperedge nodes)
   2. Compute QAOA state on this tree for given (γ,β) angles
   3. Evaluate expected fraction of satisfied constraints for the root hyperedge
-- [ ] Validate against known results:
+- [x] Validate against known results:
   - k=2 (MaxCut) on 3-regular: p=1 should give ≥0.6924 (Farhi et al. 2014)
   - Compare with Basso et al. iterative formula at large D (should nearly agree)
+  - Current regression coverage also includes MaxCut `(k=2, D=3, p=2)` and exact finite-D overlap anchors for `(k=3, D=2, p=1)`.
 - [ ] Optimise:
   - Exploit symmetries of the tree to reduce state-space dimension
   - Memory-efficient representation (the tree state lives in a 2^(#leaves) Hilbert space)
