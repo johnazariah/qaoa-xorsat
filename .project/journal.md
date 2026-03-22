@@ -1,5 +1,54 @@
 # Project Journal
 
+## Entry 17 — WHT Factorisation Reframes P1.3 (22 March 2026)
+
+### What was learned
+
+The apparent `O(p · 4^{kp})` barrier in the exact finite-D Basso constraint fold
+is not fundamental.
+
+The new research note `.project/learning/15-wht-factorisation-discovery.md`
+shows that the k-body child fold is a convolution on `(ℤ₂^{2p+1}, ⊕)` and can
+therefore be diagonalised by the Walsh-Hadamard transform.
+
+### Why this matters
+
+This changes the strategic picture for P1.3:
+
+- the previous exact Tier 2 reading looked feasible only up to about `p ≈ 5–7`
+   for `(k=3, D=4)`
+- the WHT factorisation suggests exact finite-D scaling of `O(p² · 4^p)`
+   instead of `O(p · 4^{kp})`
+- that puts exact finite-D k-body contraction back in the same asymptotic class
+   as the compact MaxCut-style recursions, modulo a higher constant factor
+
+### Code status on this branch
+
+This branch has not integrated the WHT fold yet.
+
+What it does have now is the exact finite-D branch-kernel scaffold in
+`src/basso_finite_d.jl`, including a correction to the Basso signed-bit phase
+ordering:
+
+- branch strings are treated in the signed order
+   `(a^[1], …, a^[p], a^[0], a^[-p], …, a^[-1])`
+- the central `a^[0]` bit is excluded from `Γ · (...)`
+- `test/test_basso_finite_d.jl` validates the corrected phase map and the exact
+   one-step branch fold against a manual sum
+
+### What remains blocked
+
+The root finite-D observable is still not fully mapped into repo conventions.
+A first attempt to wire the Eq. (8.8) / Eq. (8.16) style root contraction into
+the helper layer did not match the exact oracle and was backed out.
+
+That leaves the branch in a good state:
+
+- exact oracle: working
+- exact branch recursion kernel: working
+- root observable translation: still open
+- WHT production integration: next major implementation step
+
 ## Entry 16 — Smallest Exact Finite-D XORSAT Target (22 March 2026)
 
 ### What was done

@@ -27,6 +27,13 @@ end
 """Number of Basso branch bits, namely `2p + 1`."""
 basso_bit_count(p::Int) = 2 * p + 1
 
+"""Index of the central Basso bit `a^[0]` inside the `(2p + 1)`-bit branch string."""
+basso_root_bit_index(p::Int) = p + 1
+
+function basso_phase_bit_positions(p::Int)::Vector{Int}
+    [collect(1:p); collect((p+2):(2p+1))]
+end
+
 """Number of Basso branch configurations, namely `2^(2p + 1)`."""
 function basso_configuration_count(p::Int)
     validate_depth(p)
@@ -91,10 +98,151 @@ function f_function(angles::QAOAAngles, configuration::Integer)::ComplexF64
     trigs = basso_trig_table(angles)
 
     weight = ComplexF64(0.5)
-    for index in 1:(bit_count - 1)
-        bit_difference = xor(bits[index], bits[index + 1])
-        weight *= trigs[bit_difference + 1, index]
+    for index in 1:(bit_count-1)
+        bit_difference = xor(bits[index], bits[index+1])
+        weight *= trigs[bit_difference+1, index]
     end
 
     weight
+end
+
+"""Number of branching child constraints in the finite-D Basso iteration."""
+basso_branching_degree(params::TreeParams) = params.D - 1
+
+"""
+    basso_phase_argument(gamma_vector, parent_bits, child_bits...)
+
+Evaluate the finite-D Basso phase dot product
+
+`Γ ⋅ (a b¹ … b^{k-1})`
+
+using the first `2p` positions of the `(2p + 1)`-bit branch strings. Bit values
+are interpreted as `Z` eigenvalues via `0 ↦ +1` and `1 ↦ -1`.
+"""
+function basso_phase_argument(
+    gamma_vector::AbstractVector{<:Real},
+    parent_bits::AbstractVector{<:Integer},
+    child_bits::Vararg{AbstractVector{<:Integer}},
+)::Float64
+    bit_count = length(gamma_vector) + 1
+    length(parent_bits) == bit_count || throw(ArgumentError(
+        "parent bit count $(length(parent_bits)) does not match gamma length $(length(gamma_vector))",
+    ))
+
+    for bits in child_bits
+        length(bits) == bit_count || throw(ArgumentError(
+            "child bit count $(length(bits)) does not match gamma length $(length(gamma_vector))",
+        ))
+    end
+
+    phase = 0.0
+    for (gamma_index, bit_index) in pairs(basso_phase_bit_positions(length(gamma_vector) ÷ 2))
+        parity = z_eigenvalue(Int(parent_bits[bit_index]))
+        for bits in child_bits
+            parity *= z_eigenvalue(Int(bits[bit_index]))
+        end
+        phase += gamma_vector[gamma_index] * parity
+    end
+
+    phase
+end
+
+function _basso_child_sum(
+    parent_bits::Vector{Int},
+    all_bits::Vector{Vector{Int}},
+    child_weights::Vector{ComplexF64},
+    gamma_vector::Vector{Float64},
+    phase_scale::Float64,
+    child_arity::Int,
+)::ComplexF64
+    selections = Int[]
+
+    function recurse(weight_product::ComplexF64, remaining::Int)::ComplexF64
+        if iszero(remaining)
+            selected_bits = map(index -> all_bits[index], selections)
+            θ = phase_scale * basso_phase_argument(gamma_vector, parent_bits, selected_bits...)
+            return cos(θ) * weight_product
+        end
+
+        total = 0.0 + 0.0im
+        for child_index in eachindex(all_bits)
+            push!(selections, child_index)
+            total += recurse(weight_product * child_weights[child_index], remaining - 1)
+            pop!(selections)
+        end
+
+        total
+    end
+
+    recurse(1.0 + 0.0im, child_arity)
+end
+
+"""
+    basso_branch_tensor_step(params, angles, previous)
+
+Apply one exact finite-D Basso branch-tensor update (Eq. 8.7) to the branch
+tensor `previous`.
+
+The returned vector has one entry for each `(2p + 1)`-bit branch configuration.
+"""
+function basso_branch_tensor_step(
+    params::TreeParams,
+    angles::QAOAAngles,
+    previous::AbstractVector{<:Number},
+)::Vector{ComplexF64}
+    depth(angles) == params.p || throw(ArgumentError("angle depth must match tree depth"))
+
+    p = params.p
+    configuration_count = basso_configuration_count(p)
+    length(previous) == configuration_count || throw(ArgumentError(
+        "previous tensor length $(length(previous)) does not match configuration count $(configuration_count)",
+    ))
+
+    child_arity = params.k - 1
+    branch_degree = basso_branching_degree(params)
+    phase_scale = inv(sqrt(float(branch_degree)))
+    bit_count = basso_bit_count(p)
+    gamma_vector = build_gamma_vector(angles)
+    all_bits = [decode_bits(configuration, bit_count) for configuration in 0:configuration_count-1]
+    child_weights = ComplexF64[
+        f_function(angles, configuration) * ComplexF64(previous[configuration+1])
+        for configuration in 0:configuration_count-1
+    ]
+
+    next_tensor = Vector{ComplexF64}(undef, configuration_count)
+    for configuration in 1:configuration_count
+        branch_sum = _basso_child_sum(
+            all_bits[configuration],
+            all_bits,
+            child_weights,
+            gamma_vector,
+            phase_scale,
+            child_arity,
+        )
+        next_tensor[configuration] = branch_sum^branch_degree
+    end
+
+    next_tensor
+end
+
+"""
+    basso_branch_tensor(params, angles; steps=params.p)
+
+Iterate the exact finite-D Basso branch tensor for `steps` levels, starting from
+`H_D^(0) = 1`.
+"""
+function basso_branch_tensor(
+    params::TreeParams,
+    angles::QAOAAngles;
+    steps::Int=params.p,
+)::Vector{ComplexF64}
+    0 ≤ steps ≤ params.p || throw(ArgumentError("steps must lie in 0:$(params.p), got $steps"))
+    depth(angles) == params.p || throw(ArgumentError("angle depth must match tree depth"))
+
+    current = ones(ComplexF64, basso_configuration_count(params.p))
+    for _ in 1:steps
+        current = basso_branch_tensor_step(params, angles, current)
+    end
+
+    current
 end
