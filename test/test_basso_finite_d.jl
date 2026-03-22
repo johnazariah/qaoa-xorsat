@@ -161,6 +161,20 @@ end
               manual_basso_branch_tensor_step(params, angles, previous) atol = 1e-12
     end
 
+    @testset "smallest finite-D branch tensor closed form" begin
+        params = TreeParams(3, 2, 1)
+        γ = 0.31
+        angles = QAOAAngles([γ], [0.17])
+        tensor = QaoaXorsat.basso_branch_tensor(params, angles)
+
+        @testset "configuration=$configuration" for configuration in 0:QaoaXorsat.basso_configuration_count(params.p)-1
+            bits = QaoaXorsat.decode_bits(configuration, QaoaXorsat.basso_bit_count(params.p))
+            expected = bits[1] == bits[3] ? 1.0 : cos(2γ)
+
+            @test tensor[configuration+1] ≈ expected + 0.0im atol = 1e-12
+        end
+    end
+
     @testset "root kernel decomposition" begin
         angles = QAOAAngles([0.31, 0.64], [0.17, 0.39])
         branch_degree = 2
