@@ -5,12 +5,12 @@ z_sign(bit::Int) = bit == 0 ? 1 : -1
 
 function build_maxcut_light_cone_edges(D::Int, p::Int)
     next_qubit = Ref(2)
-    edges = Tuple{Int, Int}[(1, 2)]
+    edges = Tuple{Int,Int}[(1, 2)]
 
     function expand_variable(parent::Int, depth::Int)
         depth == p && return
 
-        for _ in 1:(D - 1)
+        for _ in 1:(D-1)
             next_qubit[] += 1
             child = next_qubit[]
             push!(edges, (parent, child))
@@ -33,7 +33,7 @@ function apply_maxcut_problem_layer!(state::Vector{ComplexF64}, edges, γ::Real)
             z_sign((basis_state >> (u - 1)) & 1) * z_sign((basis_state >> (v - 1)) & 1)
             for (u, v) in edges
         )
-        state[basis_state + 1] *= cis(0.5 * γf * parity_sum)
+        state[basis_state+1] *= cis(0.5 * γf * parity_sum)
     end
 
     state
@@ -64,7 +64,7 @@ function apply_reference_mixer_layer!(state::Vector{ComplexF64}, β::Real, qubit
     state
 end
 
-function exact_maxcut_reference(γs, βs; D::Int = 3)
+function exact_maxcut_reference(γs, βs; D::Int=3)
     p = length(γs)
     edges, qubit_count = build_maxcut_light_cone_edges(D, p)
     state = fill(ComplexF64(inv(sqrt(float(one(Int) << qubit_count)))), one(Int) << qubit_count)
@@ -76,7 +76,7 @@ function exact_maxcut_reference(γs, βs; D::Int = 3)
 
     parity = 0.0
     for basis_state in 0:length(state)-1
-        parity += abs2(state[basis_state + 1]) *
+        parity += abs2(state[basis_state+1]) *
                   z_sign((basis_state >> 0) & 1) *
                   z_sign((basis_state >> 1) & 1)
     end
@@ -97,7 +97,7 @@ function apply_reference_xorsat_problem_layer!(
     state::Vector{ComplexF64},
     clauses,
     γ::Real;
-    clause_sign::Int = 1,
+    clause_sign::Int=1,
 )
     γf = Float64(γ)
     iszero(γf) && return state
@@ -107,13 +107,13 @@ function apply_reference_xorsat_problem_layer!(
             clause_sign * prod(z_sign((basis_state >> (qubit - 1)) & 1) for qubit in clause)
             for clause in clauses
         )
-        state[basis_state + 1] *= cis(-0.5 * γf * parity_sum)
+        state[basis_state+1] *= cis(-0.5 * γf * parity_sum)
     end
 
     state
 end
 
-function exact_k3_d2_p1_reference(γ, β; clause_sign::Int = 1)
+function exact_k3_d2_p1_reference(γ, β; clause_sign::Int=1)
     clauses = build_k3_d2_p1_clauses()
     qubit_count = 9
     state = fill(ComplexF64(inv(sqrt(float(one(Int) << qubit_count)))), one(Int) << qubit_count)
@@ -123,7 +123,7 @@ function exact_k3_d2_p1_reference(γ, β; clause_sign::Int = 1)
 
     parity = 0.0
     for basis_state in 0:length(state)-1
-        parity += abs2(state[basis_state + 1]) *
+        parity += abs2(state[basis_state+1]) *
                   prod(z_sign((basis_state >> (qubit - 1)) & 1) for qubit in clauses[1])
     end
 
@@ -146,11 +146,11 @@ end
             (0.73, 0.29),
         ]
             angles = QAOAAngles([γ], [β])
-            parity = parity_expectation(params, angles; clause_sign = -1)
+            parity = parity_expectation(params, angles; clause_sign=-1)
             formula = -sin(4β) * cos(γ)^2 * sin(γ)
             @test parity ≈ formula atol = 1e-10
-            @test qaoa_expectation(params, angles; clause_sign = -1) ≈
-                (1 - formula) / 2 atol = 1e-10
+            @test qaoa_expectation(params, angles; clause_sign=-1) ≈
+                  (1 - formula) / 2 atol = 1e-10
         end
     end
 
@@ -160,7 +160,7 @@ end
         βopt = π / 8
         optimum = 0.5 + sqrt(3) / 9
         angles = QAOAAngles([γopt], [βopt])
-        @test qaoa_expectation(params, angles; clause_sign = -1) ≈ optimum atol = 1e-10
+        @test qaoa_expectation(params, angles; clause_sign=-1) ≈ optimum atol = 1e-10
     end
 
     @testset "MaxCut p=2 exact-statevector comparison" begin
@@ -168,10 +168,10 @@ end
         angles = QAOAAngles([0.21, 0.64], [0.17, 0.39])
         reference_parity, reference_cost = exact_maxcut_reference(angles.γ, angles.β)
 
-        @test parity_expectation(params, angles; clause_sign = -1) ≈
-            reference_parity atol = 1e-10
-        @test qaoa_expectation(params, angles; clause_sign = -1) ≈
-            reference_cost atol = 1e-10
+        @test parity_expectation(params, angles; clause_sign=-1) ≈
+              reference_parity atol = 1e-10
+        @test qaoa_expectation(params, angles; clause_sign=-1) ≈
+              reference_cost atol = 1e-10
     end
 
     @testset "k=3, D=2, p=1 exact-statevector comparison" begin
@@ -186,9 +186,9 @@ end
             reference_parity, reference_cost = exact_k3_d2_p1_reference(γ, β; clause_sign)
 
             @test parity_expectation(params, angles; clause_sign) ≈
-                reference_parity atol = 1e-10
+                  reference_parity atol = 1e-10
             @test qaoa_expectation(params, angles; clause_sign) ≈
-                reference_cost atol = 1e-10
+                  reference_cost atol = 1e-10
         end
     end
 
