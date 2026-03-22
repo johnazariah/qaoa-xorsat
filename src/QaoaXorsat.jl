@@ -16,6 +16,9 @@ export hyperindex_bit, hyperindex_parity
 export leaf_tensor, mixer_tensor, problem_tensor
 export parity_observable_tensor, observable_tensor
 
+# Experimental MaxCut transfer recursion
+include("maxcut_transfer.jl")
+
 # QAOA evaluation
 include("qaoa.jl")
 export parity_expectation, qaoa_expectation
