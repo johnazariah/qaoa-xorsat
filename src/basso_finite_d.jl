@@ -223,6 +223,11 @@ function basso_constraint_fold(
     iwht(kernel_hat .* (child_hat .^ child_arity))
 end
 
+function basso_root_parity(configuration::Integer, p::Int)::Int
+    root_bit = basso_root_bit_index(p)
+    z_eigenvalue((Int(configuration) >> (root_bit - 1)) & 1)
+end
+
 function basso_root_message(
     params::TreeParams,
     angles::QAOAAngles,
@@ -235,8 +240,34 @@ function basso_root_message(
 
     root_bit = basso_root_bit_index(params.p)
     ComplexF64[
-        z_eigenvalue(decode_bits(configuration, basso_bit_count(params.p))[root_bit]) *
         f_function(angles, configuration) * ComplexF64(branch_tensor[configuration + 1])
+        for configuration in 0:configuration_count-1
+    ]
+end
+
+function basso_root_parity_kernel(p::Int)::Vector{ComplexF64}
+    configuration_count = basso_configuration_count(p)
+
+    ComplexF64[
+        basso_root_parity(configuration, p)
+        for configuration in 0:configuration_count-1
+    ]
+end
+
+function basso_root_problem_kernel(
+    angles::QAOAAngles,
+    branch_degree::Int;
+    clause_sign::Int=1,
+)::Vector{ComplexF64}
+    validate_clause_sign(clause_sign)
+
+    gamma_full = build_gamma_full_vector(angles)
+    configuration_count = basso_configuration_count(depth(angles))
+    bit_count = basso_bit_count(depth(angles))
+    phase_scale = -0.5 * clause_sign * inv(sqrt(float(branch_degree)))
+
+    ComplexF64[
+        cis(phase_scale * sum(gamma_full .* configuration_spins(configuration, bit_count)))
         for configuration in 0:configuration_count-1
     ]
 end
@@ -244,16 +275,14 @@ end
 function basso_root_kernel(
     angles::QAOAAngles,
     branch_degree::Int,
+    p::Int=depth(angles);
+    clause_sign::Int=1,
 )::Vector{ComplexF64}
-    gamma_full = build_gamma_full_vector(angles)
-    configuration_count = basso_configuration_count(depth(angles))
-    bit_count = basso_bit_count(depth(angles))
-    phase_scale = inv(sqrt(float(branch_degree)))
-
-    ComplexF64[
-        cis(-phase_scale * sum(gamma_full .* configuration_spins(configuration, bit_count)))
-        for configuration in 0:configuration_count-1
-    ]
+    basso_root_parity_kernel(p) .* basso_root_problem_kernel(
+        angles,
+        branch_degree;
+        clause_sign,
+    )
 end
 
 function basso_root_fold(
@@ -267,6 +296,23 @@ function basso_root_fold(
     ))
 
     sum(ComplexF64.(kernel) .* xor_convolution_power(ComplexF64.(root_message), arity))
+end
+
+function basso_root_parity_sum(
+    params::TreeParams,
+    angles::QAOAAngles,
+    branch_tensor::AbstractVector{<:Number};
+    clause_sign::Int=1,
+)::ComplexF64
+    root_message = basso_root_message(params, angles, branch_tensor)
+    root_kernel = basso_root_kernel(
+        angles,
+        basso_branching_degree(params),
+        params.p;
+        clause_sign,
+    )
+
+    basso_root_fold(root_message, root_kernel, params.k)
 end
 
 """

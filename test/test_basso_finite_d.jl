@@ -143,4 +143,33 @@ end
         @test QaoaXorsat.basso_branch_tensor_step(params, angles, previous) ≈
               manual_basso_branch_tensor_step(params, angles, previous) atol = 1e-12
     end
+
+    @testset "root kernel decomposition" begin
+        angles = QAOAAngles([0.31, 0.64], [0.17, 0.39])
+        branch_degree = 2
+
+        parity_kernel = QaoaXorsat.basso_root_parity_kernel(depth(angles))
+        positive_phase = QaoaXorsat.basso_root_problem_kernel(angles, branch_degree; clause_sign=1)
+        negative_phase = QaoaXorsat.basso_root_problem_kernel(angles, branch_degree; clause_sign=-1)
+
+        @test negative_phase ≈ conj.(positive_phase) atol = 1e-12
+        @test QaoaXorsat.basso_root_kernel(angles, branch_degree) ≈
+              parity_kernel .* positive_phase atol = 1e-12
+    end
+
+    @testset "zero-angle root parity sum vanishes" begin
+        @testset "k=$k, D=$D, p=$p" for (k, D, p) in [
+            (2, 3, 1),
+            (2, 3, 2),
+            (3, 2, 1),
+            (3, 4, 1),
+        ]
+            params = TreeParams(k, D, p)
+            angles = QAOAAngles(zeros(p), zeros(p))
+            branch_tensor = QaoaXorsat.basso_branch_tensor(params, angles)
+
+            @test QaoaXorsat.basso_root_parity_sum(params, angles, branch_tensor) ≈
+                  0.0 + 0.0im atol = 1e-12
+        end
+    end
 end

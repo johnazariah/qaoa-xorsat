@@ -44,7 +44,7 @@ function naive_constraint_fold(angles::QAOAAngles, branch_degree::Int; child_ari
 
     function recurse(target::Int, accumulated_xor::Int, weight::ComplexF64, remaining::Int)
         if iszero(remaining)
-            folded[target + 1] += kernel[xor(target, accumulated_xor) + 1] * weight
+            folded[target+1] += kernel[xor(target, accumulated_xor)+1] * weight
             return
         end
 
@@ -52,7 +52,7 @@ function naive_constraint_fold(angles::QAOAAngles, branch_degree::Int; child_ari
             recurse(
                 target,
                 xor(accumulated_xor, configuration),
-                weight * branch_message[configuration + 1],
+                weight * branch_message[configuration+1],
                 remaining - 1,
             )
         end
@@ -80,14 +80,14 @@ function naive_root_fold(message::AbstractVector, kernel::AbstractVector; arity:
 
     function recurse(accumulated_xor::Int, weight::ComplexF64, remaining::Int)
         if iszero(remaining)
-            return kernel[accumulated_xor + 1] * weight
+            return kernel[accumulated_xor+1] * weight
         end
 
         subtotal = 0.0 + 0.0im
         for configuration in 0:configuration_count-1
             subtotal += recurse(
                 xor(accumulated_xor, configuration),
-                weight * message[configuration + 1],
+                weight * message[configuration+1],
                 remaining - 1,
             )
         end
@@ -117,7 +117,7 @@ end
 
         for target in 0:7
             for source in 0:7
-                direct[target + 1] += left[source + 1] * right[xor(target, source) + 1]
+                direct[target+1] += left[source+1] * right[xor(target, source)+1]
             end
         end
 
@@ -130,7 +130,7 @@ end
 
         for delta in 0:7
             for source in 0:7
-                direct[delta + 1] += values[source + 1] * values[xor(source, delta) + 1]
+                direct[delta+1] += values[source+1] * values[xor(source, delta)+1]
             end
         end
 
@@ -144,7 +144,7 @@ end
             next = zeros(ComplexF64, 8)
             for target in 0:7
                 for source in 0:7
-                    next[target + 1] += direct[source + 1] * values[xor(target, source) + 1]
+                    next[target+1] += direct[source+1] * values[xor(target, source)+1]
                 end
             end
             direct = next
@@ -181,17 +181,22 @@ end
     end
 
     @testset "naive vs WHT root fold" begin
-        @testset "k=$k, p=$p, D=$D" for (k, p, D) in [
-            (2, 1, 3),
-            (2, 2, 3),
-            (3, 1, 2),
-            (3, 1, 4),
+        @testset "k=$k, p=$p, D=$D, clause_sign=$clause_sign" for (k, p, D, clause_sign) in [
+            (2, 1, 3, -1),
+            (2, 2, 3, -1),
+            (3, 1, 2, 1),
+            (3, 1, 4, 1),
         ]
             params = TreeParams(k, D, p)
             angles = QAOAAngles(π .* rand(p), (π / 2) .* rand(p))
             branch_tensor = QaoaXorsat.basso_branch_tensor(params, angles)
             root_message = QaoaXorsat.basso_root_message(params, angles, branch_tensor)
-            kernel = QaoaXorsat.basso_root_kernel(angles, QaoaXorsat.basso_branching_degree(params))
+            kernel = QaoaXorsat.basso_root_kernel(
+                angles,
+                QaoaXorsat.basso_branching_degree(params),
+                p;
+                clause_sign,
+            )
 
             naive = naive_root_fold(root_message, kernel; arity=k)
             transformed = wht_root_fold(root_message, kernel; arity=k)

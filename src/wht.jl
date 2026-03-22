@@ -15,7 +15,7 @@ function wht!(values::AbstractVector)
     while block < length(values)
         stride = 2 * block
         for base in 1:stride:length(values)
-            for offset in 0:(block - 1)
+            for offset in 0:(block-1)
                 left = base + offset
                 right = left + block
                 x = values[left]
