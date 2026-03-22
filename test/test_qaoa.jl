@@ -84,6 +84,52 @@ function exact_maxcut_reference(γs, βs; D::Int = 3)
     parity, 0.5 * (1 - parity)
 end
 
+function build_k3_d2_p1_clauses()
+    [
+        [1, 2, 3],
+        [1, 4, 5],
+        [2, 6, 7],
+        [3, 8, 9],
+    ]
+end
+
+function apply_reference_xorsat_problem_layer!(
+    state::Vector{ComplexF64},
+    clauses,
+    γ::Real;
+    clause_sign::Int = 1,
+)
+    γf = Float64(γ)
+    iszero(γf) && return state
+
+    for basis_state in 0:length(state)-1
+        parity_sum = sum(
+            clause_sign * prod(z_sign((basis_state >> (qubit - 1)) & 1) for qubit in clause)
+            for clause in clauses
+        )
+        state[basis_state + 1] *= cis(-0.5 * γf * parity_sum)
+    end
+
+    state
+end
+
+function exact_k3_d2_p1_reference(γ, β; clause_sign::Int = 1)
+    clauses = build_k3_d2_p1_clauses()
+    qubit_count = 9
+    state = fill(ComplexF64(inv(sqrt(float(one(Int) << qubit_count)))), one(Int) << qubit_count)
+
+    apply_reference_xorsat_problem_layer!(state, clauses, γ; clause_sign)
+    apply_reference_mixer_layer!(state, β, qubit_count)
+
+    parity = 0.0
+    for basis_state in 0:length(state)-1
+        parity += abs2(state[basis_state + 1]) *
+                  prod(z_sign((basis_state >> (qubit - 1)) & 1) for qubit in clauses[1])
+    end
+
+    parity, 0.5 * (1 + clause_sign * parity)
+end
+
 @testset "QAOA evaluation" begin
     @testset "zero-angle baseline" begin
         params = TreeParams(3, 4, 1)
@@ -126,6 +172,24 @@ end
             reference_parity atol = 1e-10
         @test qaoa_expectation(params, angles; clause_sign = -1) ≈
             reference_cost atol = 1e-10
+    end
+
+    @testset "k=3, D=2, p=1 exact-statevector comparison" begin
+        params = TreeParams(3, 2, 1)
+
+        @testset "γ=$γ, β=$β, clause_sign=$clause_sign" for (γ, β, clause_sign) in [
+            (0.31, 0.17, 1),
+            (0.73, 0.29, 1),
+            (0.31, 0.17, -1),
+        ]
+            angles = QAOAAngles([γ], [β])
+            reference_parity, reference_cost = exact_k3_d2_p1_reference(γ, β; clause_sign)
+
+            @test parity_expectation(params, angles; clause_sign) ≈
+                reference_parity atol = 1e-10
+            @test qaoa_expectation(params, angles; clause_sign) ≈
+                reference_cost atol = 1e-10
+        end
     end
 
     @testset "exact light-cone guard" begin

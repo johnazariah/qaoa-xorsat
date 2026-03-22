@@ -45,4 +45,18 @@ using Test
 
         @test contracted ≈ fill(expected_entry, length(contracted)) atol = 1e-12
     end
+
+    @testset "smallest finite-D target child clause" begin
+        angles = QAOAAngles([0.31], [0.17])
+        leaf = ComplexF64.(leaf_tensor(angles))
+        tensor = reshape(problem_tensor(3, angles.γ[1], 1, 1), 4, 4, 4)
+
+        expected = ComplexF64[
+            sum(tensor[parent, child_a, child_b] * leaf[child_a] * leaf[child_b] for child_a in 1:4, child_b in 1:4)
+            for parent in 1:4
+        ]
+        contracted = QaoaXorsat.contract_constraint_message([leaf, leaf], angles.γ[1], 1, 1)
+
+        @test contracted ≈ expected atol = 1e-12
+    end
 end

@@ -1,5 +1,43 @@
 # Project Journal
 
+## Entry 16 — Smallest Exact Finite-D XORSAT Target (22 March 2026)
+
+### What was done
+
+Added a dedicated exact validation target for `(k=3, D=2, p=1)`.
+
+### Code changes
+
+1. Extended `test/test_qaoa.jl` with an independent explicit 9-qubit reference
+   for the clause set:
+   - `(1, 2, 3)`
+   - `(1, 4, 5)`
+   - `(2, 6, 7)`
+   - `(3, 8, 9)`
+
+2. Added regression checks that `parity_expectation` and `qaoa_expectation`
+   match that independent reference for representative angles and both clause
+   signs.
+
+3. Extended `test/test_transfer_oracles.jl` with a target-specific child-clause
+   contraction check using `contract_constraint_message` on the boundary leaf
+   messages of the same `(k=3, D=2, p=1)` geometry.
+
+### Why this matters
+
+This is the smallest exact finite-`D` case that goes beyond MaxCut while still
+remaining small enough for an explicit reference calculation.
+
+It gives the transfer-derivation work a concrete outer target and a concrete
+local child-clause oracle on the same geometry, without pretending that the
+full compressed recursion is already derived.
+
+### Impact on project
+
+- The exact evaluator now has direct non-MaxCut finite-`D` regression coverage.
+- The raw transfer oracle is now anchored to the first nontrivial finite-`D`
+  tree geometry rather than only generic algebraic identities.
+
 ## Entry 15 — Raw Multilinear Constraint Transfer Oracle (22 March 2026)
 
 ### What was done
