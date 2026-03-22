@@ -270,13 +270,14 @@ function basso_constraint_kernel(
     angles::QAOAAngles,
     branch_degree::Int,
 )::Vector{ComplexF64}
+    branch_degree ≥ 1 || throw(ArgumentError("branch_degree must be ≥ 1, got $branch_degree"))
+
     bit_count = basso_bit_count(depth(angles))
     configuration_count = basso_configuration_count(depth(angles))
     gamma_full = build_gamma_full_vector(angles)
-    phase_scale = inv(sqrt(float(branch_degree)))
 
     ComplexF64[
-        cos(phase_scale * sum(gamma_full .* configuration_spins(configuration, bit_count)))
+        cos(0.5 * sum(gamma_full .* configuration_spins(configuration, bit_count)))
         for configuration in 0:configuration_count-1
     ]
 end
@@ -330,7 +331,9 @@ function basso_root_message(
     ))
 
     ComplexF64[
-        f_function(angles, configuration) * ComplexF64(branch_tensor[configuration+1])
+        basso_root_parity(configuration, params.p) *
+        f_function(angles, configuration) *
+        ComplexF64(branch_tensor[configuration+1])
         for configuration in 0:configuration_count-1
     ]
 end
@@ -350,14 +353,14 @@ function basso_root_problem_kernel(
     clause_sign::Int=1,
 )::Vector{ComplexF64}
     validate_clause_sign(clause_sign)
+    branch_degree ≥ 1 || throw(ArgumentError("branch_degree must be ≥ 1, got $branch_degree"))
 
     gamma_full = build_gamma_full_vector(angles)
     configuration_count = basso_configuration_count(depth(angles))
     bit_count = basso_bit_count(depth(angles))
-    phase_scale = -0.5 * clause_sign * inv(sqrt(float(branch_degree)))
 
     ComplexF64[
-        cis(phase_scale * sum(gamma_full .* configuration_spins(configuration, bit_count)))
+        im * sin(0.5 * clause_sign * sum(gamma_full .* configuration_spins(configuration, bit_count)))
         for configuration in 0:configuration_count-1
     ]
 end
@@ -368,7 +371,9 @@ function basso_root_kernel(
     p::Int=depth(angles);
     clause_sign::Int=1,
 )::Vector{ComplexF64}
-    basso_root_parity_kernel(p) .* basso_root_problem_kernel(
+    p == depth(angles) || throw(ArgumentError("p must match angle depth $(depth(angles)), got $p"))
+
+    basso_root_problem_kernel(
         angles,
         branch_degree;
         clause_sign,
@@ -403,6 +408,42 @@ function basso_root_parity_sum(
     )
 
     basso_root_fold(root_message, root_kernel, params.k)
+end
+
+"""
+    basso_parity_expectation(params, angles; clause_sign=1) -> Float64
+
+Evaluate the exact finite-D Tier 2 root-clause parity correlator using the
+physical `γ/2` phase convention.
+"""
+function basso_parity_expectation(
+    params::TreeParams,
+    angles::QAOAAngles;
+    clause_sign::Int=1,
+)::Float64
+    depth(angles) == params.p || throw(ArgumentError("angle depth must match tree depth"))
+    validate_clause_sign(clause_sign)
+
+    branch_tensor = basso_branch_tensor(params, angles)
+    real(basso_root_parity_sum(params, angles, branch_tensor; clause_sign))
+end
+
+"""
+    basso_expectation(params, angles; clause_sign=1) -> Float64
+
+Evaluate the exact finite-D Tier 2 expected satisfaction of the root clause
+
+`(1 + clause_sign * Z₁⋯Zₖ) / 2`
+
+using the physical `γ/2` phase convention.
+"""
+function basso_expectation(
+    params::TreeParams,
+    angles::QAOAAngles;
+    clause_sign::Int=1,
+)::Float64
+    parity = basso_parity_expectation(params, angles; clause_sign)
+    0.5 * (1 + clause_sign * parity)
 end
 
 """

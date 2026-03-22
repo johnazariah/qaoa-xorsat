@@ -192,6 +192,23 @@ end
         end
     end
 
+    @testset "Tier 2 finite-D overlap comparison" begin
+        @testset "k=$k, D=$D, p=$p, clause_sign=$clause_sign" for (k, D, p, clause_sign, angles) in [
+            (3, 2, 1, 1, QAOAAngles([0.31], [0.17])),
+            (3, 2, 1, 1, QAOAAngles([0.73], [0.29])),
+            (3, 2, 1, -1, QAOAAngles([0.31], [0.17])),
+            (2, 3, 1, -1, QAOAAngles([0.31], [0.17])),
+            (2, 3, 2, -1, QAOAAngles([0.21, 0.64], [0.17, 0.39])),
+        ]
+            params = TreeParams(k, D, p)
+
+            @test basso_parity_expectation(params, angles; clause_sign) ≈
+                  parity_expectation(params, angles; clause_sign) atol = 1e-10
+            @test basso_expectation(params, angles; clause_sign) ≈
+                  qaoa_expectation(params, angles; clause_sign) atol = 1e-10
+        end
+    end
+
     @testset "exact light-cone guard" begin
         params = TreeParams(3, 4, 2)
         angles = QAOAAngles([0.1, 0.2], [0.3, 0.4])

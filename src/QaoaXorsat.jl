@@ -24,6 +24,7 @@ include("wht.jl")
 
 # Tier 2 Basso finite-D helpers
 include("basso_finite_d.jl")
+export basso_parity_expectation, basso_expectation
 
 # Experimental MaxCut transfer recursion
 include("maxcut_transfer.jl")

@@ -23,13 +23,12 @@ end
 function manual_basso_branch_tensor_step(params::TreeParams, angles::QAOAAngles, previous)
     configuration_count = QaoaXorsat.basso_configuration_count(params.p)
     branch_degree = QaoaXorsat.basso_branching_degree(params)
-    phase_scale = inv(sqrt(float(branch_degree)))
     child_arity = params.k - 1
     all_configurations = collect(0:configuration_count-1)
 
     function child_sum(parent_configuration, selected, remaining, weight_product)
         if iszero(remaining)
-            θ = phase_scale * manual_basso_phase_argument(angles, parent_configuration, selected...)
+            θ = 0.5 * manual_basso_phase_argument(angles, parent_configuration, selected...)
             return cos(θ) * weight_product
         end
 
@@ -199,7 +198,7 @@ end
 
         @testset "configuration=$configuration" for configuration in 0:QaoaXorsat.basso_configuration_count(params.p)-1
             bits = QaoaXorsat.decode_bits(configuration, QaoaXorsat.basso_bit_count(params.p))
-            expected = bits[1] == bits[3] ? 1.0 : cos(2γ)
+            expected = bits[1] == bits[3] ? 1.0 : cos(γ)
 
             @test tensor[configuration+1] ≈ expected + 0.0im atol = 1e-12
         end
@@ -209,13 +208,26 @@ end
         angles = QAOAAngles([0.31, 0.64], [0.17, 0.39])
         branch_degree = 2
 
-        parity_kernel = QaoaXorsat.basso_root_parity_kernel(depth(angles))
         positive_phase = QaoaXorsat.basso_root_problem_kernel(angles, branch_degree; clause_sign=1)
         negative_phase = QaoaXorsat.basso_root_problem_kernel(angles, branch_degree; clause_sign=-1)
 
-        @test negative_phase ≈ conj.(positive_phase) atol = 1e-12
+        @test negative_phase ≈ -positive_phase atol = 1e-12
         @test QaoaXorsat.basso_root_kernel(angles, branch_degree) ≈
-              parity_kernel .* positive_phase atol = 1e-12
+              positive_phase atol = 1e-12
+    end
+
+    @testset "root message includes parity factor" begin
+        params = TreeParams(3, 2, 1)
+        angles = QAOAAngles([0.31], [0.17])
+        branch_tensor = QaoaXorsat.basso_branch_tensor(params, angles)
+        root_message = QaoaXorsat.basso_root_message(params, angles, branch_tensor)
+
+        @test root_message ≈ ComplexF64[
+            QaoaXorsat.basso_root_parity(configuration, params.p) *
+            QaoaXorsat.f_function(angles, configuration) *
+            branch_tensor[configuration+1]
+            for configuration in 0:QaoaXorsat.basso_configuration_count(params.p)-1
+        ] atol = 1e-12
     end
 
     @testset "branch-to-hyperindex mapping" begin
@@ -403,7 +415,6 @@ end
                            cis(-0.5 * clause_sign * sum(gamma_full .* QaoaXorsat.configuration_spins(delta, bit_count)))
 
                 @test raw ≈ unscaled atol = 1e-12
-                @test raw ≈ QaoaXorsat.basso_root_kernel(angles, 1, p; clause_sign)[delta+1] atol = 1e-12
             end
         end
     end
@@ -421,6 +432,23 @@ end
 
             @test QaoaXorsat.basso_root_parity_sum(params, angles, branch_tensor) ≈
                   0.0 + 0.0im atol = 1e-12
+        end
+    end
+
+    @testset "Tier 2 parity expectation matches exact anchors" begin
+        @testset "k=$k, D=$D, p=$p, clause_sign=$clause_sign" for (k, D, p, clause_sign, angles) in [
+            (3, 2, 1, 1, QAOAAngles([0.31], [0.17])),
+            (3, 2, 1, 1, QAOAAngles([0.73], [0.29])),
+            (3, 2, 1, -1, QAOAAngles([0.31], [0.17])),
+            (2, 3, 1, -1, QAOAAngles([0.31], [0.17])),
+            (2, 3, 2, -1, QAOAAngles([0.21, 0.64], [0.17, 0.39])),
+        ]
+            params = TreeParams(k, D, p)
+
+            @test QaoaXorsat.basso_parity_expectation(params, angles; clause_sign) ≈
+                  parity_expectation(params, angles; clause_sign) atol = 1e-10
+            @test QaoaXorsat.basso_expectation(params, angles; clause_sign) ≈
+                  qaoa_expectation(params, angles; clause_sign) atol = 1e-10
         end
     end
 end
