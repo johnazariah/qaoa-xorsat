@@ -196,6 +196,40 @@ end
         @test QaoaXorsat.basso_configuration_to_hyperindex(0b01010, 2) == 0b0011
     end
 
+    @testset "hyperindex-to-branch lift" begin
+        @testset "leaf boundary reproduces f(a) at p=$p" for p in [1, 2]
+            angles = p == 1 ? QAOAAngles([0.31], [0.17]) : QAOAAngles([0.31, 0.64], [0.17, 0.39])
+            lifted = QaoaXorsat.lift_hyperindex_message_to_branch_basis(leaf_tensor(angles), angles)
+
+            @test lifted ≈ ComplexF64[
+                QaoaXorsat.f_function(angles, configuration)
+                for configuration in 0:QaoaXorsat.basso_configuration_count(p)-1
+            ] atol = 1e-12
+        end
+    end
+
+    @testset "lift does not commute with k-body constraint contraction" begin
+        params = TreeParams(3, 2, 1)
+        angles = QAOAAngles([0.31], [0.17])
+        leaf = ComplexF64.(leaf_tensor(angles))
+
+        lifted_leaf = QaoaXorsat.lift_hyperindex_message_to_branch_basis(leaf, angles)
+        branch_tensor = QaoaXorsat.basso_branch_tensor(params, angles)
+        raw_parent = QaoaXorsat.contract_constraint_message([leaf, leaf], angles.γ[1], 1, 1)
+        lifted_parent = QaoaXorsat.lift_hyperindex_message_to_branch_basis(raw_parent, angles)
+
+        @test lifted_leaf ≈ ComplexF64[
+            QaoaXorsat.f_function(angles, configuration)
+            for configuration in 0:QaoaXorsat.basso_configuration_count(params.p)-1
+        ] atol = 1e-12
+        @test branch_tensor ≈ QaoaXorsat.basso_branch_tensor_step(
+            params,
+            angles,
+            ones(ComplexF64, QaoaXorsat.basso_configuration_count(params.p)),
+        ) atol = 1e-12
+        @test !isapprox(lifted_parent, branch_tensor; atol=1e-12)
+    end
+
     @testset "root local factor matches raw tensor semantics" begin
         @testset "k=$k, p=$p, clause_sign=$clause_sign" for (k, p, clause_sign, tuples) in [
             (2, 1, -1, [(0b000, 0b000), (0b001, 0b011), (0b101, 0b010)]),

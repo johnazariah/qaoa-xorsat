@@ -223,6 +223,36 @@ function basso_configuration_to_hyperindex(configuration::Integer, p::Int)::Int
     hyperindex
 end
 
+"""
+    lift_hyperindex_message_to_branch_basis(message, angles)
+
+Lift a raw P1.2 hyperindex-space message on one variable line into the expanded
+`(2p + 1)`-bit Basso branch basis.
+
+For a branch configuration `a`, this applies the local variable-line sandwich
+factor associated with the inserted complete sets and reads the raw message at
+the corresponding hyperindex `σ(a)`.
+
+At the leaf boundary, where `leaf_tensor(angles)` is the constant `2^{-p}`
+vector, this lift reproduces `f(a)` exactly.
+"""
+function lift_hyperindex_message_to_branch_basis(
+    message::AbstractVector{<:Number},
+    angles::QAOAAngles,
+)::Vector{ComplexF64}
+    dimension = hyperindex_dimension(depth(angles))
+    length(message) == dimension || throw(ArgumentError(
+        "message length $(length(message)) does not match hyperindex dimension $(dimension)",
+    ))
+
+    scale = float(one(Int) << depth(angles))
+    ComplexF64[
+        scale * ComplexF64(message[basso_configuration_to_hyperindex(configuration, depth(angles)) + 1]) *
+        f_function(angles, configuration)
+        for configuration in 0:basso_configuration_count(depth(angles))-1
+    ]
+end
+
 function basso_constraint_kernel(
     angles::QAOAAngles,
     branch_degree::Int,
