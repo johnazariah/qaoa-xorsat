@@ -9,12 +9,16 @@ export total_variables, total_constraints, total_nodes, leaf_count
 # Tensor network
 include("tensors.jl")
 export QAOAAngles, depth
-export hyperindex_dimension, round_bit_positions
+export hyperindex_dimension
+export slice_from_physical_round, physical_round_from_slice
+export slice_bit_positions, round_bit_positions
 export hyperindex_bit, hyperindex_parity
-export leaf_tensor, mixer_tensor, problem_tensor, observable_tensor
+export leaf_tensor, mixer_tensor, problem_tensor
+export parity_observable_tensor, observable_tensor
 
 # QAOA evaluation
-# export qaoa_expectation, optimize_angles
+include("qaoa.jl")
+export parity_expectation, qaoa_expectation
 
 # Comparison data
 # export load_comparison_data

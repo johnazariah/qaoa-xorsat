@@ -16,13 +16,12 @@ using Test
         @test branching_factor(TreeParams(4, 5, 1)) == 12
     end
 
-    # Golden values from spec — MaxCut (k=2, D=3)
-    @testset "node counts k=2, D=3 (MaxCut)" begin
+    @testset "physical light-cone counts k=2, D=3 (MaxCut)" begin
         @testset "p=$p" for (p, exp_var, exp_con, exp_total, exp_leaf) in [
-            (1, 2,  1,  3,  2),
-            (2, 6,  5,  11, 4),
-            (3, 14, 13, 27, 8),
-            (4, 30, 29, 59, 16),
+            (1, 6,  5,   11, 4),
+            (2, 14, 13,  27, 8),
+            (3, 30, 29,  59, 16),
+            (4, 62, 61, 123, 32),
         ]
             t = TreeParams(2, 3, p)
             @test total_variables(t)   == exp_var
@@ -32,14 +31,13 @@ using Test
         end
     end
 
-    # Golden values from spec — (k=3, D=4)
-    @testset "node counts k=3, D=4" begin
+    @testset "physical light-cone counts k=3, D=4" begin
         @testset "p=$p" for (p, exp_var, exp_con, exp_total) in [
-            (1, 3,    1,    4),
-            (2, 21,   10,   31),
-            (3, 129,  64,   193),
-            (4, 777,  388,  1165),
-            (5, 4665, 2332, 6997),
+            (1, 21,    10,    31),
+            (2, 129,   64,   193),
+            (3, 777,  388,  1165),
+            (4, 4665, 2332, 6997),
+            (5, 27993, 13996, 41989),
         ]
             t = TreeParams(3, 4, p)
             @test total_variables(t)   == exp_var
@@ -49,16 +47,18 @@ using Test
     end
 
     @testset "leaf_count" begin
-        @test leaf_count(TreeParams(2, 3, 1)) == 2
-        @test leaf_count(TreeParams(3, 4, 1)) == 3
-        @test leaf_count(TreeParams(3, 4, 2)) == 18
+        @test leaf_count(TreeParams(2, 3, 1)) == 4
+        @test leaf_count(TreeParams(3, 4, 1)) == 18
+        @test leaf_count(TreeParams(3, 4, 2)) == 108
     end
 
     @testset "level count bounds" begin
         @test_throws ArgumentError variable_count_at_level(TreeParams(2, 3, 1), -1)
-        @test_throws ArgumentError variable_count_at_level(TreeParams(2, 3, 1), 1)
+        @test variable_count_at_level(TreeParams(2, 3, 1), 1) == 4
+        @test_throws ArgumentError variable_count_at_level(TreeParams(2, 3, 1), 2)
         @test_throws ArgumentError constraint_count_at_level(TreeParams(2, 3, 1), -1)
-        @test_throws ArgumentError constraint_count_at_level(TreeParams(2, 3, 1), 1)
+        @test constraint_count_at_level(TreeParams(2, 3, 1), 1) == 4
+        @test_throws ArgumentError constraint_count_at_level(TreeParams(2, 3, 1), 2)
     end
 
     @testset "monotonicity" begin

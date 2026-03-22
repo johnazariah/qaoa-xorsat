@@ -27,8 +27,17 @@ validate_depth(p::Int) =
 validate_round(round::Int, p::Int) =
     1 ≤ round ≤ p || throw(ArgumentError("round must be in 1:$p, got $round"))
 
+validate_slice(slice::Int, p::Int) =
+    1 ≤ slice ≤ p || throw(ArgumentError("slice must be in 1:$p, got $slice"))
+
 validate_hyperindex(σ::Integer) =
     σ ≥ 0 || throw(ArgumentError("hyperindex must be non-negative, got $σ"))
+
+function validate_clause_sign(clause_sign::Int)
+    clause_sign in (-1, 1) ||
+        throw(ArgumentError("clause_sign must be ±1, got $clause_sign"))
+    clause_sign
+end
 
 """
     hyperindex_dimension(p)
@@ -41,18 +50,53 @@ function hyperindex_dimension(p::Int)
 end
 
 """
-    round_bit_positions(round, p)
+    slice_from_physical_round(round, p)
 
-Return the `(ket_bit, bra_bit)` positions for `round` under the interleaved
-hyperindex convention
+Map a physical QAOA round index to the corresponding hyperindex slice.
+
+Physical rounds are ordered from the initial state toward the observable:
+
+- physical round `1` is the outermost slice
+- physical round `p` is the root/innermost slice
+"""
+function slice_from_physical_round(round::Int, p::Int)
+    validate_depth(p)
+    validate_round(round, p)
+    p - round + 1
+end
+
+"""
+    physical_round_from_slice(slice, p)
+
+Map a hyperindex slice index back to the corresponding physical QAOA round.
+"""
+function physical_round_from_slice(slice::Int, p::Int)
+    validate_depth(p)
+    validate_slice(slice, p)
+    p - slice + 1
+end
+
+"""
+    slice_bit_positions(slice, p)
+
+Return the `(ket_bit, bra_bit)` positions for the requested root-to-leaf
+hyperindex slice under the interleaved convention
 
 `(ket₁, bra₁, ket₂, bra₂, …, ket_p, bra_p)`.
 """
-function round_bit_positions(round::Int, p::Int)
+function slice_bit_positions(slice::Int, p::Int)
     validate_depth(p)
-    validate_round(round, p)
-    (2round - 1, 2round)
+    validate_slice(slice, p)
+    (2slice - 1, 2slice)
 end
+
+"""
+    round_bit_positions(slice, p)
+
+Backward-compatible alias for `slice_bit_positions`. Despite the historical name,
+the argument is a root-to-leaf slice index, not a physical QAOA round.
+"""
+round_bit_positions(slice::Int, p::Int) = slice_bit_positions(slice, p)
 
 """
     hyperindex_bit(σ, ℓ)
@@ -102,21 +146,22 @@ function leaf_tensor(angles::QAOAAngles)::Vector{Float64}
 end
 
 """
-    mixer_tensor(β, round, p)
+    mixer_tensor(β, slice, p)
 
-Build the raw single-qubit mixer superoperator for the requested `round`.
+Build the raw single-qubit mixer superoperator for the requested hyperindex
+`slice`.
 
 The returned matrix has size `4^p × 4^p` and acts on the full hyperindex space.
-Only the `(ket_round, bra_round)` pair is transformed; all other round-pairs are
+Only the `(ket_slice, bra_slice)` pair is transformed; all other slice-pairs are
 left unchanged.
 """
-function mixer_tensor(β::Real, round::Int, p::Int)::Matrix{ComplexF64}
+function mixer_tensor(β::Real, slice::Int, p::Int)::Matrix{ComplexF64}
     validate_depth(p)
-    validate_round(round, p)
+    validate_slice(slice, p)
 
     βf = Float64(β)
     dim = hyperindex_dimension(p)
-    ket_position, bra_position = round_bit_positions(round, p)
+    ket_position, bra_position = slice_bit_positions(slice, p)
     ket_mask = one(Int) << (ket_position - 1)
     bra_mask = one(Int) << (bra_position - 1)
     keep_mask = xor(typemax(Int), ket_mask | bra_mask)
@@ -142,29 +187,40 @@ function parity_sign(configuration, position::Int)
     foldl(*, (z_eigenvalue(hyperindex_bit(σ, position)) for σ in configuration); init = 1)
 end
 
-function problem_phase(configuration, γ::Float64, round::Int, p::Int)
-    ket_position, bra_position = round_bit_positions(round, p)
+function problem_phase(configuration, γ::Float64, slice::Int, p::Int; clause_sign::Int = 1)
+    validate_clause_sign(clause_sign)
+    ket_position, bra_position = slice_bit_positions(slice, p)
     ket_sign = parity_sign(configuration, ket_position)
     bra_sign = parity_sign(configuration, bra_position)
-    cis(γ * (bra_sign - ket_sign) / 2)
+    cis(clause_sign * γ * (bra_sign - ket_sign) / 2)
 end
 
 """
-    problem_tensor(k, γ, round, p)
+    problem_tensor(k, γ, slice, p; clause_sign=1)
 
 Build the flattened diagonal of the raw `k`-body problem-gate tensor for the
-requested `round`.
+requested root-to-leaf `slice`.
 
 The returned vector has length `(4^p)^k`. Reshape it with
 
-`reshape(problem_tensor(k, γ, round, p), ntuple(_ -> 4^p, k)...)`
+`reshape(problem_tensor(k, γ, slice, p), ntuple(_ -> 4^p, k)...)`
 
 to recover the diagonal weights indexed by the `k` qubit hyperindices.
+
+`clause_sign = 1` corresponds to the even clause `(1 + Z₁⋯Z_k)/2`, while
+`clause_sign = -1` corresponds to the odd clause `(1 - Z₁⋯Z_k)/2` used by MaxCut.
 """
-function problem_tensor(k::Int, γ::Real, round::Int, p::Int)::Vector{ComplexF64}
+function problem_tensor(
+    k::Int,
+    γ::Real,
+    slice::Int,
+    p::Int;
+    clause_sign::Int = 1,
+)::Vector{ComplexF64}
     k ≥ 2 || throw(ArgumentError("k must be ≥ 2, got $k"))
     validate_depth(p)
-    validate_round(round, p)
+    validate_slice(slice, p)
+    validate_clause_sign(clause_sign)
 
     γf = Float64(γ)
     dim = hyperindex_dimension(p)
@@ -172,31 +228,31 @@ function problem_tensor(k::Int, γ::Real, round::Int, p::Int)::Vector{ComplexF64
     tensor = Vector{ComplexF64}(undef, dim^k)
 
     for (index, configuration) in enumerate(Iterators.product(ranges...))
-        tensor[index] = problem_phase(configuration, γf, round, p)
+        tensor[index] =
+            problem_phase(configuration, γf, slice, p; clause_sign)
     end
 
     tensor
 end
 
-function observable_weight(configuration, p::Int)
+function parity_observable_weight(configuration, p::Int)
     all(ket_bit(σ, 1, p) == bra_bit(σ, 1, p) for σ in configuration) || return 0.0
 
-    z_product = foldl(*, (z_eigenvalue(ket_bit(σ, 1, p)) for σ in configuration); init = 1)
-    0.5 * (1 + z_product)
+    foldl(*, (z_eigenvalue(ket_bit(σ, 1, p)) for σ in configuration); init = 1)
 end
 
 """
-    observable_tensor(k, p)
+    parity_observable_tensor(k, p)
 
-Build the flattened diagonal of the root observable
+Build the flattened diagonal of the raw parity correlator observable
 
-`C_α = (1 + Z₁⋯Zₖ)/2`
+`Z₁⋯Z_k`
 
-using the innermost `(ket₁, bra₁)` hyperindex pair. Off-diagonal bra/ket
+using the innermost root slice `(ket₁, bra₁)`. Off-diagonal bra/ket
 configurations vanish because the observable is diagonal in the computational
 basis.
 """
-function observable_tensor(k::Int, p::Int)::Vector{Float64}
+function parity_observable_tensor(k::Int, p::Int)::Vector{Float64}
     k ≥ 2 || throw(ArgumentError("k must be ≥ 2, got $k"))
     validate_depth(p)
 
@@ -205,7 +261,35 @@ function observable_tensor(k::Int, p::Int)::Vector{Float64}
     tensor = Vector{Float64}(undef, dim^k)
 
     for (index, configuration) in enumerate(Iterators.product(ranges...))
-        tensor[index] = observable_weight(configuration, p)
+        tensor[index] = parity_observable_weight(configuration, p)
+    end
+
+    tensor
+end
+
+"""
+    observable_tensor(k, p; clause_sign=1)
+
+Build the flattened diagonal of the root observable
+
+`C_α = (1 + clause_sign * Z₁⋯Zₖ)/2`
+
+using the innermost `(ket₁, bra₁)` hyperindex pair. Off-diagonal bra/ket
+configurations vanish because the observable is diagonal in the computational
+basis.
+"""
+function observable_tensor(k::Int, p::Int; clause_sign::Int = 1)::Vector{Float64}
+    k ≥ 2 || throw(ArgumentError("k must be ≥ 2, got $k"))
+    validate_depth(p)
+    validate_clause_sign(clause_sign)
+
+    dim = hyperindex_dimension(p)
+    ranges = ntuple(_ -> 0:dim-1, k)
+    tensor = Vector{Float64}(undef, dim^k)
+
+    for (index, configuration) in enumerate(Iterators.product(ranges...))
+        parity = parity_observable_weight(configuration, p)
+        tensor[index] = iszero(parity) ? 0.0 : 0.5 * (1 + clause_sign * parity)
     end
 
     tensor

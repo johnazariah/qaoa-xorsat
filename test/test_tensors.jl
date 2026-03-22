@@ -15,10 +15,18 @@ end
     @test hyperindex_dimension(3) == 64
     @test_throws ArgumentError hyperindex_dimension(0)
     @test_throws ArgumentError hyperindex_dimension(-1)
+    @test slice_bit_positions(1, 3) == (1, 2)
+    @test slice_bit_positions(3, 3) == (5, 6)
     @test round_bit_positions(1, 3) == (1, 2)
     @test round_bit_positions(3, 3) == (5, 6)
+    @test slice_from_physical_round(1, 3) == 3
+    @test slice_from_physical_round(3, 3) == 1
+    @test physical_round_from_slice(1, 3) == 3
+    @test physical_round_from_slice(3, 3) == 1
     @test_throws ArgumentError round_bit_positions(0, 3)
     @test_throws ArgumentError round_bit_positions(4, 3)
+    @test_throws ArgumentError slice_from_physical_round(0, 3)
+    @test_throws ArgumentError physical_round_from_slice(4, 3)
 
     @test hyperindex_bit(0b1010, 1) == 0
     @test hyperindex_bit(0b1010, 2) == 1
@@ -143,6 +151,13 @@ end
         @test tensor[2, 4] ≈ cis(-γ) atol = 1e-12
     end
 
+    @testset "odd-clause sign handling" begin
+        γ = π / 3
+        tensor = reshape(problem_tensor(2, γ, 1, 1; clause_sign = -1), 4, 4)
+        @test tensor[2, 1] ≈ cis(-γ) atol = 1e-12
+        @test tensor[3, 1] ≈ cis(γ) atol = 1e-12
+    end
+
     @testset "golden values xorsat k=3 p=1" begin
         γ = π / 3
         tensor = reshape(problem_tensor(3, γ, 1, 1), 4, 4, 4)
@@ -159,6 +174,40 @@ end
     end
 end
 
+@testset "parity observable tensor" begin
+    @testset "dimensions" begin
+        for p in 1:2, k in (2, 3)
+            tensor = parity_observable_tensor(k, p)
+            @test length(tensor) == (4^p)^k
+            @test eltype(tensor) <: Real
+        end
+    end
+
+    @testset "p=1 values" begin
+        maxcut = reshape(parity_observable_tensor(2, 1), 4, 4)
+        @test maxcut[1, 1] == 1.0
+        @test maxcut[4, 4] == 1.0
+        @test maxcut[1, 4] == -1.0
+        @test maxcut[4, 1] == -1.0
+        @test maxcut[2, 1] == 0.0
+        @test maxcut[1, 2] == 0.0
+        @test maxcut[3, 3] == 0.0
+
+        xorsat = reshape(parity_observable_tensor(3, 1), 4, 4, 4)
+        @test xorsat[1, 1, 1] == 1.0
+        @test xorsat[4, 4, 4] == -1.0
+        @test xorsat[4, 4, 1] == 1.0
+        @test xorsat[4, 1, 1] == -1.0
+        @test xorsat[2, 1, 1] == 0.0
+    end
+
+    @testset "completeness" begin
+        O = parity_observable_tensor(2, 1)
+        @test sum(O) == 0.0
+        @test count(!iszero, O) == 4
+    end
+end
+
 @testset "observable tensor" begin
     @testset "dimensions" begin
         for p in 1:2, k in (2, 3)
@@ -168,33 +217,23 @@ end
         end
     end
 
-    @testset "p=1 values" begin
+    @testset "p=1 even-clause values" begin
         maxcut = reshape(observable_tensor(2, 1), 4, 4)
-        # Diagonal entries (ket=bra for both qubits):
-        # σ=(0,0) → Z=+1 for both → (1+1)/2 = 1
         @test maxcut[1, 1] == 1.0
-        # σ₁=(1,1),σ₂=(1,1) → Z=-1 for both → (1+1)/2 = 1
         @test maxcut[4, 4] == 1.0
-        # σ₁=(0,0),σ₂=(1,1) → Z₁=+1,Z₂=-1 → (1-1)/2 = 0
         @test maxcut[1, 4] == 0.0
         @test maxcut[4, 1] == 0.0
-        # Off-diagonal (ket≠bra): always 0
         @test maxcut[2, 1] == 0.0
         @test maxcut[1, 2] == 0.0
         @test maxcut[3, 3] == 0.0
-
-        xorsat = reshape(observable_tensor(3, 1), 4, 4, 4)
-        @test xorsat[1, 1, 1] == 1.0      # all Z=+1 → (1+1)/2 = 1
-        @test xorsat[4, 4, 4] == 0.0      # all Z=-1 → (1+(-1)³)/2 = 0
-        @test xorsat[4, 4, 1] == 1.0      # Z₁=-1,Z₂=-1,Z₃=+1 → (1+1)/2 = 1
-        @test xorsat[4, 1, 1] == 0.0      # Z₁=-1,Z₂=+1,Z₃=+1 → (1-1)/2 = 0
-        @test xorsat[2, 1, 1] == 0.0      # off-diagonal
     end
 
-    @testset "completeness" begin
-        # For k=2, p=1: exactly 2 nonzero entries (both =1)
-        O = observable_tensor(2, 1)
-        @test sum(O) == 2.0
-        @test count(!iszero, O) == 2
+    @testset "p=1 odd-clause values" begin
+        maxcut = reshape(observable_tensor(2, 1; clause_sign = -1), 4, 4)
+        @test maxcut[1, 1] == 0.0
+        @test maxcut[4, 4] == 0.0
+        @test maxcut[1, 4] == 1.0
+        @test maxcut[4, 1] == 1.0
+        @test maxcut[2, 1] == 0.0
     end
 end
