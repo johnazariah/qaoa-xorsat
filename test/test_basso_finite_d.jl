@@ -86,8 +86,8 @@ end
 
 function p1_root_leg(beta::Float64, operator::Matrix{ComplexF64})
     mixer = ComplexF64[
-        cos(beta) -im * sin(beta)
-        -im * sin(beta) cos(beta)
+        cos(beta) -im*sin(beta)
+        -im*sin(beta) cos(beta)
     ]
     propagated = adjoint(mixer) * operator * mixer
 
@@ -314,9 +314,9 @@ end
 
             @test parent[parent_hyperindex+1] ≈
                   QaoaXorsat.contract_diagonal_tensor_messages(
-                      AbstractVector{ComplexF64}[basis, child_messages...],
-                      tensor,
-                  ) atol = 1e-12
+                AbstractVector{ComplexF64}[basis, child_messages...],
+                tensor,
+            ) atol = 1e-12
         end
     end
 

@@ -116,7 +116,7 @@ Compute the XOR parity of the bits of hyperindex `σ` at the requested
 `positions`.
 """
 function hyperindex_parity(σ::Integer, positions)
-    foldl(⊻, (hyperindex_bit(σ, position) for position in positions); init = 0)
+    foldl(⊻, (hyperindex_bit(σ, position) for position in positions); init=0)
 end
 
 z_eigenvalue(bit::Int) = bit == 0 ? 1 : -1
@@ -174,7 +174,7 @@ function mixer_tensor(β::Real, slice::Int, p::Int)::Matrix{ComplexF64}
 
         for output_ket in 0:1, output_bra in 0:1
             output = base | (output_ket << (ket_position - 1)) | (output_bra << (bra_position - 1))
-            tensor[output + 1, input + 1] =
+            tensor[output+1, input+1] =
                 mixer_gate_entry(output_ket, input_ket, βf) *
                 conj(mixer_gate_entry(output_bra, input_bra, βf))
         end
@@ -184,10 +184,10 @@ function mixer_tensor(β::Real, slice::Int, p::Int)::Matrix{ComplexF64}
 end
 
 function parity_sign(configuration, position::Int)
-    foldl(*, (z_eigenvalue(hyperindex_bit(σ, position)) for σ in configuration); init = 1)
+    foldl(*, (z_eigenvalue(hyperindex_bit(σ, position)) for σ in configuration); init=1)
 end
 
-function problem_phase(configuration, γ::Float64, slice::Int, p::Int; clause_sign::Int = 1)
+function problem_phase(configuration, γ::Float64, slice::Int, p::Int; clause_sign::Int=1)
     validate_clause_sign(clause_sign)
     ket_position, bra_position = slice_bit_positions(slice, p)
     ket_sign = parity_sign(configuration, ket_position)
@@ -215,7 +215,7 @@ function problem_tensor(
     γ::Real,
     slice::Int,
     p::Int;
-    clause_sign::Int = 1,
+    clause_sign::Int=1,
 )::Vector{ComplexF64}
     k ≥ 2 || throw(ArgumentError("k must be ≥ 2, got $k"))
     validate_depth(p)
@@ -238,7 +238,7 @@ end
 function parity_observable_weight(configuration, p::Int)
     all(ket_bit(σ, 1, p) == bra_bit(σ, 1, p) for σ in configuration) || return 0.0
 
-    foldl(*, (z_eigenvalue(ket_bit(σ, 1, p)) for σ in configuration); init = 1)
+    foldl(*, (z_eigenvalue(ket_bit(σ, 1, p)) for σ in configuration); init=1)
 end
 
 function identity_observable_weight(configuration, p::Int)
@@ -307,7 +307,7 @@ using the innermost `(ket₁, bra₁)` hyperindex pair. Off-diagonal bra/ket
 configurations vanish because the observable is diagonal in the computational
 basis.
 """
-function observable_tensor(k::Int, p::Int; clause_sign::Int = 1)::Vector{Float64}
+function observable_tensor(k::Int, p::Int; clause_sign::Int=1)::Vector{Float64}
     k ≥ 2 || throw(ArgumentError("k must be ≥ 2, got $k"))
     validate_depth(p)
     validate_clause_sign(clause_sign)

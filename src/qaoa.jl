@@ -17,9 +17,9 @@ function build_light_cone_tree(params::TreeParams)
     function expand_variable(parent::Int, depth::Int)
         depth == params.p && return
 
-        for _ in 1:(params.D - 1)
+        for _ in 1:(params.D-1)
             clause = Int[parent]
-            for _ in 1:(params.k - 1)
+            for _ in 1:(params.k-1)
                 push!(clause, fresh_qubit!())
             end
             push!(clauses, clause)
@@ -44,7 +44,7 @@ end
 qubit_state_sign(state::Int, qubit::Int) = z_eigenvalue((state >> (qubit - 1)) & 1)
 
 clause_parity_sign(state::Int, clause) =
-    foldl(*, (qubit_state_sign(state, qubit) for qubit in clause); init = 1)
+    foldl(*, (qubit_state_sign(state, qubit) for qubit in clause); init=1)
 
 function validate_exact_light_cone(tree::LightConeTree)
     tree.qubit_count ≤ MAX_EXACT_LIGHTCONE_QUBITS || throw(ArgumentError(
@@ -64,7 +64,7 @@ function apply_problem_layer!(
     state::Vector{ComplexF64},
     clauses,
     γ::Real;
-    clause_sign::Int = 1,
+    clause_sign::Int=1,
 )
     γf = Float64(γ)
     iszero(γf) && return state
@@ -74,7 +74,7 @@ function apply_problem_layer!(
 
     for basis_state in 0:length(state)-1
         parity_sum = sum(clause_parity_sign(basis_state, clause) for clause in clauses)
-        state[basis_state + 1] *= cis(phase_scale * parity_sum)
+        state[basis_state+1] *= cis(phase_scale * parity_sum)
     end
 
     state
@@ -125,7 +125,7 @@ end
 function simulate_light_cone_state(
     params::TreeParams,
     angles::QAOAAngles;
-    clause_sign::Int = 1,
+    clause_sign::Int=1,
 )
     depth(angles) == params.p ||
         throw(ArgumentError("angle depth must match tree depth"))
@@ -146,7 +146,7 @@ function root_parity_expectation(state::Vector{ComplexF64}, root_clause)
     expectation = 0.0
 
     for basis_state in 0:length(state)-1
-        expectation += abs2(state[basis_state + 1]) * clause_parity_sign(basis_state, root_clause)
+        expectation += abs2(state[basis_state+1]) * clause_parity_sign(basis_state, root_clause)
     end
 
     expectation
@@ -164,7 +164,7 @@ small trees.
 function reference_parity_expectation(
     params::TreeParams,
     angles::QAOAAngles;
-    clause_sign::Int = 1,
+    clause_sign::Int=1,
 )::Float64
     tree, state = simulate_light_cone_state(params, angles; clause_sign)
     root_parity_expectation(state, tree.root_clause)
@@ -179,7 +179,7 @@ Tier 2 branch-transfer contraction in the physical `γ/2` convention.
 function parity_expectation(
     params::TreeParams,
     angles::QAOAAngles;
-    clause_sign::Int = 1,
+    clause_sign::Int=1,
 )::Float64
     basso_parity_expectation(params, angles; clause_sign)
 end
@@ -199,7 +199,7 @@ Set `clause_sign = -1` for odd clauses such as MaxCut edges.
 function qaoa_expectation(
     params::TreeParams,
     angles::QAOAAngles;
-    clause_sign::Int = 1,
+    clause_sign::Int=1,
 )::Float64
     basso_expectation(params, angles; clause_sign)
 end
