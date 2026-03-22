@@ -17,15 +17,19 @@ Collaboration with Dr. Stephen Jordan. The goal is to produce precise, quantitat
 ## Approaches
 
 ### 1. Direct / Exact Light-Cone Method (our focus)
+
 - Exploits the fact that on locally tree-like graphs the expectation value of a single constraint under QAOA at depth p depends only on a finite neighbourhood (the "light cone" of radius p around that constraint).
 - Exact — no O(1/D) corrections.
 - Used in the original QAOA paper (Farhi, Goldstone, Gutmann 2014) and in the 2025 Farhi–Gutmann–Ranard–Villalonga paper on MaxCut.
 - Cost: exponential in p, but feasible for moderate p with optimised code + cluster compute.
 
-### 2. Iterative / Large-Girth Approximate Method
+### 2. Finite-D Branch-Transfer Method
+
 - Basso, Farhi, Marwaha, Villalonga, Zhou (2021) — arXiv:2110.14206.
-- Compact iterative formula; cost O(p² · 4ᵖ).
-- Accurate up to O(1/D) corrections — fine for large D asymptotics, but insufficient for exact results at D=4.
+- In this repo, the branch-transfer / WHT contraction is now implemented in the physical finite-D convention, not just the large-D normalization.
+- Cost O(p² · 4ᵖ) from the exact branch/root XOR convolutions.
+- Validated against the exact light-cone oracle on current anchor cases including `(k=3, D=2, p=1)` and MaxCut `(k=2, D=3, p=1,2)`.
+- The public `parity_expectation` and `qaoa_expectation` API now routes through this exact finite-D evaluator.
 
 ## Key References
 

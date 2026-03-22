@@ -10,15 +10,24 @@ We use an **interleaved** hyperindex ordering
 `(ket₁, bra₁, ket₂, bra₂, ..., ket_p, bra_p)`
 
 rather than grouping all ket bits before all bra bits. This keeps every QAOA
-round local to one adjacent bit-pair:
+slice local to one adjacent bit-pair:
 
-- round `ℓ` uses bit positions `(2ℓ-1, 2ℓ)`
-- the innermost/root slice is round `1`
-- the outermost/leaf slice is round `p`
+- slice `s` uses bit positions `(2s-1, 2s)`
+- slice `1` is the innermost/root slice
+- slice `p` is the outermost/leaf slice
 
 This is a small clarification of the draft spec rather than a conceptual
 change: each qubit still has `2p` binary components and therefore `4^p`
 possible hyperindex values.
+
+The **physical QAOA round** index runs in the opposite direction:
+
+- physical round `1` is the outermost slice
+- physical round `p` is the innermost/root slice
+
+So the explicit mapping is
+
+`slice = p - round + 1`.
 
 ## Raw tensor primitives
 
@@ -113,30 +122,70 @@ weight is
 This yields entries in `{0, 1}` for the flattened diagonal stored by
 `observable_tensor(k, p)`.
 
-## Contraction ordering (for P1.3)
+## Contraction ordering and current blocker (for P1.3)
 
-Farhi et al. 2025, Eq. (14) and Fig. 5(b), show that the contraction proceeds by
-contracting one colored box, then raising the resulting branch tensor entrywise
-to the branching multiplicity before moving one level toward the root.
+The light cone at physical depth `p` contains the root clause plus `p`
+additional constraint shells and a boundary variable shell. For MaxCut
+`(k=2, D=3, p=1)` that means **6 qubits and 5 edges**, not the smaller
+three-node draft tree.
 
-Mapped to our notation:
+### Contraction Ordering
 
-- **leaf level** uses round `p`
-- then the contraction moves inward through rounds `p-1, p-2, ..., 1`
-- at a variable node, the multiplicity is `D-1`
-- at a constraint node, the multiplicity is `k-1`
+The indexing used in the code is now fixed:
 
-So for `p = 2`, `k = 2`, `D = 3`:
+- root-to-leaf **slice** index `s = 1, ..., p`
+- physical QAOA **round** index `r = 1, ..., p`
+- mapping `s = p - r + 1`
 
-1. start from the leaf tensor on round `2`
-2. contract the deepest round-`2` mixer/problem structure
-3. raise the resulting branch entries to the power `D-1 = 2`
-4. move inward to round `1`
-5. apply the root observable on the round-`1` slice
+So:
 
-For general `k`, the same root-to-leaf indexing applies; only the
-constraint-node multiplicity changes from `1` child branch (`k = 2`) to
-`k-1` child branches.
+- physical round `1` is the **outermost** slice
+- physical round `p` is the **innermost** slice next to the observable
+
+For the concrete example `(k=2, D=3, p=2)`:
+
+- round `1` lives on slice `2` (closest to the `|+⟩` boundary)
+- round `2` lives on slice `1` (closest to the root observable)
+
+The exact reference evaluator in `src/qaoa.jl` applies the physical circuit in
+that forward order:
+
+1. problem layer with `γ₁`, then mixer layer with `β₁`
+2. problem layer with `γ₂`, then mixer layer with `β₂`
+3. measure the root observable
+
+This agrees with the adopted hyperindex convention from the P1.2 raw tensors:
+the innermost root slice is `(ket₁, bra₁)`, while the outermost slice is
+`(ket_p, bra_p)`.
+
+What is still **not** derived is the effective branch-transfer object that lets
+one contract those raw tensors in `O(4^p)` while preserving this ordering.
+
+The raw P1.2 tensors are still useful **local oracles**, but they are not yet a
+complete derivation of the intended O(4^p) branch-transfer recursion. Two facts
+are now fixed:
+
+1. **Only variable branching exponentiates entrywise.** At a variable node the
+   `D-1` identical child constraints contribute an entrywise power.
+2. **Constraint contraction is multilinear in `k-1` child messages.** The draft
+   `.^ (k-1)` rule at non-root constraints is wrong in general.
+
+We also have the corrected MaxCut p=1 validation target:
+
+`⟨Z_u Z_v⟩ = -sin(4β) cos²(γ) sin(γ)`
+
+and therefore
+
+`c_edge = (1 - ⟨Z_u Z_v⟩) / 2 = 1/2 + √3/9 ≈ 0.69245`
+
+at the optimum.
+
+What remains blocked is the **effective transfer object** that connects the raw
+P1.2 tensors to the paper's Eq. (14) style O(4^p) recursion without double
+counting boundary/mixer structure. The repository now carries an exact
+light-cone statevector evaluator as a correctness reference for small trees,
+while keeping the raw tensor API and slice/round mapping explicit for the next
+derivation step.
 
 ## Zero-angle check
 
@@ -149,3 +198,5 @@ At `γ = β = 0`:
 The root observable then averages uniformly over the computational-basis
 configurations on the root slice, so the expectation value reduces to the random
 baseline `1/2`, as required by Spec P1.3.
+
+The exact evaluator now checks this explicitly for `(k=3, D=4, p=1)`.

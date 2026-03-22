@@ -1,5 +1,324 @@
 # Project Journal
 
+## Entry 18 — P1.3 Exact Finite-D Contraction Landed (22 March 2026)
+
+### What was completed
+
+Closed P1.3 as an implementation task rather than leaving it as an unfinished
+derivation track. The exact finite-D branch-transfer evaluator now matches the
+reference light-cone oracle on the current validated overlap cases, and the
+repo's public evaluation API routes through that Tier 2 path.
+
+### Code and doc changes
+
+1. Implemented the physical-convention finite-D evaluator in
+   `src/basso_finite_d.jl`:
+   - branch kernel uses the repo's physical `γ/2` convention
+   - root message carries the center-bit parity factor
+   - root contraction uses the k-fold XOR sine kernel
+
+2. Exported the Tier 2 public helpers and routed the main public API through
+   them in `src/qaoa.jl`.
+
+3. Added overlap regressions covering:
+   - `(k=3, D=2, p=1)` with both clause signs
+   - MaxCut `(k=2, D=3, p=1,2)`
+
+4. Cleaned up the P1.3 spec and implementation note so they now describe the
+   implemented exact finite-D path rather than the earlier unresolved root
+   interface.
+
+### Why this matters
+
+The remaining mismatch turned out not to be a root-only observable issue. The
+root XOR-convolution structure was correct, but the branch/root phase
+normalization had to be expressed in the repo's physical convention rather than
+the earlier branch-degree-normalized one.
+
+With that convention fixed, the exact finite-D evaluator is no longer a side
+experiment. It is now the production contraction path for `parity_expectation`
+and `qaoa_expectation`, while the explicit light-cone simulator remains as a
+guarded reference oracle for small trees.
+
+### Result
+
+- P1.3 is no longer blocking later computation work.
+- The codebase now has both a correctness oracle and a faster exact finite-D
+  contraction path.
+- The project record is aligned with the implemented state.
+
+## Entry 17 — WHT Factorisation Reframes P1.3 (22 March 2026)
+
+### What was learned
+
+The apparent `O(p · 4^{kp})` barrier in the exact finite-D Basso constraint fold
+is not fundamental.
+
+The new research note `.project/learning/15-wht-factorisation-discovery.md`
+shows that the k-body child fold is a convolution on `(ℤ₂^{2p+1}, ⊕)` and can
+therefore be diagonalised by the Walsh-Hadamard transform.
+
+### Why this matters
+
+This changes the strategic picture for P1.3:
+
+- the previous exact Tier 2 reading looked feasible only up to about `p ≈ 5–7`
+   for `(k=3, D=4)`
+- the WHT factorisation suggests exact finite-D scaling of `O(p² · 4^p)`
+   instead of `O(p · 4^{kp})`
+- that puts exact finite-D k-body contraction back in the same asymptotic class
+   as the compact MaxCut-style recursions, modulo a higher constant factor
+
+### Code status on this branch
+
+This branch has not integrated the WHT fold yet.
+
+What it does have now is the exact finite-D branch-kernel scaffold in
+`src/basso_finite_d.jl`, including a correction to the Basso signed-bit phase
+ordering:
+
+- branch strings are treated in the signed order
+   `(a^[1], …, a^[p], a^[0], a^[-p], …, a^[-1])`
+- the central `a^[0]` bit is excluded from `Γ · (...)`
+- `test/test_basso_finite_d.jl` validates the corrected phase map and the exact
+   one-step branch fold against a manual sum
+
+### What remains blocked
+
+The root finite-D observable is still not fully mapped into repo conventions.
+A first attempt to wire the Eq. (8.8) / Eq. (8.16) style root contraction into
+the helper layer did not match the exact oracle and was backed out.
+
+That leaves the branch in a good state:
+
+- exact oracle: working
+- exact branch recursion kernel: working
+- root observable translation: still open
+- WHT production integration: next major implementation step
+
+## Entry 16 — Smallest Exact Finite-D XORSAT Target (22 March 2026)
+
+### What was done
+
+Added a dedicated exact validation target for `(k=3, D=2, p=1)`.
+
+### Code changes
+
+1. Extended `test/test_qaoa.jl` with an independent explicit 9-qubit reference
+   for the clause set:
+   - `(1, 2, 3)`
+   - `(1, 4, 5)`
+   - `(2, 6, 7)`
+   - `(3, 8, 9)`
+
+2. Added regression checks that `parity_expectation` and `qaoa_expectation`
+   match that independent reference for representative angles and both clause
+   signs.
+
+3. Extended `test/test_transfer_oracles.jl` with a target-specific child-clause
+   contraction check using `contract_constraint_message` on the boundary leaf
+   messages of the same `(k=3, D=2, p=1)` geometry.
+
+### Why this matters
+
+This is the smallest exact finite-`D` case that goes beyond MaxCut while still
+remaining small enough for an explicit reference calculation.
+
+It gives the transfer-derivation work a concrete outer target and a concrete
+local child-clause oracle on the same geometry, without pretending that the
+full compressed recursion is already derived.
+
+### Impact on project
+
+- The exact evaluator now has direct non-MaxCut finite-`D` regression coverage.
+- The raw transfer oracle is now anchored to the first nontrivial finite-`D`
+  tree geometry rather than only generic algebraic identities.
+
+## Entry 15 — Raw Multilinear Constraint Transfer Oracle (22 March 2026)
+
+### What was done
+
+Added `src/transfer_oracles.jl` with a small exact helper,
+`contract_constraint_message`, that contracts one raw problem tensor against the
+`k - 1` child branch messages of a constraint and returns the parent-facing
+message.
+
+### Why this matters
+
+This is the smallest exact finite-`D` transfer object that directly addresses
+the P1.3 blocker.
+
+The branch already knew mathematically that non-root constraint updates are
+multilinear rather than entrywise powers, but that fact was only documented.
+The new helper makes it executable and testable.
+
+### Code changes
+
+1. Added `src/transfer_oracles.jl` with:
+   - a flattened hyperindex helper matching the existing raw tensor layout
+   - `contract_constraint_message(child_messages, γ, slice, p; clause_sign=1)`
+
+2. Updated `src/QaoaXorsat.jl` to include the new internal source file.
+
+3. Added `test/test_transfer_oracles.jl` covering:
+   - `k=2` reduction to matrix-vector contraction
+   - multilinearity at `k=3`
+   - zero-angle factorisation
+
+4. Updated `test/runtests.jl` to include the new test file.
+
+### Result
+
+The worktree stays green with 303/303 tests passing.
+
+### Impact on project
+
+- Future exact-transfer derivation work can now compare proposed compressed
+  updates against a concrete raw oracle instead of only against prose.
+- The next natural validation step is the smallest nontrivial finite-`D` case,
+  `(k=3, D=2, p=1)`, using the exact evaluator in `src/qaoa.jl` as the outer
+  correctness anchor.
+
+## Entry 14 — Experimental MaxCut Transfer-Matrix Port (22 March 2026)
+
+### What was done
+
+Added `src/maxcut_transfer.jl`, an internal Julia port of the compact MaxCut
+transfer-matrix builder used in the public
+`benjaminvillalonga/large-girth-maxcut-qaoa` implementation.
+
+### Code changes
+
+1. Added `src/maxcut_transfer.jl` with:
+    - `MaxCutTransferParams`
+    - the compact `(2p + 1) × (2p + 1)` matrix builder
+    - the broadcast-corner symmetry fill
+    - the upstream-style scalar transfer objective
+
+2. Updated `src/QaoaXorsat.jl` to include the new internal module file.
+
+3. Added `test/test_maxcut_transfer.jl` with regression coverage for:
+    - `p=1` matrix entries and scalar objective
+    - `p=2` matrix entries and scalar objective
+    - matrix corner-symmetry identities
+
+4. Updated `test/runtests.jl` to include the new transfer regression file.
+
+### Important clarification
+
+This does **not** replace the exact finite-tree evaluator in `src/qaoa.jl`.
+
+The compact MaxCut transfer recursion is an upstream implementation reference
+and an experiment in Julia, but its scalar objective is not yet identified with
+this branch's finite-`D` root-clause expectation. Keeping those paths separate is
+intentional.
+
+### Impact on project
+
+- The repository now contains a native Julia copy of the upstream compact MaxCut
+   recursion structure.
+- Future work can compare that compact recursion against the exact local-tree
+   reference without repeatedly mining the external C++ source.
+- Total tests increased from 269 to 300 while keeping the worktree green.
+
+## Entry 13 — P1.3 Transfer-Source Documentation (22 March 2026)
+
+### What was done
+
+Added a focused learning note,
+`.project/learning/11-explainer-p1.3-maxcut-transfer-sources.md`, to record the
+external sources used in the recent P1.3 MaxCut transfer work.
+
+### Why this was needed
+
+Recent branch work used both:
+
+1. the exact finite-D contraction perspective from Farhi et al. 2025, and
+2. the compact MaxCut recursion lineage associated with Basso et al. and the
+    public `benjaminvillalonga/large-girth-maxcut-qaoa` repository.
+
+Those sources are adjacent but not interchangeable. The new note makes the
+relationship explicit so future P1.3 work does not treat a MaxCut transfer port
+as a proof of the finite-D k-XORSAT recursion.
+
+### Source status recorded
+
+- `papers/farhi2025-maxcut-lower-bound.pdf` already covered the exact MaxCut
+   tensor-contraction reference.
+- `papers/basso2021-qaoa-high-depth.pdf` already covered the Basso et al.
+   large-girth / high-depth recursion reference.
+- The upstream `large-girth-maxcut-qaoa` implementation is a code reference, not
+   a paper artefact, so it was documented in learning material rather than added
+   to `.project/papers`.
+
+### Impact on project
+
+- No `PLAN.md` changes are needed.
+- The documentation now distinguishes more cleanly between:
+   - exact finite-D contraction,
+   - large-D compact recursion,
+   - external MaxCut implementation patterns,
+   - and this branch's experimental Julia port.
+
+## Entry 12 — P1.3 Exact Light-Cone Reference Evaluator (22 March 2026)
+
+### What was done
+
+Stabilised the `feature/p1.3-contraction` branch around a correctness-first
+implementation of P1.3 instead of continuing to chase the original draft's
+incorrect contraction rule.
+
+### Code changes already present on this branch
+
+1. Added `src/qaoa.jl` with:
+   - explicit light-cone construction for `(k, D, p)`
+   - exact QAOA state preparation on that finite tree
+   - `parity_expectation`
+   - `qaoa_expectation`
+   - a hard guard against oversized exact trees
+
+2. Added `test/test_qaoa.jl` covering:
+   - zero-angle baseline at `(k=3, D=4, p=1)`
+   - the exact MaxCut `p=1` parity formula
+   - the exact MaxCut `p=1` optimum
+   - a `p=2` exact-statevector comparison
+   - the guard behaviour on oversized trees
+
+### Documentation corrections completed now
+
+1. Added `.project/implementation-notes/P1.3.md` explaining why this branch
+   implements an exact reference evaluator rather than the intended `O(4^p)`
+   transfer recursion.
+
+2. Updated `.project/learning/05-tensor-derivation.md` with a concrete
+   "Contraction Ordering" section:
+   - physical round `1` is outermost
+   - physical round `p` is innermost
+   - slice index satisfies `slice = p - round + 1`
+   - concrete example given at `(k=2, D=3, p=2)`
+
+3. Revised `.project/specs/P1.3-contraction.md` so it no longer claims the
+   incorrect non-root constraint update `branch .^ (k-1)`.
+
+### Important result
+
+The main blocker is now sharply identified.
+
+- At variable nodes, identical child branches contribute via entrywise power.
+- At constraint nodes, child contributions are multilinear in the `k-1` child
+  messages and cannot in general be replaced by entrywise power.
+
+That is why the branch stops at a guarded exact evaluator instead of claiming a
+fast but unjustified `O(4^p)` implementation.
+
+### Impact on project
+
+- We now have a trusted reference oracle for all small-tree cases.
+- Any future transfer recursion must reproduce these results before it is used
+  for `(k=3, D=4)` at larger depth.
+- P1.3 is therefore complete as a **reference implementation and validation
+  layer**, while the optimised branch-transfer derivation remains future work.
+
 ## Entry 11 — P1.2 Tensor Network Primitives (21 March 2026)
 
 ### What was done
