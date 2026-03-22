@@ -68,6 +68,23 @@ function manual_root_local_factor(
     parity * phase
 end
 
+function manual_diagonal_tensor_contract(messages, tensor)
+    dimension = length(first(messages))
+    total = 0.0 + 0.0im
+
+    for configuration in Iterators.product(ntuple(_ -> 0:dimension-1, length(messages))...)
+        weight = tensor[QaoaXorsat.flattened_hyperindex_position(configuration, dimension)]
+
+        for (message, hyperindex) in zip(messages, configuration)
+            weight *= message[hyperindex+1]
+        end
+
+        total += weight
+    end
+
+    total
+end
+
 @testset "Basso finite-D helpers" begin
     @testset "gamma vector" begin
         angles = QAOAAngles([0.21, 0.64], [0.17, 0.39])
@@ -249,6 +266,56 @@ end
 
         @test mixed ≈ direct atol = 1e-12
         @test mixed ≈ branch_tensor atol = 1e-12
+    end
+
+    @testset "generic diagonal tensor contraction" begin
+        angles = QAOAAngles([0.31], [0.17])
+        child_messages = [
+            ComplexF64.(leaf_tensor(angles)),
+            ComplexF64.(leaf_tensor(angles)),
+        ]
+        tensor = problem_tensor(3, angles.γ[1], 1, 1)
+
+        @test QaoaXorsat.contract_diagonal_tensor_messages(child_messages, problem_tensor(2, angles.γ[1], 1, 1)) ≈
+              manual_diagonal_tensor_contract(child_messages, problem_tensor(2, angles.γ[1], 1, 1)) atol = 1e-12
+
+        parent = QaoaXorsat.contract_constraint_message(child_messages, angles.γ[1], 1, 1)
+
+        @testset "parent_hyperindex=$parent_hyperindex" for parent_hyperindex in 0:hyperindex_dimension(1)-1
+            basis = zeros(ComplexF64, hyperindex_dimension(1))
+            basis[parent_hyperindex+1] = 1.0 + 0.0im
+
+            @test parent[parent_hyperindex+1] ≈
+                  QaoaXorsat.contract_diagonal_tensor_messages(
+                      AbstractVector{ComplexF64}[basis, child_messages...],
+                      tensor,
+                  ) atol = 1e-12
+        end
+    end
+
+    @testset "raw root diagonal observable stays at half without variable-line interface" begin
+        params = TreeParams(3, 2, 1)
+
+        @testset "γ=$γ, β=$β, clause_sign=$clause_sign" for (γ, β, clause_sign) in [
+            (0.31, 0.17, 1),
+            (0.73, 0.29, 1),
+            (0.31, 0.17, -1),
+        ]
+            angles = QAOAAngles([γ], [β])
+            leaf = ComplexF64.(leaf_tensor(angles))
+            child = QaoaXorsat.contract_constraint_message([leaf, leaf], γ, 1, 1; clause_sign)
+            denominator = QaoaXorsat.contract_diagonal_tensor_messages(
+                [child, child, child],
+                QaoaXorsat.identity_observable_tensor(params.k, params.p),
+            )
+            numerator = QaoaXorsat.contract_diagonal_tensor_messages(
+                [child, child, child],
+                observable_tensor(params.k, params.p; clause_sign),
+            )
+
+            @test numerator / denominator ≈ 0.5 + 0.0im atol = 1e-12
+            @test real(numerator / denominator) != qaoa_expectation(params, angles; clause_sign)
+        end
     end
 
     @testset "root local factor matches raw tensor semantics" begin

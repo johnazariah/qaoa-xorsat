@@ -11,6 +11,46 @@ function flattened_hyperindex_position(configuration, dimension::Int)
 end
 
 """
+    contract_diagonal_tensor_messages(messages, tensor)
+
+Contract a flattened diagonal `k`-body tensor against one message per tensor
+leg and return the resulting scalar.
+
+Each message must have the same length `d`, and the tensor must have length
+`d^k` in the same row-major flattening convention used throughout the raw
+transfer helpers.
+"""
+function contract_diagonal_tensor_messages(
+    messages::AbstractVector{<:AbstractVector},
+    tensor::AbstractVector{<:Number},
+)::ComplexF64
+    !isempty(messages) || throw(ArgumentError("need at least one message"))
+
+    dimension = length(first(messages))
+    all(length(message) == dimension for message in messages) || throw(ArgumentError(
+        "all messages must have length $dimension",
+    ))
+    length(tensor) == dimension^length(messages) || throw(ArgumentError(
+        "tensor length $(length(tensor)) does not match $(length(messages)) messages of length $dimension",
+    ))
+
+    ranges = ntuple(_ -> 0:dimension-1, length(messages))
+    total = 0.0 + 0.0im
+
+    for configuration in Iterators.product(ranges...)
+        weight = ComplexF64(tensor[flattened_hyperindex_position(configuration, dimension)])
+
+        for (message, hyperindex) in zip(messages, configuration)
+            weight *= message[hyperindex+1]
+        end
+
+        total += weight
+    end
+
+    total
+end
+
+"""
     contract_constraint_message(child_messages, γ, slice, p; clause_sign=1)
 
 Contract the raw diagonal problem tensor of one `k`-body constraint against the
@@ -42,26 +82,15 @@ function contract_constraint_message(
     arity = child_count + 1
     tensor = problem_tensor(arity, γ, slice, p; clause_sign)
     parent_message = zeros(ComplexF64, dimension)
-    ranges = ntuple(_ -> 0:dimension-1, child_count)
+    parent_basis = zeros(ComplexF64, dimension)
 
     for parent_hyperindex in 0:dimension-1
-        contribution = 0.0 + 0.0im
-
-        for child_configuration in Iterators.product(ranges...)
-            tensor_index = flattened_hyperindex_position(
-                (parent_hyperindex, child_configuration...),
-                dimension,
-            )
-            weight = tensor[tensor_index]
-
-            for (message, child_hyperindex) in zip(child_messages, child_configuration)
-                weight *= message[child_hyperindex+1]
-            end
-
-            contribution += weight
-        end
-
-        parent_message[parent_hyperindex+1] = contribution
+        fill!(parent_basis, 0.0 + 0.0im)
+        parent_basis[parent_hyperindex+1] = 1.0 + 0.0im
+        parent_message[parent_hyperindex+1] = contract_diagonal_tensor_messages(
+            AbstractVector{ComplexF64}[parent_basis, child_messages...],
+            tensor,
+        )
     end
 
     parent_message

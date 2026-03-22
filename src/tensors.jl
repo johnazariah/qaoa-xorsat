@@ -241,6 +241,35 @@ function parity_observable_weight(configuration, p::Int)
     foldl(*, (z_eigenvalue(ket_bit(σ, 1, p)) for σ in configuration); init = 1)
 end
 
+function identity_observable_weight(configuration, p::Int)
+    all(ket_bit(σ, 1, p) == bra_bit(σ, 1, p) for σ in configuration) ? 1.0 : 0.0
+end
+
+"""
+    identity_observable_tensor(k, p)
+
+Build the flattened diagonal of the root identity observable on the innermost
+slice.
+
+Only configurations with matching ket/bra bits on the root slice contribute.
+This is the denominator tensor for normalized root expectation values in the raw
+hyperindex representation.
+"""
+function identity_observable_tensor(k::Int, p::Int)::Vector{Float64}
+    k ≥ 2 || throw(ArgumentError("k must be ≥ 2, got $k"))
+    validate_depth(p)
+
+    dim = hyperindex_dimension(p)
+    ranges = ntuple(_ -> 0:dim-1, k)
+    tensor = Vector{Float64}(undef, dim^k)
+
+    for (index, configuration) in enumerate(Iterators.product(ranges...))
+        tensor[index] = identity_observable_weight(configuration, p)
+    end
+
+    tensor
+end
+
 """
     parity_observable_tensor(k, p)
 
