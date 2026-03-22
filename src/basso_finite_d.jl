@@ -223,6 +223,52 @@ function basso_constraint_fold(
     iwht(kernel_hat .* (child_hat .^ child_arity))
 end
 
+function basso_root_message(
+    params::TreeParams,
+    angles::QAOAAngles,
+    branch_tensor::AbstractVector{<:Number},
+)::Vector{ComplexF64}
+    configuration_count = basso_configuration_count(params.p)
+    length(branch_tensor) == configuration_count || throw(ArgumentError(
+        "branch tensor length $(length(branch_tensor)) does not match configuration count $(configuration_count)",
+    ))
+
+    root_bit = basso_root_bit_index(params.p)
+    ComplexF64[
+        z_eigenvalue(decode_bits(configuration, basso_bit_count(params.p))[root_bit]) *
+        f_function(angles, configuration) * ComplexF64(branch_tensor[configuration + 1])
+        for configuration in 0:configuration_count-1
+    ]
+end
+
+function basso_root_kernel(
+    angles::QAOAAngles,
+    branch_degree::Int,
+)::Vector{ComplexF64}
+    gamma_full = build_gamma_full_vector(angles)
+    configuration_count = basso_configuration_count(depth(angles))
+    bit_count = basso_bit_count(depth(angles))
+    phase_scale = inv(sqrt(float(branch_degree)))
+
+    ComplexF64[
+        cis(-phase_scale * sum(gamma_full .* configuration_spins(configuration, bit_count)))
+        for configuration in 0:configuration_count-1
+    ]
+end
+
+function basso_root_fold(
+    root_message::AbstractVector{<:Number},
+    kernel::AbstractVector{<:Number},
+    arity::Int,
+)::ComplexF64
+    arity ≥ 1 || throw(ArgumentError("arity must be ≥ 1, got $arity"))
+    length(root_message) == length(kernel) || throw(ArgumentError(
+        "root_message and kernel must have equal length",
+    ))
+
+    sum(ComplexF64.(kernel) .* xor_convolution_power(ComplexF64.(root_message), arity))
+end
+
 """
     basso_branch_tensor_step(params, angles, previous)
 

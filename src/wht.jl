@@ -64,3 +64,17 @@ end
 Compute `values ★ values` on `(ℤ₂^n, ⊕)`.
 """
 xor_autoconvolution(values::AbstractVector) = iwht(wht(values) .^ 2)
+
+"""
+    xor_convolution_power(values, exponent)
+
+Compute the repeated XOR-convolution power
+
+`values ★ values ★ ⋯ ★ values`
+
+with `exponent` factors on `(ℤ₂^n, ⊕)`.
+"""
+function xor_convolution_power(values::AbstractVector, exponent::Int)
+    exponent ≥ 1 || throw(ArgumentError("exponent must be ≥ 1, got $exponent"))
+    iwht(wht(values) .^ exponent)
+end

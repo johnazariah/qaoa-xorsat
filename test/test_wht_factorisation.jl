@@ -74,6 +74,34 @@ function wht_constraint_fold(angles::QAOAAngles, branch_degree::Int; child_arity
     QaoaXorsat.iwht(kernel_hat .* (branch_hat .^ child_arity))
 end
 
+function naive_root_fold(message::AbstractVector, kernel::AbstractVector; arity::Int)
+    configuration_count = length(message)
+    total = 0.0 + 0.0im
+
+    function recurse(accumulated_xor::Int, weight::ComplexF64, remaining::Int)
+        if iszero(remaining)
+            return kernel[accumulated_xor + 1] * weight
+        end
+
+        subtotal = 0.0 + 0.0im
+        for configuration in 0:configuration_count-1
+            subtotal += recurse(
+                xor(accumulated_xor, configuration),
+                weight * message[configuration + 1],
+                remaining - 1,
+            )
+        end
+        subtotal
+    end
+
+    total += recurse(0, 1.0 + 0.0im, arity)
+    total
+end
+
+function wht_root_fold(message::AbstractVector, kernel::AbstractVector; arity::Int)
+    sum(kernel .* QaoaXorsat.xor_convolution_power(message, arity))
+end
+
 @testset "WHT factorisation" begin
     @testset "round trip" begin
         @testset "n=$n" for n in (3, 5)
@@ -109,26 +137,66 @@ end
         @test QaoaXorsat.xor_autoconvolution(values) ≈ direct atol = 1e-10
     end
 
-    @testset "naive vs WHT constraint fold — p=$p, D=$D" for (p, D, trials) in [
-        (1, 3, 100),
-        (1, 4, 50),
-        (2, 3, 20),
-        (2, 4, 10),
-        (3, 3, 5),
-        (3, 4, 3),
+    @testset "xor convolution power theorem" begin
+        values = randn(ComplexF64, 8)
+        direct = values
+        for _ in 2:4
+            next = zeros(ComplexF64, 8)
+            for target in 0:7
+                for source in 0:7
+                    next[target + 1] += direct[source + 1] * values[xor(target, source) + 1]
+                end
+            end
+            direct = next
+        end
+
+        @test QaoaXorsat.xor_convolution_power(values, 4) ≈ direct atol = 1e-10
+    end
+
+    @testset "naive vs WHT constraint fold — arity=$child_arity, p=$p, D=$D" for (child_arity, p, D, trials) in [
+        (1, 1, 3, 40),
+        (2, 1, 3, 100),
+        (2, 1, 4, 50),
+        (3, 1, 3, 40),
+        (1, 2, 3, 10),
+        (2, 2, 3, 20),
+        (2, 2, 4, 10),
+        (3, 2, 3, 5),
+        (2, 3, 3, 5),
+        (2, 3, 4, 3),
     ]
         branch_degree = D - 1
         max_error = 0.0
 
         @testset "trial $trial" for trial in 1:trials
             angles = QAOAAngles(π .* rand(p), (π / 2) .* rand(p))
-            naive = naive_constraint_fold(angles, branch_degree)
-            transformed = wht_constraint_fold(angles, branch_degree)
+            naive = naive_constraint_fold(angles, branch_degree; child_arity)
+            transformed = wht_constraint_fold(angles, branch_degree; child_arity)
             max_error = max(max_error, maximum(abs.(naive .- transformed)))
 
             @test transformed ≈ naive atol = 1e-10
         end
 
-        @info "p=$p, D=$D: max |S_naive - S_wht| = $max_error over $trials trials"
+        @info "arity=$child_arity, p=$p, D=$D: max |S_naive - S_wht| = $max_error over $trials trials"
+    end
+
+    @testset "naive vs WHT root fold" begin
+        @testset "k=$k, p=$p, D=$D" for (k, p, D) in [
+            (2, 1, 3),
+            (2, 2, 3),
+            (3, 1, 2),
+            (3, 1, 4),
+        ]
+            params = TreeParams(k, D, p)
+            angles = QAOAAngles(π .* rand(p), (π / 2) .* rand(p))
+            branch_tensor = QaoaXorsat.basso_branch_tensor(params, angles)
+            root_message = QaoaXorsat.basso_root_message(params, angles, branch_tensor)
+            kernel = QaoaXorsat.basso_root_kernel(angles, QaoaXorsat.basso_branching_degree(params))
+
+            naive = naive_root_fold(root_message, kernel; arity=k)
+            transformed = wht_root_fold(root_message, kernel; arity=k)
+
+            @test transformed ≈ naive atol = 1e-10
+        end
     end
 end
