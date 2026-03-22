@@ -85,6 +85,19 @@ function manual_diagonal_tensor_contract(messages, tensor)
     total
 end
 
+function p1_root_leg(beta::Float64, operator::Matrix{ComplexF64})
+    mixer = ComplexF64[
+        cos(beta) -im * sin(beta)
+        -im * sin(beta) cos(beta)
+    ]
+    propagated = adjoint(mixer) * operator * mixer
+
+    ComplexF64[
+        0.5 * propagated[QaoaXorsat.bra_bit(state, 1, 1)+1, QaoaXorsat.ket_bit(state, 1, 1)+1]
+        for state in 0:hyperindex_dimension(1)-1
+    ]
+end
+
 @testset "Basso finite-D helpers" begin
     @testset "gamma vector" begin
         angles = QAOAAngles([0.21, 0.64], [0.17, 0.39])
@@ -278,6 +291,8 @@ end
 
         @test QaoaXorsat.contract_diagonal_tensor_messages(child_messages, problem_tensor(2, angles.γ[1], 1, 1)) ≈
               manual_diagonal_tensor_contract(child_messages, problem_tensor(2, angles.γ[1], 1, 1)) atol = 1e-12
+          @test QaoaXorsat.contract_tensor_messages(child_messages, problem_tensor(2, angles.γ[1], 1, 1)) ≈
+              manual_diagonal_tensor_contract(child_messages, problem_tensor(2, angles.γ[1], 1, 1)) atol = 1e-12
 
         parent = QaoaXorsat.contract_constraint_message(child_messages, angles.γ[1], 1, 1)
 
@@ -291,6 +306,59 @@ end
                       tensor,
                   ) atol = 1e-12
         end
+    end
+
+    @testset "mixer-dressed diagonal root observable remains insufficient" begin
+        params = TreeParams(3, 2, 1)
+
+        @testset "γ=$γ, β=$β, clause_sign=$clause_sign" for (γ, β, clause_sign) in [
+            (0.31, 0.17, 1),
+            (0.73, 0.29, 1),
+            (0.31, 0.17, -1),
+        ]
+            angles = QAOAAngles([γ], [β])
+            leaf = ComplexF64.(leaf_tensor(angles))
+            child = QaoaXorsat.contract_constraint_message([leaf, leaf], γ, 1, 1; clause_sign)
+            dressed_identity = QaoaXorsat.apply_local_matrix_to_tensor(
+                QaoaXorsat.identity_observable_tensor(params.k, params.p),
+                mixer_tensor(β, 1, 1),
+                params.k,
+            )
+            dressed_parity = QaoaXorsat.apply_local_matrix_to_tensor(
+                parity_observable_tensor(params.k, params.p),
+                mixer_tensor(β, 1, 1),
+                params.k,
+            )
+            denominator = QaoaXorsat.contract_tensor_messages([child, child, child], dressed_identity)
+            numerator = QaoaXorsat.contract_tensor_messages([child, child, child], dressed_parity)
+
+            @test numerator / denominator ≈ 0.0 + 0.0im atol = 1e-12
+            @test real(numerator / denominator) != parity_expectation(params, angles; clause_sign)
+        end
+    end
+
+    @testset "single-qubit root leg ansatz is not exact" begin
+        params = TreeParams(3, 2, 1)
+        γ = 0.73
+        β = 0.29
+        clause_sign = 1
+        angles = QAOAAngles([γ], [β])
+        leaf = ComplexF64.(leaf_tensor(angles))
+        child = QaoaXorsat.contract_constraint_message([leaf, leaf], γ, 1, 1; clause_sign)
+        identity_leg = p1_root_leg(β, Matrix{ComplexF64}(I, 2, 2))
+        parity_leg = p1_root_leg(β, ComplexF64[1 0; 0 -1])
+        kernel = problem_tensor(params.k, γ, 1, 1; clause_sign)
+        denominator = QaoaXorsat.contract_diagonal_tensor_messages(
+            [child .* identity_leg, child .* identity_leg, child .* identity_leg],
+            kernel,
+        )
+        numerator = QaoaXorsat.contract_diagonal_tensor_messages(
+            [child .* parity_leg, child .* parity_leg, child .* parity_leg],
+            kernel,
+        )
+
+        @test real(numerator / denominator) ≈ 0.6573461890062107 atol = 1e-12
+        @test !isapprox(real(numerator / denominator), parity_expectation(params, angles; clause_sign); atol=1e-6)
     end
 
     @testset "raw root diagonal observable stays at half without variable-line interface" begin
