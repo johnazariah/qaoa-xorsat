@@ -193,6 +193,36 @@ function configuration_spins(configuration::Integer, bit_count::Int)::Vector{Int
     [z_eigenvalue((Int(configuration) >> (index - 1)) & 1) for index in 1:bit_count]
 end
 
+"""
+    basso_configuration_to_hyperindex(configuration, p)
+
+Map a `(2p + 1)`-bit Basso branch configuration
+
+`(a^[1], …, a^[p], a^[0], a^[-p], …, a^[-1])`
+
+to the raw P1.2 hyperindex convention
+
+`(ket₁, bra₁, ket₂, bra₂, …, ket_p, bra_p)`
+
+where slice `1` is the innermost / root slice and slice `p` is the outermost
+/ boundary slice.
+"""
+function basso_configuration_to_hyperindex(configuration::Integer, p::Int)::Int
+    bits = decode_bits(configuration, basso_bit_count(p))
+    hyperindex = 0
+
+    for physical_round in 1:p
+        slice = slice_from_physical_round(physical_round, p)
+        ket_position, bra_position = slice_bit_positions(slice, p)
+        negative_index = 2p - physical_round + 2
+
+        hyperindex |= bits[physical_round] << (ket_position - 1)
+        hyperindex |= bits[negative_index] << (bra_position - 1)
+    end
+
+    hyperindex
+end
+
 function basso_constraint_kernel(
     angles::QAOAAngles,
     branch_degree::Int,

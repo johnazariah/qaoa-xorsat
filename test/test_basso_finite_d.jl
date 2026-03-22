@@ -51,6 +51,23 @@ function manual_basso_branch_tensor_step(params::TreeParams, angles::QAOAAngles,
      for parent_configuration in all_configurations]
 end
 
+function manual_root_local_factor(
+    angles::QAOAAngles,
+    configurations::AbstractVector{<:Integer};
+    clause_sign::Int=1,
+)
+    p = depth(angles)
+    hyperindices = map(configuration -> QaoaXorsat.basso_configuration_to_hyperindex(configuration, p), configurations)
+
+    phase = prod(1:p) do physical_round
+        slice = QaoaXorsat.slice_from_physical_round(physical_round, p)
+        QaoaXorsat.problem_phase(hyperindices, angles.γ[physical_round], slice, p; clause_sign)
+    end
+
+    parity = prod(configuration -> QaoaXorsat.basso_root_parity(configuration, p), configurations)
+    parity * phase
+end
+
 @testset "Basso finite-D helpers" begin
     @testset "gamma vector" begin
         angles = QAOAAngles([0.21, 0.64], [0.17, 0.39])
@@ -155,6 +172,36 @@ end
         @test negative_phase ≈ conj.(positive_phase) atol = 1e-12
         @test QaoaXorsat.basso_root_kernel(angles, branch_degree) ≈
               parity_kernel .* positive_phase atol = 1e-12
+    end
+
+    @testset "branch-to-hyperindex mapping" begin
+        @test QaoaXorsat.basso_configuration_to_hyperindex(0b000, 1) == 0b00
+        @test QaoaXorsat.basso_configuration_to_hyperindex(0b101, 1) == 0b11
+        @test QaoaXorsat.basso_configuration_to_hyperindex(0b00000, 2) == 0b0000
+        @test QaoaXorsat.basso_configuration_to_hyperindex(0b10001, 2) == 0b1100
+        @test QaoaXorsat.basso_configuration_to_hyperindex(0b01010, 2) == 0b0011
+    end
+
+    @testset "root local factor matches raw tensor semantics" begin
+        @testset "k=$k, p=$p, clause_sign=$clause_sign" for (k, p, clause_sign, tuples) in [
+            (2, 1, -1, [(0b000, 0b000), (0b001, 0b011), (0b101, 0b010)]),
+            (2, 2, -1, [(0b00000, 0b00000), (0b10001, 0b01010), (0b11100, 0b00111)]),
+            (3, 1, 1, [(0b000, 0b000, 0b000), (0b001, 0b010, 0b011), (0b101, 0b110, 0b011)]),
+        ]
+            angles = p == 1 ? QAOAAngles([0.31], [0.17]) : QAOAAngles([0.31, 0.64], [0.17, 0.39])
+            gamma_full = QaoaXorsat.build_gamma_full_vector(angles)
+            bit_count = QaoaXorsat.basso_bit_count(p)
+
+            for configs in tuples
+                delta = foldl(xor, configs; init=0)
+                raw = manual_root_local_factor(angles, collect(configs); clause_sign)
+                unscaled = QaoaXorsat.basso_root_parity(delta, p) *
+                           cis(-0.5 * clause_sign * sum(gamma_full .* QaoaXorsat.configuration_spins(delta, bit_count)))
+
+                @test raw ≈ unscaled atol = 1e-12
+                @test raw ≈ QaoaXorsat.basso_root_kernel(angles, 1, p; clause_sign)[delta+1] atol = 1e-12
+            end
+        end
     end
 
     @testset "zero-angle root parity sum vanishes" begin
