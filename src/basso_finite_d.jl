@@ -34,6 +34,18 @@ function basso_phase_bit_positions(p::Int)::Vector{Int}
     [collect(1:p); collect((p+2):(2p+1))]
 end
 
+function build_gamma_full_vector(angles::QAOAAngles)::Vector{Float64}
+    p = depth(angles)
+    gamma_full = zeros(Float64, basso_bit_count(p))
+    gamma_vector = build_gamma_vector(angles)
+
+    for (gamma_index, bit_index) in pairs(basso_phase_bit_positions(p))
+        gamma_full[bit_index] = gamma_vector[gamma_index]
+    end
+
+    gamma_full
+end
+
 """Number of Basso branch configurations, namely `2^(2p + 1)`."""
 function basso_configuration_count(p::Int)
     validate_depth(p)
@@ -177,6 +189,40 @@ function _basso_child_sum(
     recurse(1.0 + 0.0im, child_arity)
 end
 
+function configuration_spins(configuration::Integer, bit_count::Int)::Vector{Int}
+    [z_eigenvalue((Int(configuration) >> (index - 1)) & 1) for index in 1:bit_count]
+end
+
+function basso_constraint_kernel(
+    angles::QAOAAngles,
+    branch_degree::Int,
+)::Vector{ComplexF64}
+    bit_count = basso_bit_count(depth(angles))
+    configuration_count = basso_configuration_count(depth(angles))
+    gamma_full = build_gamma_full_vector(angles)
+    phase_scale = inv(sqrt(float(branch_degree)))
+
+    ComplexF64[
+        cos(phase_scale * sum(gamma_full .* configuration_spins(configuration, bit_count)))
+        for configuration in 0:configuration_count-1
+    ]
+end
+
+function basso_constraint_fold(
+    child_message::AbstractVector{<:Number},
+    kernel::AbstractVector{<:Number},
+    child_arity::Int,
+)::Vector{ComplexF64}
+    child_arity ≥ 1 || throw(ArgumentError("child_arity must be ≥ 1, got $child_arity"))
+    length(child_message) == length(kernel) || throw(ArgumentError(
+        "child_message and kernel must have equal length",
+    ))
+
+    child_hat = wht(ComplexF64.(child_message))
+    kernel_hat = wht(ComplexF64.(kernel))
+    iwht(kernel_hat .* (child_hat .^ child_arity))
+end
+
 """
     basso_branch_tensor_step(params, angles, previous)
 
@@ -200,29 +246,14 @@ function basso_branch_tensor_step(
 
     child_arity = params.k - 1
     branch_degree = basso_branching_degree(params)
-    phase_scale = inv(sqrt(float(branch_degree)))
-    bit_count = basso_bit_count(p)
-    gamma_vector = build_gamma_vector(angles)
-    all_bits = [decode_bits(configuration, bit_count) for configuration in 0:configuration_count-1]
     child_weights = ComplexF64[
         f_function(angles, configuration) * ComplexF64(previous[configuration+1])
         for configuration in 0:configuration_count-1
     ]
+    kernel = basso_constraint_kernel(angles, branch_degree)
+    branch_sum = basso_constraint_fold(child_weights, kernel, child_arity)
 
-    next_tensor = Vector{ComplexF64}(undef, configuration_count)
-    for configuration in 1:configuration_count
-        branch_sum = _basso_child_sum(
-            all_bits[configuration],
-            all_bits,
-            child_weights,
-            gamma_vector,
-            phase_scale,
-            child_arity,
-        )
-        next_tensor[configuration] = branch_sum^branch_degree
-    end
-
-    next_tensor
+    branch_sum .^ branch_degree
 end
 
 """
