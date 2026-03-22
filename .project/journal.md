@@ -1,5 +1,44 @@
 # Project Journal
 
+## Entry 13 — P1.3 Transfer-Source Documentation (22 March 2026)
+
+### What was done
+
+Added a focused learning note,
+`.project/learning/11-explainer-p1.3-maxcut-transfer-sources.md`, to record the
+external sources used in the recent P1.3 MaxCut transfer work.
+
+### Why this was needed
+
+Recent branch work used both:
+
+1. the exact finite-D contraction perspective from Farhi et al. 2025, and
+2. the compact MaxCut recursion lineage associated with Basso et al. and the
+    public `benjaminvillalonga/large-girth-maxcut-qaoa` repository.
+
+Those sources are adjacent but not interchangeable. The new note makes the
+relationship explicit so future P1.3 work does not treat a MaxCut transfer port
+as a proof of the finite-D k-XORSAT recursion.
+
+### Source status recorded
+
+- `papers/farhi2025-maxcut-lower-bound.pdf` already covered the exact MaxCut
+   tensor-contraction reference.
+- `papers/basso2021-qaoa-high-depth.pdf` already covered the Basso et al.
+   large-girth / high-depth recursion reference.
+- The upstream `large-girth-maxcut-qaoa` implementation is a code reference, not
+   a paper artefact, so it was documented in learning material rather than added
+   to `.project/papers`.
+
+### Impact on project
+
+- No `PLAN.md` changes are needed.
+- The documentation now distinguishes more cleanly between:
+   - exact finite-D contraction,
+   - large-D compact recursion,
+   - external MaxCut implementation patterns,
+   - and this branch's experimental Julia port.
+
 ## Entry 12 — P1.3 Exact Light-Cone Reference Evaluator (22 March 2026)
 
 ### What was done
