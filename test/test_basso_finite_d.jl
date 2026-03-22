@@ -230,6 +230,27 @@ end
         @test !isapprox(lifted_parent, branch_tensor; atol=1e-12)
     end
 
+    @testset "mixed raw-to-branch clause oracle" begin
+        params = TreeParams(3, 2, 1)
+        angles = QAOAAngles([0.31], [0.17])
+        leaf = ComplexF64.(leaf_tensor(angles))
+
+        mixed = QaoaXorsat.contract_hyperindex_messages_to_branch_basis(
+            [leaf, leaf],
+            angles,
+            QaoaXorsat.basso_branching_degree(params),
+        )
+        direct = QaoaXorsat.basso_constraint_fold(
+            QaoaXorsat.lift_hyperindex_message_to_branch_basis(leaf, angles),
+            QaoaXorsat.basso_constraint_kernel(angles, QaoaXorsat.basso_branching_degree(params)),
+            2,
+        )
+        branch_tensor = QaoaXorsat.basso_branch_tensor(params, angles)
+
+        @test mixed ≈ direct atol = 1e-12
+        @test mixed ≈ branch_tensor atol = 1e-12
+    end
+
     @testset "root local factor matches raw tensor semantics" begin
         @testset "k=$k, p=$p, clause_sign=$clause_sign" for (k, p, clause_sign, tuples) in [
             (2, 1, -1, [(0b000, 0b000), (0b001, 0b011), (0b101, 0b010)]),

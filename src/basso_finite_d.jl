@@ -247,10 +247,23 @@ function lift_hyperindex_message_to_branch_basis(
 
     scale = float(one(Int) << depth(angles))
     ComplexF64[
-        scale * ComplexF64(message[basso_configuration_to_hyperindex(configuration, depth(angles)) + 1]) *
+        scale * ComplexF64(message[basso_configuration_to_hyperindex(configuration, depth(angles))+1]) *
         f_function(angles, configuration)
         for configuration in 0:basso_configuration_count(depth(angles))-1
     ]
+end
+
+function contract_hyperindex_messages_to_branch_basis(
+    child_messages::AbstractVector{<:AbstractVector},
+    angles::QAOAAngles,
+    branch_degree::Int,
+)::Vector{ComplexF64}
+    !isempty(child_messages) || throw(ArgumentError("need at least one child message"))
+
+    lifted = [lift_hyperindex_message_to_branch_basis(message, angles) for message in child_messages]
+    kernel = basso_constraint_kernel(angles, branch_degree)
+
+    basso_constraint_fold_messages(lifted, kernel)
 end
 
 function basso_constraint_kernel(
@@ -283,6 +296,24 @@ function basso_constraint_fold(
     iwht(kernel_hat .* (child_hat .^ child_arity))
 end
 
+function basso_constraint_fold_messages(
+    child_messages::AbstractVector{<:AbstractVector},
+    kernel::AbstractVector{<:Number},
+)::Vector{ComplexF64}
+    !isempty(child_messages) || throw(ArgumentError("need at least one child message"))
+    all(length(message) == length(kernel) for message in child_messages) || throw(ArgumentError(
+        "all child messages must have length $(length(kernel))",
+    ))
+
+    kernel_hat = wht(ComplexF64.(kernel))
+    child_hat_product = ones(ComplexF64, length(kernel))
+    for message in child_messages
+        child_hat_product .*= wht(ComplexF64.(message))
+    end
+
+    iwht(kernel_hat .* child_hat_product)
+end
+
 function basso_root_parity(configuration::Integer, p::Int)::Int
     root_bit = basso_root_bit_index(p)
     z_eigenvalue((Int(configuration) >> (root_bit - 1)) & 1)
@@ -299,7 +330,7 @@ function basso_root_message(
     ))
 
     ComplexF64[
-        f_function(angles, configuration) * ComplexF64(branch_tensor[configuration + 1])
+        f_function(angles, configuration) * ComplexF64(branch_tensor[configuration+1])
         for configuration in 0:configuration_count-1
     ]
 end
