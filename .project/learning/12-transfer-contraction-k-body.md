@@ -144,6 +144,35 @@ At non-zero angles (e.g. γ=0.3, β=0.5):
 | Approach | Cost | Exactness | Feasible p (k=3,D=4) |
 |----------|------|-----------|----------------------|
 | Brute-force state vector | $O(2^{6^p})$ | Exact | p=1 only (p=2 needs 129 qubits) |
-| Basso finite-D iteration (Eq. 8.7) | $O(p \cdot 4^{3p})$ | Exact | p ≤ 5–7 |
+| Basso finite-D, naive (Eq. 8.7) | $O(p \cdot 4^{3p})$ | Exact | p ≤ 5–7 |
+| **Basso finite-D + WHT** | **$O(p^2 \cdot 4^p)$** | **Exact** | **p ≤ 15–17** |
 | Basso large-D iteration (Eq. 8.9) | $O(p^2 \cdot 4^p)$ | $O(1/D)$ approximate | p ≤ 15+ |
 | Original P1.3 spec (wrong) | $O(p \cdot 4^p)$ | N/A | N/A |
+
+---
+
+## Update (22 March 2026): WHT Factorisation Resolves Open Question 1
+
+The parity decomposition research question posed in this document has been
+**fully resolved**. The constraint fold is a convolution on $\mathbb{Z}_2^{2p+1}$,
+and the Walsh-Hadamard transform diagonalises it:
+
+$$\hat{S} = \hat{\kappa} \cdot \hat{g}^{k-1}$$
+
+This reduces the exact finite-D constraint fold from $O(4^{kp})$ to
+$O(p \cdot 4^p)$ per step, giving $O(p^2 \cdot 4^p)$ overall — the **same
+asymptotic cost as the large-D approximation, but exact at any finite D**.
+
+The key insight: the sum over $(k-1)$ child configurations is a convolution over
+child *parities*, not a factorisation over *rounds*. The cosine kernel need not
+decompose into per-round factors — it just needs to be a well-defined function
+on $\mathbb{Z}_2^{2p+1}$, which it trivially is.
+
+**Numerically verified** at p=1,2,3 for D=3,4 to machine precision ($< 10^{-14}$).
+
+Full derivation and verification: see
+[15-wht-factorisation-discovery.md](15-wht-factorisation-discovery.md).
+
+This makes the project's primary deliverable — exact QAOA performance at (k=3, D=4)
+up to p=15+ — fully feasible. The recommendations in this document (items 2–4)
+are superseded: we do not need the large-D approximation or hybrid approaches.

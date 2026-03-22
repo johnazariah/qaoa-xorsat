@@ -1,0 +1,35 @@
+graph TD
+    parent(("x₁ parent
+    receives B'"))
+
+    c1["c₁ CONSTRAINT
+    combines 2 children
+    via 3-body gate"]
+
+    childA(("child A
+    tensor B"))
+    childB(("child B
+    tensor B
+    (identical)"))
+
+    leafA1(("leaf"))
+    leafA2(("leaf"))
+    leafB1(("leaf"))
+    leafB2(("leaf"))
+
+    parent --- c1
+    c1 --- childA
+    c1 --- childB
+    childA --- leafA1
+    childA --- leafA2
+    childB --- leafB1
+    childB --- leafB2
+
+    style parent fill:#dcfce7,stroke:#16a34a,color:#14532d
+    style c1 fill:#fef3c7,stroke:#d97706,color:#78350f
+    style childA fill:#dcfce7,stroke:#16a34a,color:#14532d
+    style childB fill:#dcfce7,stroke:#16a34a,color:#14532d
+    style leafA1 fill:#f0fdf4,stroke:#86efac,color:#14532d
+    style leafA2 fill:#f0fdf4,stroke:#86efac,color:#14532d
+    style leafB1 fill:#f0fdf4,stroke:#86efac,color:#14532d
+    style leafB2 fill:#f0fdf4,stroke:#86efac,color:#14532d

@@ -1,0 +1,6487 @@
+Decoded Quantum Interferometry Requires Structure
+Eric R. Anschuetz,1, 2, ∗ David Gamarnik,3 and Jonathan Z. Lu4, †
+1
+
+arXiv:2509.14509v1 [quant-ph] 18 Sep 2025
+
+Institute for Quantum Information and Matter, Caltech,
+1200 E. California Blvd., Pasadena, CA 91125, USA
+2
+Walter Burke Institute for Theoretical Physics, Caltech,
+1200 E. California Blvd., Pasadena, CA 91125, USA
+3
+Sloan School of Management, MIT, 100 Main St., Cambridge, MA 02142, USA
+4
+Department of Mathematics, MIT, 77 Massachusetts Ave., Cambridge, MA 02139, USA
+We study the performance of Decoded Quantum Interferometry (DQI) on typical instances of
+MAX-k-XOR-SAT when the transpose of the constraint matrix is drawn from a standard ensemble of LDPC parity check matrices. We prove that if the decoding step of DQI corrects up to
+the folklore efficient decoding threshold for LDPC codes, then DQI is obstructed by a topological
+feature of the near-optimal space of solutions known as the overlap gap property (OGP). As the
+OGP is widely conjectured to exactly characterize the performance of state-of-the-art classical algorithms, this result suggests that DQI has no quantum advantage in optimizing unstructured MAXk-XOR-SAT instances. We also give numerical evidence supporting this conjecture by showing
+that approximate message passing (AMP)—a classical algorithm conjectured to saturate the OGP
+threshold—outperforms DQI on a related ensemble of MAX-k-XOR-SAT instances. Finally, we
+prove that depth-1 QAOA outperforms DQI at sufficiently large k under the same decoding threshold
+assumption.
+Our result follows by showing that DQI is approximately Lipschitz under the quantum Wasserstein
+metric over many standard ensembles of codes. We then prove that MAX-k-XOR-SAT exhibits
+both an OGP and a related topological obstruction known as the chaos property; this is the first
+known OGP threshold for MAX-k-XOR-SAT at fixed k, which may be of independent interest.
+Finally, we prove that both of these topological properties inhibit approximately Lipschitz algorithms
+such as DQI from optimizing MAX-k-XOR-SAT to large approximation ratio.
+
+CONTENTS
+
+I. Introduction
+A. Motivation
+B. Contributions
+
+2
+2
+3
+
+II. Preliminaries
+A. MAX-k-XOR-SAT
+B. The Gallager Ensemble of LDPC Codes
+C. Decoded Quantum Interferometry
+D. Stable Quantum Algorithms
+E. Topological Obstructions in Combinatorial Optimization Problems
+
+6
+6
+7
+8
+11
+11
+
+III. Stable Quantum Algorithms Fail to Optimize MAX-k-XOR-SAT
+A. Reduction to Deterministic Quantum Algorithms
+B. Measurement Reduction
+C. Considering Many Replicas
+D. Distant Clustering for Independent Instances
+E. Topologically Obstructed Configurations Conditioned on Events
+F. Completing the Proof
+
+13
+14
+16
+19
+20
+20
+22
+
+IV. Stability of Decoded Quantum Interferometry
+A. DQI is Stable
+B. Locally Restrictable Codes
+1. Restrictability of Good Locally Generated Ensembles
+
+23
+23
+25
+25
+
+∗ eans@caltech.edu
+† lujz@mit.edu
+
+2
+2. Random Code Constructions
+3. Distance of Random Locally-Generated Codes
+C. Stability of DQI on Constructed Ensembles
+
+26
+27
+31
+
+V. Statistical Properties of Transposed Gallager MAX-k-XOR-SAT
+A. Maximum Value of Transposed Gallager MAX-k-XOR-SAT
+1. Concentration
+2. Upper Bound
+3. Lower Bound
+B. Transposed Gallager MAX-k-XOR-SAT Exhibits an Overlap Gap Property
+1. Dependent v (r)
+2. Independent v (r)
+
+31
+31
+32
+32
+33
+38
+40
+43
+
+VI. Algorithmic Implications and a Classical Algorithm
+
+43
+
+Acknowledgments
+
+45
+
+A. Background on the Quantum Wasserstein Distance
+
+45
+
+B. QAOA for MAX-k-XOR-SAT
+
+47
+
+C. Bound on ψ
+
+48
+
+References
+
+50
+
+I.
+
+INTRODUCTION
+A.
+
+Motivation
+
+Quantum algorithms which are known or believed to give significant speedups, such as factoring integers or solving certain systems of equations, generally have significant and rigid algebraic structure [1–4]. At the same time, a
+tantalizing—but, as of yet not well understood—potential application for quantum algorithms is in discrete optimization. In this setting, one is interested in computing
+z ∗ = argmax g (z)
+z∈{0,1}n
+
+(1)
+
+given some objective function g : Fn2 → R.
+While complexity theory suggests that—at least in the worst case—optimizing a generic objective function g to a
+sufficiently large constant approximation ratio is NP-hard, there is nevertheless hope of a quantum-classical approximation gap. This possibility is particularly attractive in the “average case,” wherein the function g is drawn from
+certain natural ensembles of problem instances. Namely, it is plausible that efficient quantum algorithms are able
+to achieve a function value gq∗ while efficient classical algorithms are only able to achieve a value gc∗ < gq∗ with high
+probability over the distribution of problem instances.
+In recent years, the classical average-case hardness of this task has been studied through the use of statistical
+∗
+techniques. These efforts have led to a conjecture that gc∗ is tightly characterized by the function value gOGP
+at
+which the overlap gap property (OGP) manifests: a shattering of the space of near-optimal solutions into many wellseparated clusters [5–10]. An illustration of this property is given as Fig. 1. The onset of this topological feature
+is rigorously known to inhibit classical algorithms which are Lipschitz functions of their inputs from preparing nearoptimal solutions, and is also rigorously known to be a tight characterization of the value achieved by such algorithms
+in many settings [9, 10]. The onset of the OGP also coincides with the approximation ratios achieved by the bestknown polynomial-time algorithms for random k-SAT instances, maximum independent set, and in the optimization
+of spin glasses. We refer the interested reader to Ref. [5] for more examples of problems for which the OGP is known
+to be tight with polynomial-time classical algorithms.
+Conditioned on this well-established conjecture, then, the question of average-case quantum advantage for discrete
+optimization becomes:
+Question 1. For a given optimization problem, is there a quantum algorithm that overcomes the OGP barrier?
+
+3
+
+FIG. 1. The overlap gap property is a topological feature of the space of near-optimal solutions of combinatorial optimization
+problems that is widely believed to characterize their hardness. It is characterized by a clustering of near-optimal solutions
+(small circles) into many disconnected clusters (large circles).
+
+Due to the ubiquity and widespread impact of combinatorial optimization problems across a plethora of fields
+and applications, much effort has been devoted to the development of quantum algorithms which can efficiently find
+∗
+[11, 12]. Unfortunately, it is now known that many of
+solutions z ∗ whose achieved function value can exceed gOGP
+these algorithms are unable to overcome the OGP barrier [13–21]; for this reason, it seems unlikely that these will
+exhibit any quantum advantage for typical, unstructured optimization problems.
+However, a new quantum algorithm for optimization has recently been developed that is fundamentally different
+from the others: Decoded Quantum Interferometry (DQI), a quantum algorithm for MAX-k-XOR-SAT [22]. In
+MAX-k-XOR-SAT, one is given m linear equations in F2 over n < m variables, and is asked to find a variable
+assignment z ∈ Fn2 satisfying as many clauses as possible. More concretely, a problem instance is encoded as an
+m × n, k-row sparse constraint matrix B ∈ Fm×n
+as well as a vector of parities v ∈ Fm
+2 , and one hopes to minimize
+2
+n
+over z ∈ F2 :
+g (z) := m − ∥Bz ⊕ v∥1 .
+
+(2)
+
+DQI acts as a quantum reduction from instances of the MAX-k-XOR-SAT optimization problem to the bounded
+distance decoding of a classical linear code with parity check matrix B ⊺ ∈ Fn×m
+. Unlike previous quantum heuristics,
+2
+the performance of DQI can actually be guaranteed given a classical decoder known to efficiently decode up to ℓ errors
+in an m-bit code. The expected fraction of satisfied clauses is given by a semicircle law [22]:
+⟨g⟩DQI
+m
+
+r
+=
+
+ℓ
++
+2m
+
+s 
+!2
+1
+ℓ
+1−
+.
+2
+m
+
+(3)
+
+Armed with this performance guarantee, one can search for structured distributions over MAX-k-XOR-SAT for
+which the corresponding decoding problem is easy in order to find problems for which µDQI is large. For instance, one
+can consider a special case of MAX-k-XOR-SAT called optimal polynomial intersection (OPI), where the decoding
+problem reduces to decoding a Reed–Solomon code [23]. It is conjectured that DQI exhibits a quantum advantage on
+OPI [22]. If true, this conjecture remains consistent with the status quo intuition that quantum advantage necessitates
+algebraic structure.
+However, if the MAX-k-XOR-SAT instance is instead chosen randomly from an unstructured ensemble, we cannot
+rely on these same techniques for decoding. A crucial question then is whether one should expect a quantum advantage
+in this average case. In particular,
+Question 2. Can DQI exceed the OGP threshold for unstructured MAX-k-XOR-SAT instances?
+B.
+
+Contributions
+
+We show that, like other quantum algorithms for optimization, DQI cannot surpass the OGP barrier. To demonstrate this, we show the following:
+
+4
+1. We show that the OGP inhibits not only Lipschitz classical algorithms, but also approximately Lipschitz quantum
+algorithms from optimizing MAX-k-XOR-SAT.
+2. We show that DQI is approximately Lipschitz in the quantum Wasserstein distance [24], and therefore inhibited
+by the OGP for MAX-k-XOR-SAT.
+3. We compute the threshold at which the OGP occurs in MAX-k-XOR-SAT, inhibiting DQI from achieving a
+satisfied fraction of clauses µtop we compute.
+4. We prove that µtop is achieved by a depth-1 quantum algorithm known as QAOA [11] up to constants independent
+of k, and give numerical evidence that µtop is achieved by approximate message passing (AMP) up to constants
+independent of k. We also give numerical evidence that AMP outperforms DQI at large k, even when these
+constants are taken into account.
+Specifically, we consider a definition of Lipschitz quantum algorithms that is due to Ref. [21]. It is defined with
+respect to the quantum Wasserstein distance dW [24], which we review in Appendix A; informally, the quantum
+Wasserstein distance is an “earth-mover’s” metric in that states which differ by a p-qubit quantum channel differ by
+at most O (p) in quantum Wasserstein distance.
+Definition 3 (Stable quantum algorithms, informal [21]). Let A be a quantum algorithm, i.e., a map from problem
+instances X to quantum states A (X). We say A is stable if there exist L and sufficiently small f such that, with
+high probability over X,
+dW (A (X) , A (X ′ )) ≤ f + L ∥X − X ′ ∥1 .
+
+(4)
+
+We show that the OGP inhibits stable quantum algorithms for MAX-k-XOR-SAT. A similar statement was shown
+in [21] for quantum spin glass problems exhibiting a certain quantum modification of the OGP; we show that stable
+quantum algorithms are also obstructed by the classical OGP in classical combinatorial optimization problems.
+Theorem 4 (OGP inhibits stable quantum algorithms, informal version of Theorem 21). Let µOGP be the satisfied
+fraction at which the OGP occurs for MAX-k-XOR-SAT. Then, stable quantum algorithms can satisfy a fraction of
+clauses no better than µOGP .
+We note that Theorem 4 also applies to quantum algorithms beyond DQI which were previously shown to be stable,
+including standard quantum algorithms such as logarithmic-depth QAOA [21, Corollary 61] and phase estimation [21,
+Corollary 64].
+We then focus on the setting where the LDPC parity check matrix B ⊺ is drawn from the standard Gallager ensemble
+of LDPC codes on m bits with k-local checks and rate r = 1 − n/m. These codes are conjectured to have maximal
+efficiently decodable error weight [25, 26]:
+ ∗
+
+ℓ∗
+c∗ (1 − r)
+c (1 − r)
+−1
+
+ = (1 + ok (1)) H2
+= (1 + ok (1))
+,
+(5)
+k
+m
+k
+k log2 1−r
+where c∗ is a universal constant and H−1
+: [0, 1] → [0, 1/2] is the inverse of the binary entropy function H2 (x) =
+2
+−x log2 (x) − (1 − x) log2 (1 − x). We show that, under the Gallager ensemble of parity check matrices, the quantum
+state prepared by DQI is stable according to Definition 3 when the associated decoder corrects ℓ ≤ ℓ∗ errors. Our
+argument for the stability of DQI follows from the observation that Gallager codes are what we call locally restrictable:
+these are ensembles of codes which are still good codes when ignoring all but an ϵ-fraction of syndromes. Generally
+across coding theory, the notion of removing certain parity checks is known as puncturing a code. In this context,
+restrictability amounts to the existence of a large puncturing which maintains good distance. We also show that
+local restrictability is not unique to the Gallager ensemble, and demonstrate it is satisfied by other standard code
+families. As stability depends only on the state prepared by the quantum algorithm, this property is independent of
+the decoder used for DQI, or indeed whatever methods are used to prepare the DQI state.
+Theorem 5 (Stability of DQI, informal version of Theorem 35). Let B ⊺ be a parity check matrix drawn from an
+ϵ-locally restrictable code family such as the Gallager ensemble. Assume the DQI decoder corrects at most ℓ∗ errors,
+as defined in Eq. (5). Then, DQI is stable for this ensemble of MAX-k-XOR-SAT instances.
+Next, we compute statistical properties of MAX-k-XOR-SAT at fixed k and clause density λ = m/n, including
+the maximum achievable satisfied fraction as well as the overlap gap threshold. These are the first times these two
+quantities have been computed for MAX-k-XOR-SAT when k is held fixed, and thus may be of independent interest.
+
+5
+Theorem 6 (MAX-k-XOR-SAT exhibits the OGP, informal version of Theorems 57 and 61). MAX-k-XOR-SAT
+at clause density λ = m/n has, with high probability, a maximum satisfied fraction of:
+
+
+1
+g∗
+= 1 − H−1
+1
+−
++ exp (− Ωk (k)) .
+(6)
+2
+m
+λ
+Furthermore, MAX-k-XOR-SAT exhibits the OGP.
+Combining our results, we are able to show that DQI is topologically obstructed from satisfying a fraction of clauses
+beyond:1
+r
+1
+2c∗ ln (k)
+.
+(7)
+µtop = + (1 + ok (1))
+2
+kλ
+More formally, we prove the following.
+Theorem 7 (DQI is topologically obstructed for MAX-k-XOR-SAT, informal version of Theorem 62). Assume the
+DQI decoder corrects at most ℓ∗ errors, as defined in Eq. 5. DQI does not succeed in sampling a bit string z ∈ Fn2
+achieving a satisfied fraction:
+r
+
+
+4c∗ log2 (k)
+1
+2c∗ ln (k)
+−1
+µtop = 1 − H2
+1 − (1 + ok (1))
+= + (1 + ok (1))
+(8)
+kλ
+2
+kλ
+with probability more than 12/13 over both the randomness of the sampling and the distribution of problem instances.
+We can compare this with the expected satisfied fraction (Eq. (5)) in the large k limit with the same assumed
+bound on ℓ:
+s
+⟨g⟩DQI
+1
+c∗
+≤ + (1 + ok (1))
+.
+(9)
+m
+2
+kλ log2 (kλ)
+While this bound is of a slightly different nature than Theorem 7—which is a “with high probability” statement,
+rather than a statement only in expectation—the gap between ⟨g⟩DQI /m and µtop suggests that DQI does not
+perform optimally among stable algorithms. Motivated by this observation, we show in Appendix B that a depth-1
+quantum algorithm known as QAOA [11] achieves in expectation over the problem instance the same k scaling as
+µtop , beyond what DQI achieves:
+h
+i
+r
+E ⟨g⟩QAOA
+⟨g⟩DQI
+1
+ln (k)
+≥ + (1 + ok (1))
+>
+;
+(10)
+m
+2
+4ekλ
+m
+the final inequality holds at sufficiently large k.
+We also consider what is optimally achieved by classical algorithms. It is widely believed that the classical algorithm known as approximate message passing (AMP) achieves the OGP threshold for combinatorial optimization
+problems [5–10]. Much like DQI, AMP has the nice property that its optimal performance can be computed without
+running the algorithm [27]. When applied to MAX-k-XOR-SAT,2 the SAT fraction achieved by AMP is [10, 28, 29]:
+µAMP =
+
+1
+1
++ √ min Pk [γ] ,
+2 2 λ γ∈L
+
+(11)
+
+where Pk is known as the Parisi functional and L the space of functions [0, 1) → R≥0 satisfying certain reguarlization
+conditions [28]. As Pk and L are convex, one can efficiently optimize the functional numerically [27, 29]. We use code
+from [29] for this purpose and numerically fit:
+r
+⟨g⟩DQI
+1
+0.882 ln (k)
+µAMP ≈ +
+>
+,
+(12)
+2
+kλ
+m
+
+1 We say µ
+top rather than µOGP as we will later see that DQI is also obstructed by a topological feature weaker than the OGP known as
+
+the chaos property.
+2 For technical reasons, this is only proven to be true for distributions of MAX-k-XOR-SAT instances which are k-local in expectation,
+
+rather than strictly k-regular; this slightly differs from the distribution considered in the rest of our results. See Sec. VI for more
+discussion.
+
+6
+where the inequality holds at sufficiently large k. As AMP optimizes to an OGP threshold [28] we conjecture that
+µAMP ≥ ⟨g⟩DQI /m even at small k, though we do not prove this here.
+The remainder of our work is structured as follows. In Sec. II we give the necessary background on the tools with
+which we use to prove our main results. In Sec. III we show that stable quantum algorithms fail to overcome the OGP
+barrier for optimization MAX-k-XOR-SAT. In Sec. IV we prove that DQI is stable over a variety of code families.
+We follow this up in Sec. V by proving various statistical properties of MAX-k-XOR-SAT instances drawn from
+the Gallager ensemble, including the w.h.p. (with high probability) maximum achievable satisfied fraction, as well as
+the fact that MAX-k-XOR-SAT exhibits an OGP. Finally, in Sec. VI we discuss the algorithmic implications of our
+results when taken in combination, and numerically show that the value achieved by AMP surpasses that achieved
+by DQI.
+
+II.
+
+PRELIMINARIES
+
+A.
+
+MAX-k-XOR-SAT
+
+We are interested in the hardness of MAX-k-XOR-SAT. Here, the task is to satisfy as many of m parity constraints
+over F2 as possible, where each parity constraint involves k of n variables. More concretely, a MAX-k-XOR-SAT
+problem is defined by a constraint matrix B ∈ Fm×n
+—assumed to be k-row sparse—and a list of parities v ∈ Fm
+2 ,
+2
+and the goal is to find a bit string z ∈ Fn2 which minimizes the number of violated clauses:
+# violated clauses = ∥Bz ⊕ v∥1 .
+
+(13)
+
+We can equivalently write this as a maximization problem, where one is interested in maximizing the function:
+(14)
+
+g (z) := g(B,v) (z) := m − ∥Bz ⊕ v∥1 .
+
+In what follows, we will use λ := m/n to denote the clause density. Obviously, the problem is only interesting when
+the linear system of equations defining the problem is overdetermined, i.e., when λ > 1. We also assume that k > 2
+and is even to simplify some of our later calculations.
+Throughout the paper we will primarily be interested in the n → ∞ limit. We will hold λ and k fixed as we take
+this limit. For this reason O (·) will be used as big-O notation with respect to the variable n. In some situations, we
+wish to use big-O notation with respect to a function of variable x that is distinct from n; in these situations, we will
+use the notation Ox (·) to be maximally clear.
+We will particularly be interested in the average-case hardness of MAX-k-XOR-SAT when the constraint matrix
+and the parities are drawn from some distribution. It is natural to consider when v is drawn uniformly at random
+from the hypercube (and independently from B), i.e., that the entries of v are drawn from the product distribution
+⊗m
+v ∼ Ber (1/2) , where Ber (1/2) is the Bernoulli distribution with probability of 1 equal to 1/2. We will therefore
+fix this distribution for v, and write:
+v ∼ Ppar := Ber (1/2)
+
+⊗m
+
+(15)
+
+.
+
+There are many natural choices of distribution for B. In the paper in which DQI was introduced [22], the authors
+studied MAX-k-XOR-SAT instances where B ⊺ was drawn from the Gallager ensemble G (m, k, d) [30], which we
+will describe in more detail in a moment (see Sec. II B). Here, m denotes the number of columns of B ⊺ , k the columnsparsity, and d = λk the row-sparsity of matrices drawn from G (m, k, d). We will also assume the B ⊺ is drawn from
+G (m, k, d), and write:
+⊺
+
+(16)
+
+Pcon = G (m, k, d) ∼ B
+
+to denote the resulting distribution on B. This together with Ppar define the distribution of MAX-k-XOR-SAT
+instances we are primary concerned with here.
+Definition 8 (Transposed Gallager ensemble of MAX-k-XOR-SAT instances). We call the product distribution:
+⊺
+
+⊗m
+
+P1 := Pcon ⊗ Ppar = G (m, k, d) ⊗ Ber (1/2)
+the transposed Gallager ensemble of MAX-k-XOR-SAT instances.
+
+(17)
+
+7
+We will also be interested in correlated instances of MAX-k-XOR-SAT. We will consider correlated instances
+drawn in the following way. For each integer 0 ≤ p ≤ m define the m × m projector:
+
+
+(18)
+
+Υp := diag 1, . . . , 1, 0, . . . , 0 .
+| {z } | {z }
+p
+
+m−p
+
+
+
+R
+Definition 9 (κ-correlated ensemble). Fix κ ∈ [0, 1], draw B, v (1) ∼ P1 and ṽ (r) ∼ Ppar r=2 independently, and
+let:
+
+
+(19)
+v (r) := v (1) ⊕ Υ⌊κm⌋ v (1) ⊕ ṽ (r) .
+We call the joint distribution of
+
+B, v (r)
+
+R
+
+(κ)
+
+r=1
+
+when drawn in this way the (κ, R)-correlated ensemble PR . When
+(κ)
+
+R = 2, we simply say the κ-correlated ensemble P2 .
+Informally, these are R-tuples of MAX-k-XOR-SAT instances with identical constraint matrices, and whose par(κ)
+ities are independent within their first κ-fraction of parities. By construction, PR marginalizes to P1 in any variable
+for any κ ∈ [0, 1].
+B.
+
+The Gallager Ensemble of LDPC Codes
+
+FIG. 2. One step of the Gallager construction with m = 6, d = 3. This step is repeated for a total k = λ−1 s layers, where d
+and λ are given parameters.
+
+We now review both the Gallager code ensemble as well as general properties of LDPC codes. Define the binary
+matrix H ∈ Fn×m
+to be the parity check matrix of a code C, where
+2
+(20)
+
+C = {v ∈ Fm
+2 : Hv = 0}
+
+where all algebra is done over F2 unless explicitly stated otherwise. In other words, C is the linear subspace of Fm
+2
+given by the kernel of H. Rows of H are known as checks. We are particularly interested in codes whose parity check
+matrix is sparse in the following way.
+Definition 10 (Code sparsities). Let H ∈ Fn×m
+be a parity check matrix. Then the bit sparsity of H and check
+2
+sparsity of H are given by
+wtb (H) := max
+
+j∈[m]
+
+n
+X
+
+Hij ,
+
+i=1
+
+where both sums are as integers (i.e., over Z), not over F2 .
+
+wtc (H) := max
+i∈[n]
+
+m
+X
+j=1
+
+Hij ,
+
+(21)
+
+8
+n
+= λ−1 = 1 − r, where r is known as the design rate of the family.
+In the standard notation of coding theory, m
+
+Definition 11 (LDPC code). Let H ∈ Fλ2
+code if
+
+−1
+
+m×m
+
+be a parity check matrix. We say that H is a (k, d)-LDPC code
+
+wtb (H) ≤ k,
+
+wtc (H) ≤ d.
+
+(22)
+
+Informally, a LDPC code satisfies the property that every check is supported on only a small number of bits, and
+every bit is in the support of only a small number of checks. The Gallager ensemble with parameters (k, d) is an
+ensemble of (k, d)-regular LDPC codes with particularly nice properties. For that reason, it is perhaps the most
+widely studied and used ensemble of random LDPC codes.
+We now describe the Gallager ensemble G (m, k, d) in more detail. The most convenient way to define the Gallager
+ensemble is in the language of graphs. We may represent H as a bipartite graph G = (L ⊔ R, E) with m nodes in
+the left vertex set L, n = λ−1 m nodes in the right vertex set R, and edge set E ⊆ L × R. The left nodes are referred
+to as the “data” nodes and the right nodes as “syndrome” or “check” nodes. We connect node i ∈ L to node j ∈ R if
+Hji = 1. Such a graph is known as a Tanner graph of H and is denoted G(H).
+Definition 12 (Regular bipartite graphs). A bipartite graph G = (L ⊔ R, E) is (weakly) (a, b)-regular if ∀i ∈ L,
+deg(i) = a (deg(i) ≤ a) and ∀j ∈ R, deg(j) = b (deg(j) ≤ b).
+A code is (k, d)-LDPC if and only if its Tanner graph is weakly (k, d)-regular.
+Definition 13 (Bipartite graph merging). Let G1 = (L ⊔ R1 , E1 ) and G2 = (L ⊔ R2 , E2 ) be two bipartite graphs with
+the same left node set and disjoint right node sets. The merge of G1 and G2 is a graph G = (L ⊔ (R1 ∪ R2 ), E1 ∪ E2 )
+given by combining the right node sets and the edges together into the same left node set.
+See Fig. 2 for a visualization of a merge. With these graph notions formulated, we now formally define the Gallager
+ensemble.
+Definition 14 (Gallager ensemble). Let k ≥ 3 and 1 ≤ d ≤ k be constant integers. The Gallager ensemble G(m, k, d)
+is a distribution over parity check matrices H ∈ Fn×m
+, where n := m kd and m/d is assumed to be a positive integer,
+2
+defined by a sampling process over Tanner graphs. Sample k uniformly random (1, d)-regular bipartite graphs (called
+layers) G1 , . . . , Gk with m left nodes and m/d right nodes. The sampled code is defined to be the code whose
+parity check matrix corresponds to the Tanner graph obtained by merging the layers G1 , . . . , Gk in the manner of
+n×m
+Definition 13. This graph is a (k, d)-regular bipartite graph with m left nodes and k m
+d = n right nodes, so H ∈ F2
+as needed.
+m
+d
+Here λ = m
+n = mk/d = k . Figure 2 visualizes the merging of layers in a small case. The Gallager ensemble has been
+studied through many coding-theoretic lenses [30, 31]. Note that one consequence of the requirement that m/d ∈ N
+is that k divides n, which we assume throughout what follows.
+Generally, the constraint matrix B in DQI corresponds to a parity check matrix H = B ⊺ . We use both symbols
+to denote parity check matrices.
+
+C.
+
+Decoded Quantum Interferometry
+
+The Decoded Quantum Interferometry (DQI) algorithm is a quantum reduction between the combinatorial optimization problem MAX-k-XOR-SAT and decoding a classical linear code [22]. We briefly describe the reduction,
+which is illustrated in Fig. 3. A MAX-k-XOR-SAT instance of degree d is specified by a pair (B, v) where B ∈ Fm×n
+2
+and v ∈ Fm
+2 , for m ≥ n. Here, B satisfies the constraint that the weight of every row (column) is at most k (d). The
+task is to find x ∈ Fn2 such that ∥Bx − v∥1 is minimized. We may define a slightly different objective function
+f (x) := m − 2 ∥Bx ⊕ v∥1
+
+(23)
+
+which is equivalent to the previous objective function g in the sense that a choice x maximizes m − ∥Bx ⊕ v∥1 if and
+only if it maximizes f (x). f differs slightly from the function we previously considered, g(x) = m − ∥Bx ⊕ v∥1 , but
+is equivalent to g as an objective function. We introduce f because it arises naturally in the construction of DQI. The
+goal of DQI is to sample solutions x from a distribution proportional to P 2 (f (x)), where P is a univariate polynomial
+of a large degree ℓ. In this way the values of x for which f (x) is small have very low probability, whereas values of
+
+9
+
+FIG.
+3.
+Workflow of the Decoded Quantum Interferometry (DQI) algorithm, which aim to produce the state ∝
+P
+P(f (x)) |x⟩, where P is a univariate polynomial and f : Fn
+2 → Z is an objective function. Initially, in the pink
+x∈Fn
+2
+bubble, an instance-independent resource state |ψ2 ⟩ is prepared. Here wk ∈ R are constants and 1/N is a constant that
+enforces normalization. In the green bubble, |ψ2 ⟩ is processed to encode information about the problem instance, given by
+(B, v) ∈ Fm×n
+× Fm
+2 . Both steps can be performed in quantum polynomial time. In the last step (blue bubble), the decoder
+2
+for the code corresponding to parity check matrix B ⊺ is applied to uncompute a register. A Hadamard transform completes
+the transformation into the desired state |DQIℓ (f )⟩, where f (x) = m − 2 ∥Bx ⊕ v∥1 is the difference between the number of
+satisfied and unsatisfied clauses.
+
+x for which f (x) is large have comparatively a much larger probability. Such a sampling can be achieved by creating
+the quantum state
+|DQIℓ (f )⟩ :=
+
+1 X
+P(f (x))|x⟩,
+N
+n
+
+(24)
+
+x∈F2
+
+and then subsequently measuring in the computational basis. Here, 1/N is the normalization operator that enforces
+the correct normalization of the state. Because n ≤ m, B ⊺ ∈ Fn×m
+can be interpreted as the parity check matrix
+2
+of a classical linear code. The central claim of DQI is that if there exists a decoder which can correctly decode all
+errors up to weight ℓ in the code given by B ⊺ , then there is a quantum algorithm which samples from a distribution
+of solutions x with probability proportional to P 2 (x), for any P such that deg(P) ≤ ℓ. There are two key facts which
+together imply this reduction. The first is that
+Theorem 15 (Symmetric polynomial expansion [22]). Let P be a univariate polynomial of degree ℓ and let z1 , . . . , zm
+be formal variables satisfying zi2 = 1 for all i. Then there exists coefficients c0 , . . . , cℓ ∈ R, depending only on P, such
+
+10
+that
+P
+
+m
+X
+
+!
+zi
+
+=
+
+i=1
+
+ℓ
+X
+
+X
+
+ck
+
+ym
+z1y1 · · · zm
+.
+
+(25)
+
+y∈Fm
+2 :|y|=k
+
+k=0
+
+Denote by bi the ith row of B. Each row is known as a clause and each corresponding vi is known as a target. If
+bi · x = vi , then we say that the ith clause is satisfied. Hence,Pf counts the difference between the number of satisfied
+m
+and unsatisfied clauses. We can therefore re-express f (x) = i=1 fi (x), where
+(26)
+
+fi (x) = (−1)bi ·x+vi .
+Applying Theorem 15,
+P(f (x)) =
+
+ℓ
+X
+
+X
+
+ck
+
+ym
+f1y1 · · · fm
+.
+
+(27)
+
+y∈Fm
+2 :|y|=k
+
+k=0
+
+The second fact is that if we apply a Hadamard transform H ⊗n to |DQIℓ (f )⟩, we find a state which is simpler to
+synthesize. By applying Eq. (25)
+ℓ
+
+|DQIℓ (f )⟩ =
+
+1 X X
+ck
+N
+n
+x∈F2 k=0
+
+X
+
+ym
+|x⟩
+f1y1 · · · fm
+
+(28)
+
+(−1)y1 (b1 ·x+v1 ) · · · (−1)ym (bm ·x+vm ) |x⟩
+
+(29)
+
+y∈Fm
+2 :|y|=k
+
+ℓ
+
+=
+
+1 X X
+ck
+N
+n
+x∈F2 k=0
+
+X
+y∈Fm
+2 :|y|=k
+
+ℓ
+
+=
+
+1 X X
+ck
+N
+n
+x∈F2 k=0
+
+⊺
+
+X
+y∈Fm
+2 :|y|=k
+
+
+
+ℓ
+
+1 X
+=
+ck
+N
+k=0
+
+(30)
+
+(−1)v·y (−1)(B y)·x |x⟩
+
+X
+
+(−1)v·y 
+
+
+X
+
+⊺
+
+(−1)(B y)·x |x⟩ .
+
+(31)
+
+(−1)v·y |B ⊺ y⟩
+
+(32)
+
+x∈Fn
+2
+
+y∈Fm
+2 :|y|=k
+
+Therefore, the Hadamard transform yields a simple state
+ℓ
+
+H ⊗n |DQIℓ (f )⟩ =
+
+1 X
+ck
+N
+k=0
+
+X
+y∈Fm
+2 :|y|=k
+
+Figure 3 describes in detail as to how the state in Eq. (32) is synthesized by using a decoder for the classical linear
+code whose parity check matrix is given by B ⊺ ∈ Fn×m
+. Specifically, we apply the following steps.
+2
+q 
+Pℓ
+m
+1. Define wk = ck
+k=0 wk |k⟩ is synthesized, which can be done efficiently since ℓ = O(n) and
+k . The state ∝
+so the register has only O(log n) qubits. Next, create a Dicke state
+|k⟩ 7→ |k⟩ ⊗ |Dkm ⟩ = |k⟩ ⊗
+
+ −1/2
+m
+k
+
+X
+
+|y⟩
+
+(33)
+
+y∈Fm
+2 :|y|=k
+
+coherently, using methods such as that of Bärtschi and Eidenbenz [32]. The Hamming weight of every term in
+a Dicke state is the same, so we may compute it and thereby uncompute the |k⟩ register. This leaves our initial
+resource state |ψ2 ⟩, which has no dependence on the specific problem instance (B, v).
+Nm
+vi
+on |ψ2 ⟩, we add a phase and create |ψ3 ⟩. We then add a new register and compute
+2. By applying
+i=1 Z
+⊺
+|y⟩ |0⟩ 7→ |y⟩ |B y⟩.
+3. In the final step, we apply a decoder for the code B ⊺ which we assume is capable of deducing the error y from
+the syndrome B ⊺ y for every y such that ∥y∥1 ≤ ℓ. This decoder therefore enables the uncomputation of the
+|y⟩ register, which produces the state in Eq. (32).
+After applying a final Hadamard transform, we achieve the final state A (B, v) = |DQIℓ (f )⟩ ⟨DQIℓ (f )|.
+
+11
+D.
+
+Stable Quantum Algorithms
+
+We now review stable quantum algorithms. These are quantum algorithms which are Lipschitz in their inputs with
+respect to the quantum Wasserstein distance on quantum states [21]. In what follows we write out the definition of
+stability when specialized to the case of the Gallager ensemble of constraint matrices. We use Sn to denote the set of
+n-qubit pure states, and Snm to denote the set of n-qubit mixed states. We also use D := m (n + 1) as shorthand for
+the total number of variables defining a MAX-k-XOR-SAT instance, i.e., the dimension of the vector vec (B) ⊕ v.
+We consider in what follows a quantum algorithm A to be a map from a space of inputs FD
+2 as well as a probability
+space (Ω, PΩ ) to the set of quantum states Snm . The addition of a probability space allows us to consider randomized
+quantum algorithms on the same footing as deterministic quantum algorithms. While in principle one can incorporate
+the randomness directly into A, it turns out doing so has implications on the stability parameters; see Ref. [21] for
+more discussion on this technicality.
+We now have all of the ingredients to define stability when specialized to MAX-k-XOR-SAT. Informally, we say a
+quantum algorithm is stable if with high probability the algorithm is a Lipshitz function of the MAX-k-XOR-SAT
+phases except perhaps within a small bad subset of qubits.
+m
+Definition 16 (Stable quantum algorithm). Let A : FD
+2 × Ω → Sn be a quantum algorithm with associated
+probability space (Ω, PΩ ). Furthermore, let K ⊂ [0, 1] be a set of κ’s, each labeling a κ-correlated instances as defined
+in Definition 9.
+A is said to be (f, L, K, pst )-stable if, for all κ ∈ K,
+
+
+ 
+[n]
+′
+′
+P((B,v),(B,v′ ),ω)∼P(κ) ⊗PΩ ∃SB ∈
+: ∥TrSB (A (B, v, ω) − A (B, v , ω))∥W2 ≤ L ∥v − v ∥1 ≥ 1 − pst .
+(34)
+2
+f
+
+If K can be arbitrary, we say A is (f, L, pst )-stable. Furthermore, if A is a constant function of ω ∈ Ω, we say A is
+deterministic.
+Here, ∥·∥W2 induces the quantum Wasserstein distance of order 2 [21] which we review in Appendix A. In Ref. [21], it
+was shown that many standard quantum algorithms are stable according to Definition 16, including logarithmic-depth
+variational quantum algorithms, phase estimation, and logarithmic-depth Lindbladian dynamics.
+We also here review the concept of a near-optimal quantum algorithm [21]. We specialize to the case when the
+output is a classical state as we are here interested in the hardness of classical problems; this will allow us to directly
+incorporate the effects of shot noise in our definition. In particular, let M : Snm → Conv (B) be the channel denoting
+measurement in the computational basis, where B is the set of pure computational basis states on n qubits and
+Conv (·) denotes the convex hull. We can equivalently consider this as a stochastic map to pure computational basis
+f : S m × [0, 1] → B, where:
+states M
+n
+i
+h
+f (ρ, υ) = M (ρ) ,
+Eυ∼U M
+(35)
+with U denoting the uniform distribution over [0, 1]. We then have the following definition, where for simplicity we
+slightly abuse notation and write gX as a map B → Z rather than Fn2 → Z.
+m
+Definition 17 (Near-optimal quantum algorithm). Let A : FD
+2 × Ω → Sn be a quantum algorithm with associated
+f
+probability space (Ω, PΩ ), and let M be as in Eq. (35). Then, A is said to be (γ, pf )-optimal for gX over P1 if:
+h 
+
+i
+f (A (X, ω) , υ) ≥ γλn ≥ 1 − pf .
+P(X,ω,υ)∼P1 ⊗PΩ ⊗U gX M
+(36)
+
+Informally, a quantum algorithm is (γ, pf )-optimal if it satisfies a fraction γ of clauses with probability 1 − pf over
+both the randomness of the algorithm and the randomness of drawing problem instances from P1 .
+E.
+
+Topological Obstructions in Combinatorial Optimization Problems
+
+We end our preliminaries by reviewing topological obstructions in optimization problems; in particular, we here
+discuss the overlap gap property (OGP). The OGP is a topological property of the near-optimal space of optimization
+problems which is conjectured to tightly characterize their average-case hardness [5–10]. It has also been previously
+seen to have implications in quantum settings, having been used to show specific quantum algorithms such as lowdepth QAOA are inhibited from preparing near-optimal solutions to combinatorial optimization problems [13–21],
+and even to show a weaker version of the no low-energy trivial states (NLTS) conjecture [33].
+
+12
+
+}
+𝜈1
+
+}
+
+𝜈
+2
+
+FIG. 4. An illustration of the near-optimal solution space of a problem satisfying the R-OGP when R = 2. For two potentiallycorrelated problem instances (gray circles and blue squares), tuples (small circles and squares) are either close in the semimetric
+n−1 dk (within ν1 ) or far apart (beyond ν2 ). The dotted large circles are a guide to the eye.
+
+There are many different versions of the OGP. We will here be primarily concerned with the R-OGP (also known as
+the multi-OGP ) [34, 35].3 For concreteness, we specialize the definition to the correlated ensemble of MAX-k-XORSAT instances we introduced in Definition 9. Informally, the R-OGP is a statement that over R correlated problem
+instances gX , solutions achieving a satisfied fraction of µ clauses are clustered w.h.p. Furthermore, near-optimal
+solutions from independent problem instances are far apart. We give an illustration of this phenomenon in the special
+case when R = 2 in Fig. 4.
+While typically the notion of distance in the OGP is given by the Hamming distance, for technical reasons we will
+find it much more convenient to work with what we call the k-minimum Hamming semimetric. To define this, we
+first define the n × n projectors Γi , i ∈ [k] onto n/k-dimensional subspaces:
+
+
+
+
+Γi := diag 
+. . . , 0, 1, . . . , 1, 0, . . . , 0 .
+0,
+| {z } | {z } | {z }
+n
+(i−1)n
+k
+(1− ki )n
+k
+
+(37)
+
+We now define the semimetric. This is formally a semimetric as it does not satisfy the triangle inequality, though we
+will later see that it still has nice properties.
+Definition 18 (k-minimum Hamming semimetric). The k-minimum Hamming semimetric between z, z ′ ∈ Fn2 is:
+dk (z, z ′ ) :=
+
+k
+X
+
+
+
+n
+min ∥Γi (z ⊕ z ′ )∥1 ,
+− Γi (z ⊕ z ′ )
+.
+k
+1
+i=1
+
+(38)
+
+We are now equipped to formally define the R-OGP as we use it here, specialized toward MAX-k-XOR-SAT over
+the transposed Gallager ensemble with clause density λ and k-variable constraints.
+Definition 19 (R-OGP). Fix any R ≥ 2 ∈ N and 0 ≤ ν1 < ν2 < 1/2. If there exists a µ∗ such that the following
+holds for all κ ∈ [0, 1], then gX is said to satisfy the R-OGP with parameters (R, µ∗ , ν1 , ν2 ).
+For any µ > µ∗ , it is the case that:
+
+
+(R,µ,ν1 ,ν2 )
+P(B,v(r) )R ∼P(κ) S
+̸= ∅ ≤ exp (− Ω (n)) ,
+(39)
+R
+2
+(B,v(r) )r=1
+r=1
+R
+(R,µ,ν1 ,ν2 )
+R×n
+where S
+is the random set of R-tuples z (r) r=1 ∈ {−1, 1}
+satisfying:
+(r) R
+B,v
+(
+)r=1
+
+3 Conventionally this is called the “m-OGP,” though we say “R-OGP” rather than “m-OGP” to avoid overloading notation with m.
+
+13
+1. µ-SAT fraction: For all r ∈ [R],
+
+
+gX (r) z (r) ≥ µλn.
+
+(40)
+
+2. k-minimum Hamming semimetric bound: Recalling the k-minimum Hamming semimetric (Definition 18),
+for all r ̸= r′ ∈ [R],
+
+
+′
+dk z (r) , z (r ) ∈ [ν1 n, ν2 n] .
+(41)
+We will also consider the chaos property, a weaker property than the R-OGP that only requires Eq. (235) be satisfied
+in Definition 19. The reason for this is two-fold:
+1. As it is weaker than the R-OGP, it is easier to prove; in Sec. V B we will compute the chaos property threshold
+exhibited by MAX-k-XOR-SAT for any choice of R, though we are only able to compute the threshold for the
+full R-OGP when R = 2.
+2. While it yields a weaker topological obstruction than the full overlap gap property, it will suffice for obstructing
+DQI.
+For ease of reference later, we give a full, formal definition for the chaos property.
+Definition 20 (Chaos property). Fix any R ≥ 2 ∈ N and 0 < ν2 < 1/2. If there exists a µ∗ such that the following
+holds, gX is said to satisfy the chaos property with parameters (R, µ∗ , ν2 ).
+For any µ > µ∗ , it is the case that:
+
+
+(R,µ,0,ν2 )
+̸= ∅ ≤ exp (− Ω (n)) ,
+(42)
+P(B,v(r) )R ∼P(1) S
+R
+2
+(B,v(r) )r=1
+r=1
+where S
+
+(R,µ,0,ν2 )
+R
+B,v (r)
+r=1
+
+(
+
+)
+
+R
+R×n
+is the random set of R-tuples z (r) r=1 ∈ {−1, 1}
+satisfying:
+
+1. µ-SAT fraction: For all r ∈ [R],
+
+
+gX (r) z (r) ≥ µλn.
+
+(43)
+
+2. k-minimum Hamming semimetric bound: Recalling the k-minimum Hamming semimetric (Definition 18),
+for all r ̸= r′ ∈ [R],
+
+
+′
+dk z (r) , z (r ) ≤ ν2 n.
+(44)
+
+III.
+
+STABLE QUANTUM ALGORITHMS FAIL TO OPTIMIZE MAX-k-XOR-SAT
+
+In this section we prove that stable quantum algorithms fail to optimize MAX-k-XOR-SAT at any approximation
+ratio exhibiting an R-OGP. We also show that stable quantum algorithms with sufficiently good stability parameters
+are obstructed by the weaker chaos property; we will later see the chaos property suffices for obstructing DQI.
+Theorem 21 (Stable Quantum Algorithms Fail for Transposed Gallager MAX-k-XOR-SAT). Fix any (R, µ, ν1 , ν2 )
+such that MAX-k-XOR-SAT satisfies the multi-OGP with these parameters (Definition 19). Fix any Q ∈ N. There
+exists a constant δ > 0 depending only on R and Q such that the following holds at sufficiently large n. Fix f, L, pst
+and γ, pf satisfying the following inequalities:
+pst + pf ≤ δ;
+γ ≥ µ;
+λL
+f
++
+n
+Q
+
+s
+
+Q+1
+ν2 − ν1
+p
+<
+.
+4
+1 − (Q + 1) 3pf
+
+(45)
+(46)
+(47)
+
+There is no (f, L, pst )-stable and (γ, pf )-optimal quantum algorithm for MAX-k-XOR-SAT instances drawn from P1 .
+
+14
+Similarly, fix any (R, µ, ν2 ) such that MAX-k-XOR-SAT satisfies the chaos property with these parameters (Definition 20). Fix f, L, pst and γ, pf satisfying the following inequalities:
+1
+;
+12
+γ ≥ µ;
+
+(48)
+
+2
+ν2
+p
+< .
+4
+1 − 2 3pf
+
+(50)
+
+pst + pf ≤
+
+f
++ λL
+n
+
+s
+
+(49)
+
+There is no (f, L, pst )-stable and (γ, pf )-optimal quantum algorithm for MAX-k-XOR-SAT instances drawn from P1 .
+We now prove Theorem 61. At a high level, our strategy follows that of Ref. [21, Theorem 16], but differs in a few
+key ways:
+• As we only consider classical problems, the proof can be simplified substantially.
+• As the eigenbasis of the problem is fixed, we can account for shot noise in the failure probability of the algorithm.
+• The k-minimum Hamming semimetric (Definition 18) which we use to define (and later prove) our OGP and
+chaos property does not satisfy the triangle inequality, introducing complications to the proof.
+• f no longer need depend on Q, which greatly improves the satisfied fraction at which DQI (or any other stable
+algorithm with nontrivial f ) is obstructed. This is achieved by slightly modifying the definition of stability from
+Ref. [21], which requires further modifications to the proof.
+• Our strategy requires a novel strategy to interpolate between correlated problem instances as we are no longer
+considering Gaussian randomness.
+Before proceeding with the proof, we give a sketch of our approach, lettered by subsection in what follows. We
+proceed by contradiction, assuming there exists a quantum algorithm A that is (f, L, pst )-stable and (γ, pf )-optimal
+for MAX-k-XOR-SAT instances drawn from P1 .
+(A) We show that the existence of A implies the existence of a stable, near-optimal quantum algorithm which is
+also deterministic.
+(B) We show that the existence of a stable, near-optimal, deterministic quantum algorithm for this problem implies
+the existence of a stable, near-optimal classical algorithm I (at the cost of worse constants).
+(C) We consider an interpolation path over many replicas, and show that I is stable and near-optimal over the
+replicas with high probability.
+(D) Due to MAX-k-XOR-SAT with independent parities having distant solutions (as implied by the chaos property,
+Definition 20), we show that with high probability all R-tuples of T independently-sampled instances have nearoptimal states which are distant in k-minimum Hamming semimetric with high probability.
+(E) We show that with high probability there exists some point along the interpolation path where this algorithm
+outputs a configuration disallowed by the multi-OGP due to the pairwise-stability and near-optimality of I.
+(F) Finally, we show that there exist choices of parameters such that all “with high probability” events have a
+nontrivial intersection. This contradicts the assumption of the existence of A.
+
+A.
+
+Reduction to Deterministic Quantum Algorithms
+
+We first prove that, WLOG, one can consider deterministic quantum algorithms. The proof follows a similar
+strategy as Ref. [7, Lemma 6.11].
+Lemma 22 (Reduction to deterministic quantum algorithms). Let A (X, ω) be a quantum algorithm that is both
+(f, L, pst )-stable and (γ, pf )-optimal for gX over X ∼ P1 . Fix any K = {κ} ⊆ [0, 1]. Then, there exists a deterministic
+e (X) that is both (f, L, K, 3pst )-stable and (γ, 3pf )-optimal for gX .
+quantum algorithm A
+
+15
+Proof. Let (Ω, PΩ ) be the probability space associated with A and let g ∗ n be the expected maximal value of gX over
+f (Eq. (35)). For notational convenience, we define the
+X ∼ P1 . Recall the definition of the measurement channel M
+events for all ω ∈ Ω, ν ∈ [0, 1], and X = (B, v) , Y = (B, v ′ ) ∈ FD
+2 :
+
+ 
+
+[n]
+(ω)
+Est (X, Y ) := ∃SB ∈
+: ∥TrSB (A (X, ω) − A (Y , ω))∥W2 ≤ L ∥v − v ′ ∥1 ,
+(51)
+f
+n 
+
+o
+(ω)
+f (A (X, ω) , υ) ≥ γλn ,
+Eno
+(X, υ) := gX M
+(52)
+and the events for all ω ∈ Ω:
+n
+h
+i
+o n
+h
+i
+o
+(ω)
+(ω)
+∁
+Tst (ω) := P(X,Y )∼P(κ) Est (X, Y ) > 3pst = P(X,Y )∼P(κ) Est (X, Y ) ≤ 1 − 3pst ,
+2
+2
+n
+h
+i
+o n
+h
+i
+o
+∁
+(ω)
+(ω)
+Tno (ω) := P(X,υ)∼P1 ⊗U Eno (X, υ) > 3pf = P(X,υ)∼P1 ⊗U Eno
+(X, υ) ≤ 1 − 3pf .
+By the law of total probability,
+h
+i
+h
+ii
+h
+(ω)
+(ω)
+∁
+∁
+= P(X,Y ,ω)∼P(κ) ⊗PΩ Est (X, Y ) ≤ pst ,
+Eω∼PΩ P(X,Y )∼P(κ) Est (X, Y )
+2
+2
+h
+h
+ii
+h
+i
+∁
+∁
+(ω)
+(ω)
+Eω∼PΩ P(X,υ)∼P1 ⊗U Eno (X, υ)
+= P(X,ω,υ)∼P1 ⊗PΩ ⊗U Eno
+(X, υ) ≤ pf ,
+where the inequalities follow from the stability and near-optimality of A. By Markov’s inequality,
+h
+h
+ii
+(ω)
+∁
+Eω∼PΩ P(X,Y )∼P(κ) Est (X, Y )
+1
+2
+≤ ,
+Pω∼PΩ [Tst (ω)] ≤
+3pst
+3
+ii
+h
+h
+(ω)
+∁
+Eω∼PΩ P(X,υ) Eno (X, υ)
+1
+Pω∼PΩ [Tno (ω)] ≤
+≤ .
+3pf
+3
+
+(53)
+(54)
+
+(55)
+(56)
+
+(57)
+(58)
+
+Furthermore, by the union bound,
+Pω∼PΩ [Tno (ω) ∪ Tst (ω)] ≤
+
+2
+.
+3
+
+(59)
+
+In particular, there must exist ω ∗ ∈ Ω such that the event
+∁
+
+∁
+
+∁
+
+(Tno (ω ∗ ) ∪ Tst (ω ∗ )) = Tno (ω ∗ ) ∩ Tst (ω ∗ )
+
+(60)
+
+e (X) := A (X, ω ∗ )
+A
+
+(61)
+
+occurs. By definition, then,
+
+is a deterministic quantum algorithm that is both (f, L, K, 3pst )-stable and (γ, 3pf )-optimal for gX .
+We also bound the probability over X that the probability of achieving a high-energy state over υ ∼ U is large.
+Lemma 23 (Controlling shot noise). Let A (X) be a (γ, 3pf )-optimal deterministic quantum algorithm for gX over
+X ∼ P1 . Then:
+h
+h 
+
+i
+p i
+p
+f (A (X) , υ) ≥ γλn ≥ 1 − 3pf ≥ 1 − 3pf .
+PX∼P1 Pυ∼U gX M
+(62)
+f (Eq. (35)). For notational convenience, we define the
+Proof. Recall the definition of the measurement channel M
+event for all ν ∈ [0, 1] and X:
+n 
+
+o
+(X)
+f (A (X) , υ) ≥ γλn ,
+Eno
+(υ) := gX M
+(63)
+as well as the event for all X:
+n
+h
+i p o n
+h
+i
+p o
+∁
+(X)
+(X)
+Tno (X) := Pυ∼U Eno
+(υ) > 3pf = Pυ∼U Eno
+(υ) ≤ 1 − 3pf .
+
+(64)
+
+16
+By the law of total probability and the (γ, 3pf )-near optimality of A,
+h h
+ii
+h
+i
+∁
+∁
+(X)
+(X)
+EX∼P1 Pυ Eno
+(υ)
+= P(X,υ)∼P1 ⊗U Eno
+(υ) ≤ 3pf .
+
+(65)
+
+By Markov’s inequality,
+h
+h
+ii
+(X)
+∁
+EX∼P1 Pυ∼U Eno (υ)
+p
+√
+≤ 3pf .
+PX∼P1 [Tno (X)] ≤
+3pf
+
+(66)
+
+Substituting the definition of Tno (X) yields the final result.
+B.
+
+Measurement Reduction
+
+We now prove that, if there exists a stable, near-optimal quantum algorithm for a classical problem class, there
+exists a near-optimal classical algorithm which satisfies a weaker notion of stability than that given in Definition 16.
+In what follows, we use U to denote the uniform distribution over [0, 1], and we use B to denote the set of pure
+computational basis states.
+Lemma 24 (Nondeterministic classical shadows reduction). Assume there exists an (f, L, {κ} , 3Qpst )-stable and
+(γ, 3pf )-near optimal deterministic quantum algorithm A (X) for gX over X ∼ P1 . Then, there exists a pure quantum
+(κ)
+algorithm G : RD × [0, 1] → B such that, for (X, Y ) = ((B, v) , (B, v ′ )) ∼ P2 ,
+
+ 
+
+[n]
+′
+P(X,Y )∼P(κ) ∃SB ∈
+: ∥TrSB (G (X, ν) − G (Y , ν))∥W2 ≤ L ∥v − v ∥1 ≥ 1 − 3pst .
+(67)
+2
+f
+Furthermore, for any X and υ ∈ [0, 1] satisfying the probability 1 −
+
+p
+∁
+3pf event Tno (X) (Eq. (64)),
+
+Pυ∼U [gX (G (X, υ)) ≥ γλn] ≥ 1 −
+
+p
+
+3pf .
+
+(68)
+
+Proof. We begin by considering Eq. (67). As the quantum Wasserstein distance is nonincreasing under convex combinations of tensor product channels (see Proposition 68, reviewed in Appendix A), we have for all ρ, σ ∈ Snm :
+h
+i
+f (ρ, υ) − M
+f (σ, υ)
+(69)
+:= ∥M (ρ) − M (σ)∥W2 ≤ ∥ρ − σ∥W2 .
+Eυ∼U M
+W2
+
+In particular, defining:
+f (A (X) , υ) ,
+G (X, υ) := M
+
+(70)
+
+
+ 
+
+[n]
+′
+P(X,Y )∼P(κ) ∃SB ∈
+: ∥TrSB (G (X, ν) − G (Y , ν))∥W2 ≤ L ∥v − v ∥1 ≥ 1 − 3pst
+2
+f
+
+(71)
+
+we have:
+
+since A (X) is (f, L, K, 3pst )-stable.
+Finally, Eq. (68) follows immediately from substituting Eq. (70) into Lemma 23, yielding the final result.
+Ideally, we would strengthen this notion of stability to that of Definition 16, which would allow us to directly
+leverage the machinery of classical algorithmic hardness results based on OGPs. Unfortunately, it is generally the
+case that:
+
+
+∥Eν∼U [TrSB (G (X, ν) − G (Y , ν))]∥W2 ̸= Eν∼U ∥TrSB (G (X, ν) − G (Y , ν))∥W2 ,
+(72)
+making such a strengthening generally impossible. However, we can get close; as the quantum Wasserstein distance
+upper bounds the classical Wasserstein distance for quantum states in the computational basis (see Proposition 73),
+we have the following consequence of stability according to ∥Eν∼U [TrSB (G (X, ν) − G (Y , ν))]∥W2 . Note that the
+quantum Wasserstein distance of order 1 is exactly the Hamming distance on computational basis states [24], so here
+∥|s⟩ ⟨s| − |t⟩ ⟨t|∥W1 can simply be thought of as dH (s, t).
+
+17
+Proposition 25 (Expected Wasserstein distance [21, Proposition 26]). For each X, let pX (|s⟩ ⟨s|) be the distribution
+of G (X, ν) over ν ∼ U, i.e.,
+X
+Eν∼U [G (X, ν)] =:
+pX (|s⟩ ⟨s|) |s⟩ ⟨s| .
+(73)
+s∈Fn
+2
+
+Then, for every pair (X, Y ), there exists some probability distribution π(X,Y ) (|s⟩ ⟨s| , |t⟩ ⟨t|) over (|s⟩ ⟨s| , |t⟩ ⟨t|) ∈ B 2
+satisfying:
+h
+i
+2
+2
+(74)
+E(|s⟩⟨s|,|t⟩⟨t|)∼π(X,Y ) ∥|s⟩ ⟨s| − |t⟩ ⟨t|∥W1 ≤ ∥Eν∼U [G (X, ν) − G (Y , ν)]∥W2 ,
+X
+π(X,Y ) (|s⟩ ⟨s| , |t⟩ ⟨t|) = pX (|s⟩ ⟨s|) ,
+(75)
+|t⟩⟨t|∈B
+
+X
+
+(76)
+
+π(X,Y ) (|s⟩ ⟨s| , |t⟩ ⟨t|) = pY (|t⟩ ⟨t|) .
+
+|s⟩⟨s|∈B
+
+Unfortunately, π(X,Y ) depends on (X, Y ), so this fact cannot be immediately applied to demonstrate the stability
+of G. However, this fact will be enough to allow us to prove the existence of a different stable, pure quantum algorithm
+I. We formalize this as the following lemma.
+Lemma 26 (Reduction to pure, deterministic algorithms). Let A, Tno (X), κ, and G be as in Lemma 24. Fix Q ∈ N.
+Q
+Q
+Let PQ be a distribution over X = (Xq )q=0 = ((B, vq ))q=0 ∈ RD×(Q+1) such that the marginal distribution over any
+(κ)
+
+pair (Xq , Xq+1 ) is P2 . Assume that
+pf <
+
+1
+
+(77)
+
+2,
+
+3 (Q + 1)
+
+and fix any
+s
+β>
+
+Q
+p .
+1 − (Q + 1) 3pf
+
+(78)
+
+Consider as well the event:
+ 
+ \
+Q−1
+Q
+\ 
+[n]
+∁
+CX :=
+∃SB ∈
+: ∥TrSB (A (Xq ) − A (Xq+1 ))∥W2 ≤ L ∥vq − vq+1 ∥1 ∩
+Tno (Xq ) ,
+f
+q=0
+q=0
+
+(79)
+
+which occurs with probability:
+PX∼PQ [CX ] ≥ 1 − 3Qpst + (Q + 1)
+
+(80)
+
+p
+
+3pf + Q exp (− Ω (n)) .
+Q
+
+For any X ∼ PQ where the event CX occurs, there exists a pure, deterministic quantum algorithm I : {q}q=0 → B
+satisfying for all integer 0 ≤ q ≤ Q − 1:
+∥I (q) − I (q + 1)∥W1 ≤ f + βL ∥vq − vq+1 ∥1
+
+(81)
+
+gXq (I (q)) ≥ γλn.
+
+(82)
+
+and, for all q ∈ [Q],
+
+Proof. Consider X ∼ PQ . Let π(Xq ,Xq+1 ) (|sq ⟩ ⟨sq | , |sq+1 ⟩ ⟨sq+1 |) be as in Proposition 25. We have:
+h
+i
+2
+2
+E(|sq ⟩⟨sq |,|sq+1 ⟩⟨sq+1 |)∼π(X ,X ) ∥TrSB (|s⟩ ⟨s| − |t⟩ ⟨t|)∥W1 ≤ ∥Eω∼U [TrSB (G (Xq , ω) − G (Xq+1 , ω))]∥W2 .
+q
+
+q+1
+
+(83)
+
+We also recall from Proposition 25:
+pXq (|sq ⟩ ⟨sq |) =
+
+X
+
+π(Xq ,Xq+1 ) (|sq ⟩ ⟨sq | , |sq+1 ⟩ ⟨sq+1 |)
+
+|sq+1 ⟩⟨sq+1 |∈B
+
+=
+
+X
+|sq−1 ⟩⟨sq−1 |∈B
+
+π(Xq−1 ,Xq ) (|sq−1 ⟩ ⟨sq−1 | , |sq ⟩ ⟨sq |) ,
+
+(84)
+
+18
+where the final equality holds due to the compatibility of the marginals of the π(Xq ,Xq+1 ) (Eqs. (75) and (76)). Finally,
+Q
+we define the probability distribution ΠX over (|sq ⟩ ⟨sq |)q=0 ∈ B Q+1 given by:
+Q−1
+
+
+Y π(Xq ,Xq+1 ) (|sq ⟩ ⟨sq | , |sq+1 ⟩ ⟨sq+1 |)
+Q
+ΠX (|si ⟩ ⟨si |)q=0 := π(X0 ,X1 ) (|s0 ⟩ ⟨s0 | , |s1 ⟩ ⟨s1 |)
+.
+pXq (|sq ⟩ ⟨sq |)
+q=1
+
+(85)
+
+Using the consistency of the single-variable marginals (Eq. (84)), it is easy to see by direct calculation that the
+two-variable marginals of ΠX agree with the π(Xq ,Xq+1 ) :
+(86)
+
+ΠX (|sq ⟩ ⟨sq | , |sq+1 ⟩ ⟨sq+1 |) = π(Xq ,Xq+1 ) (|sq ⟩ ⟨sq | , |sq+1 ⟩ ⟨sq+1 |) .
+
+Now, define a sample space Ω := BQ+1 . We use the notation ωq (zero-indexed) to denote the projection of ω ∈ Ω
+e : {q}Q × Ω → B:
+to the qth of the factors B. With this notation, we define the pure quantum algorithm I
+q=0
+(87)
+
+e (q, ω) = ωq .
+I
+
+By Markov’s inequality, conditioned on X being such that the event CX occurs, we have from Markov’s inequality
+that for any β > 0:
+
+
+
+
+e
+e
+Pω∼ΠX |CX TrSB I (q, ω) − I (q + 1, ω)
+≥ βL ∥vq − vq+1 ∥1
+W1
+
+
+
+ 2
+2
+2 2
+e
+e
+≥ β L ∥vq − vq+1 ∥1
+= Pω∼ΠX |CX TrSB I (q, ω) − I (q + 1, ω)
+W1
+
+
+ 2
+
+(88)
+e (q, ω) − I
+e (q + 1, ω)
+Eω∼ΠX |CX TrSB I
+W1
+≤
+2
+β 2 L2 ∥vq − vq+1 ∥1
+1
+≤ 2
+β
+for any integer 0 ≤ q ≤ Q − 1. By the union bound,
+"Q−1
+
+
+\
+e (q, ω) − I
+e (q + 1, ω)
+Pω∼Π |C
+TrS I
+X
+
+B
+
+X
+
+q=0
+
+As |SB | ≤ f , this also implies:
+"Q−1
+\
+e (q, ω) − I
+e (q + 1, ω)
+Pω∼ΠX |CX
+I
+q=0
+
+#
+W1
+
+≤ βL ∥vq − vq+1 ∥1 ≥ 1 −
+
+#
+W1
+
+≤ f + βL ∥vq − vq+1 ∥1 ≥ 1 −
+
+Furthermore, by the union bound (and conditioned on CX ),
+"Q
+#
+
+
+\
+p
+e (q, ω) ≥ γλn ≥ 1 − (Q + 1) 3pf .
+Pω∼Π |C
+fX I
+X
+
+q
+
+X
+
+Q
+.
+β2
+
+Q
+.
+β2
+
+(89)
+
+(90)
+
+(91)
+
+q=0
+
+In particular, assuming β is sufficiently large such that:
+p
+Q
++ (Q + 1) 3pf < 1,
+2
+β
+
+(92)
+
+we have from the law of total probability that there exists some ω ∗ ∈ Ω = B Q+1 such that the events in Eqs. (90)
+and (91) occur. The final result follows by defining:
+e (q, ω ∗ ) .
+I (q) := I
+
+(93)
+
+19
+C.
+
+Considering Many Replicas
+
+We now apply Lemmas 22 through 26 in sequence to T + 1 replicas, and choose a specific interpolation path which
+T
+we construct in the following way. First, we fix natural numbers T and Q. We sample B ∼ Pcon and ṽ (t) t=0 ∼ P1
+independently, and define for each t ∈ [T ] and integer 0 ≤ q ≤ Q:
+
+
+(94)
+vq(t) := ṽ (0) ⊕ Υ⌊ qm ⌋ ṽ (0) ⊕ ṽ (t) ,
+Q
+
+where we recall the definition of Υp (Eq. (18)):
+
+
+
+(95)
+
+Υp := diag 1, . . . , 1, 0, . . . , 0 .
+| {z } | {z }
+p
+
+m−p
+
+Finally, we define for all t ∈ [T ] and integer 0 ≤ q ≤ Q:
+
+
+Xq(t) := B, vq(t) .
+
+(96)
+
+
+
+(m)
+(t)
+(t)
+(t)
+By construction, any pair Xq , Xq+1 is marginally distributed as P2 Q . Furthermore, at q = 0 all of the Xq are
+
+Q  T
+(t)
+(t)
+Xq
+identical; at q = Q, their parities vq are i.i.d. We let PT,Q denote the joint distribution over all
+q=0
+
+t=1
+
+sampled in this way.
+Our main result here is combining all of the lemmas proven to this point, and bounding the probability that
+collective stability and near-optimality holds for I over PT,Q .
+Proposition 27 (Considering many replicas). Fix T, Q ∈ N. Let A be a quantum algorithm that is both (f, L, pst )stable and (γ, pf )-optimal for gX over X ∼ P1 . Assume that
+pf <
+
+1
+
+2,
+
+3 (Q + 1)
+
+(97)
+
+and fix any
+s
+β>
+
+Q
+p .
+1 − (Q + 1) 3pf
+
+(98)
+
+Then,
+PX∼PT ,Q [Y] ≥ 1 − 3T Qpst − (T Q + 1)
+
+p
+3pf − T Q exp (− Ω (n)) ,
+
+(99)
+
+where we have defined the event:
+n
+oT
+Q
+Y := ∃ I t : {q}q=0 → B
+:
+
+t=1
+T
+ \
+
+I t (0) = I t′ (0)
+ ′
+
+t,t =1
+(( T Q−1
+)
+\ \ 1
+f
+λ
+∩
+∥I t (q) − I t (q + 1)∥W1 ≤ + βL
+n
+n
+Q
+t=1 q=0
+(T Q
+))
+\ \
+∩
+gXq (I t (q)) ≥ γλn
+.
+
+(100)
+
+t=1 q=1
+
+Proof. We begin by conditioning on the event CX defined as in Lemma 26. First, note that by construction of the
+interpolation path:
+(t)
+
+vq(t) − vq+1
+
+≤
+1
+
+m
+λ
+= n
+Q
+Q
+
+(101)
+
+20
+for any t ∈ [T ] and integer 0 ≤ q ≤ Q − 1. The final two events composing Y then follow immediately from applying
+
+Q
+(t)
+Lemma 26 to Xq
+for each t ∈ [T ]—each yielding the function I t —and the union bound. The consistency
+q=0
+
+(t)
+
+relation at q = 0 follows by inspecting the proof of Lemma 26 and noting that I t (0) depends only on X0 ; as the
+(t)
+X0 are identical across all t ∈ [T ], so are the I t (0). The final result holds by recalling the probability of the event
+CX occurring from Lemma 26, as well as the union bound.
+D.
+
+Distant Clustering for Independent Instances
+
+We here bound the probability of the chaos property occurring. This is the second aspect of Theorem 61, which
+states that independent instances have distant near-optimal states.
+Lemma 28 (Distant clustering for independent instances). Fix (R, µ, ν2 ) such that gX satisfies the chaos property
+(Definition 20) with these parameters. Then:
+ 
+T
+PX∼PT ,Q [Z] ≥ 1 −
+exp (− Ω (n)) ,
+(102)
+R
+where
+)
+
+(
+Z :=
+
+\
+R∈(
+
+[T ]
+R
+
+)
+
+(R,µ,0,ν )
+S (r)  2
+XQ
+
+=∅ .
+
+(103)
+
+r∈R
+
+(r)
+
+Proof. As the vQ are independent by construction, the desired result follows immediately from the union bound and
+the definition of the chaos property.
+E.
+
+Topologically Obstructed Configurations Conditioned on Events
+
+Our strategy is now to show, conditioned on all of the previously-introduced events occurring, that the algorithm
+must output configurations that are topologically obstructed by either the R-OGP or the chaos property. This will
+follow from a similar argument as that in Refs. [8, 21], though we reproduce it here in full for completeness.
+First, we sample X ∼ PT,Q and condition on the events Y (from Proposition 27) and Z (from Lemma 28). We let
+ν1 , ν2 be the associated R-OGP parameters; if only the chaos property is satisfied, we take ν1 = 0. We construct a
+graph GT,Q with colored edges in the following way:
+1. GT,Q has vertex set [T ];
+2. The GT,Q has edge (t, t′ ) if and only if there exists a q ∈ [Q] such that:
+dk (I t (q) , I t′ (q)) ∈ [ν1 n, ν2 n] .
+
+(104)
+
+The color of the edge (t, t′ ) is the minimal q ∈ [Q] such that this holds true.
+Our main goal in this section is to demonstrate that GT,Q has a monochromatic R-clique, which we know from
+Theorem 61 is obstructed by the multi-OGP.
+First, we claim that GT,Q is R-admissible when conditioned on Y and Z, defined as follows.
+Definition 29 (R-admissibility). Let R ∈ N. A graph G = (V, E) is said to be R-admissible if, for every R ⊆ V with
+|R| = R, there exist distinct i, j ∈ R such that (i, j) ∈ E.
+We now show that GT,Q is R-admissible when conditioned on Y and Z. This is formalized via the following lemma,
+where we recall the k-minimum Hamming semimetric (Definition 18):
+dk (z, z ′ ) :=
+
+k
+X
+
+
+
+n
+min ∥Γi z ⊕ Γi z ′ ∥1 , − ∥Γi z ⊕ Γi z ′ ∥1 .
+k
+i=1
+
+(105)
+
+21
+Lemma 30 (Topologically obstructed configurations conditioned on events). Assume that:
+βλL
+ν2 − ν1
+f
++
+≤
+n
+Q
+4
+and γ ≥ µ. Draw
+
+
+
+(t)
+Xq
+
+Q  T
+q=0
+
+(106)
+
+according to PT,Q , and condition on the events Y (from Proposition 27) and Z
+
+t=1
+
+(from Lemma 28) occurring. Then, GT,Q is R-admissible.
+Proof. Define the function over t, t′ ∈ [T ] and integer 0 ≤ q ≤ Q:
+p (t, t′ , q) :=
+
+1
+dk (I t (q) , I t′ (q)) .
+n
+
+(107)
+
+While the k-minimum Hamming semimetric does not necessarily satisfy the triangle inequality, we claim that it has
+the following property for any z, z ′ , z ′′ ∈ Fn2 :
+dk (z, z ′ ) ≤ dk (z, z ′′ ) + dH (z ′ , z ′′ ) ,
+n/k
+
+where dH denotes the Hamming distance. To see this, denoting 1 ∈ F2
+dk (z, z ′ ) =
+
+=
+
+as the all-ones vector, we have:
+
+k
+X
+
+
+
+n
+min ∥Γi z ⊕ Γi z ′ ∥1 , − ∥Γi z ⊕ Γi z ′ ∥1
+k
+i=1
+
+k
+X
+
+min (∥Γi z ⊕ Γi z ′′ ⊕ Γi z ′ ⊕ Γi z ′′ ∥1 , ∥Γi 1 ⊕ Γi z ⊕ Γi z ′′ ⊕ Γi z ′ ⊕ Γi z ′′ ∥1 )
+
+i=1
+
+≤
+
+(108)
+
+k
+X
+
+(109)
+
+min (∥Γi z ⊕ Γi z ′′ ∥ + ∥Γi z ′ ⊕ Γi z ′′ ∥1 , ∥Γi 1 ⊕ Γi z ⊕ Γi z ′′ ∥ + ∥Γi z ′ ⊕ Γi z ′′ ∥1 )
+
+i=1
+
+= dk (z, z ′′ ) + dH (z ′ , z ′′ ) .
+Therefore, conditioned on Y, by Proposition 27 we have that p is Lipschitz in q in that:
+1
+1
+dH (I t (q) , I t (q + 1)) + dH (I t′ (q) , I t′ (q + 1))
+n
+n
+2f
+2βλL
+≤
++
+n
+Q
+ν2 − ν1
+≤
+,
+2
+
+|p (t, t′ , q) − p (t, t′ , q + 1)| ≤
+
+(110)
+
+(t)
+
+where
+the
+
+ final inequality is due to Eq. (106). Furthermore, by construction p (0) = 0. Finally, writing Xq =
+(t)
+(t)
+B, vq , recall that the vQ are independent. Therefore, conditioned on Z, by the (γ, 0)-near-optimality of I (when
+conditioned on Y) we have that there exist some s∗ ̸= t∗ ∈ [T ] such that:
+(111)
+
+p (s∗ , t∗ , Q) ≥ ν2 .
+
+Let q ∗ be the smallest q ∈ [Q] satisfying p (s∗ , t∗ , q ∗ ) ≥ ν2 . In particular, p (s∗ , t∗ , q ∗ − 1) < ν2 . Furthermore, by
+Eq. (110),
+p (s∗ , t∗ , q ∗ − 1) ≥ ν2 −
+
+ν2 − ν1
+ν1 + ν2
+=
+.
+2
+2
+
+(112)
+
+Combining these two observations,
+p (s∗ , t∗ , q ∗ − 1) ∈
+
+
+
+ν1 + ν2
+, ν2
+2
+
+
+⊂ (ν1 , ν2 ) .
+
+Recalling the definition of p (t, t′ , q) and GT,Q yields the final result.
+We now cite a result linking R-admissibility to the existence of a monochromatic R-clique.
+
+(113)
+
+22
+Proposition 31 (G contains a monochromatic R-clique [8, Proposition 6.12]). Assume G is R-admissible, has C
+edge colors, and has exp2 C 4mC vertices. Then, G has a monochromatic clique of cardinality R.
+This immediately gives the following result when applied to GT,Q .
+
+Proposition 32 (GT,Q contains a monochromatic R-clique). If T = exp2 Q4RQ , GT,Q conditioned on Y and Z has
+a monochromatic clique of cardinality R if:
+βλL
+ν2 − ν1
+f
++
+≤
+n
+Q
+4
+
+(114)
+
+and γ ≥ µ.
+
+F.
+
+Completing the Proof
+
+We now have all of the ingredients to complete Theorem 21. First, we lower bound the probability that the event:
+(115)
+
+W := Y ∩ Z
+occurs, with Y and Z defined in Proposition 27 and Lemma 28, respectively.
+
+Lemma 33 (Probability of good events). Fix T and Q as constants independent of n. Assume pst , pf , and β ∈ R+
+are such that:
+p
+3T Qpst + (T Q + 1) 3pf ≤ 1 − exp (− o (n)) ;
+(116)
+s
+Q
+p .
+β>
+(117)
+1 − (Q + 1) 3pf
+Then,
+PPk [W] ≥ exp (− o (n)) .
+Proof. By Proposition 27, Lemma 28, and the union bound, W occurs with probability at least:
+p
+PPk [W] ≥ 1 − 3T Qpst + (T Q + 1) 3pf − T Q exp (− Ω (n))
+≥ exp (− o (n)) .
+
+(118)
+
+(119)
+
+We now use Proposition 32 to show a contradiction with the statement of Theorem 21. Once again we assume
+µ, ν1 , ν2 are as in the assumed R-OGP; if the chaos property assumption is taken instead, fix ν1 = 0 in what follows.
+Conditioned on W (and given the assumed bounds on γ, pf and f, L, pst ), Proposition 32 states that there exists some
+
+0 ≤ q ≤ Q − 1 and R ∈ [TR] such that, for all t ̸= t′ ∈ R,
+dk (I t (q) , I t′ (q)) ∈ [ν1 n, ν2 n] ,
+gX (t) (I t (q)) ≥ γλn,
+
+(120)
+(121)
+
+(t′ ) (I t′ (q)) ≥ γλn.
+Xq
+
+(122)
+
+q
+
+g
+
+Namely, recalling the definition of the set S(Xq(r) )
+
+nonempty. This implies that:
+
+in Theorem 61, conditioned on W it is the case that this set is
+r∈R
+
+"
+PX∼PT ,Q
+
+#
+
+(R,µ,ν ,ν )
+S (r) 1 2 ̸= ∅
+Xq
+
+≥ PX∼PT ,Q [W]
+
+r∈R
+
+≥ exp (− o (n)) ,
+where the final line follows from Lemma 33.
+
+(123)
+
+23
+However, this contradicts both the R-OGP and the chaos property. For the former, from Definition 19,
+"
+#
+(R,µ,ν1 ,ν2 )
+
+̸= ∅
+(r)
+Xq
+
+PX∼PT ,Q S
+
+(124)
+
+≤ exp (− Ω (n))
+
+r∈R
+
+(r)
+
+if γ ≥ µ, yielding a contradiction. In the case of the property, when Q = 1 the X1
+so by Definition 20:
+"
+#
+(R,µ,ν1 ,ν2 )
+
+̸= ∅
+(r)
+Xq
+
+PX∼PT ,Q S
+
+are constrained to independent,
+
+≤ exp (− Ω (n))
+
+(125)
+
+r∈R
+
+if γ ≥ µ, once again yielding a contradiction. Taking:
+s
+β=
+
+Q+1
+√ ,
+1 − (Q + 1) 3pf
+
+(126)
+
+δ=
+
+1
+1
+=
+,
+6T Q
+6Q exp2 (Q4RQ )
+
+(127)
+
+with Q fixed to be 1 if the chaos property is satisfied, then proves Theorem 21.
+IV.
+
+STABILITY OF DECODED QUANTUM INTERFEROMETRY
+
+We now discuss the stability of DQIℓ over certain code families. Unlike the discussion of the rest of our results, we
+here keep the distribution of constraints Pcon general, i.e., we do not necessarily assume it is the transposed Gallager
+ensemble discussed in Sec. II A. This will allow us to show that the stability of DQI is fairly generic, and does not
+rely specifically on decoding Gallager-ensemble codes.
+Before we state our main result of this section, we introduce a code property we call local restrictability.
+Definition 34 ((ϵ, ∆, pres )-restrictability). Fix 0 < ϵ ≤ 1, 1 ≤ ∆ ≤ m, and 0 ≤ pres ≤ 1. If Pcon satisfies:
+PB∼Pcon [∃SB ⊆ [n] : |SB | ≤ ϵn ∧ ΠSB B ⊺ ∈ H≥∆ ] ≥ 1 − pres ,
+|S |×n
+
+we say that it is (ϵ, ∆, pres )-restrictable. Here, ΠSB ∈ {0, 1} B
+H≥∆ is the set of check matrices of codes of distance at least ∆.
+
+(128)
+
+is a projector onto the rows labeled by SB , and
+
+Informally, locally restrictable codes are those which still have lower-bounded distance (∆) even when all but ϵn of
+the syndromes are discarded. Our main result in this section is that DQIℓ is stable if Pcon is (ϵ, ∆, pres )-restrictable
+and 2ℓ + 1 ≤ ∆.
+Theorem 35 (DQI is stable). Assume Pcon is (ϵ, ∆, pres )-restrictable. Then DQIℓ is (ϵn, 0, pres )-stable if 2ℓ + 1 ≤ ∆.
+The remainder of this section is structured in the following way. First, in Sec. IV A we prove Theorem 35. Then,
+in Sec. IV B we prove that a variety of natural code families are restrictable and sparse in a way which implies that
+DQI is stable. Finally, in Sec. IV C we prove a variety of corollaries instantiating Theorem 35 with specific parameters
+over these code families.
+A.
+
+DQI is Stable
+
+We first prove Theorem 35. To begin, we summarize the steps of DQIℓ , keeping only the details that are relevant
+to us. The algorithm is parameterized by some 1 ≤ ℓ ≤ m. We refer to parts of Fig. 3 as well to aid the reader.
+1. A problem-independent initial state |ψ2 ⟩ is prepared (Fig. 3, pink bubble).
+Nm
+2. The gate i=1 Zivi is applied, yielding the state |ψ3 (v)⟩ (Fig. 3, green bubble, first step).
+3. The isometry:
+UB =
+
+X
+
+(|y⟩ ⊗ |B ⊺ y⟩) ⟨y|
+
+y∈Fm
+2
+
+is applied, yielding the state |ψ4 (B, v)⟩ (Fig. 3, green bubble, second step).
+
+(129)
+
+24
+4. A decoding operator:
+OB =
+
+X
+
+|B ⊺ y⟩ (⟨y| ⊗ ⟨B ⊺ y|)
+
+(130)
+
+y∈Fm
+2 :|y|≤ℓ
+
+is applied, yielding the state |ψ5 (B, v)⟩ (Fig. 3, blue bubble, first step). Note this can only be performed
+efficiently if the code is efficiently decodable through ℓ errors.
+Nm
+5. The Fourier transform i=1 Hi is applied, yielding the final state |ψ6 (B, v)⟩ (Fig. 3, blue bubble, second step).
+It is easy to see that steps 2 and 3 of this procedure commute: this is because the isometry UB can be implemented
+via CNOT gates controlled on the initial register, where the Zi gates were applied. As we are only interested in the
+stability of DQIℓ when varying v, we might as well rewrite these steps in the following way.
+1. A phase-independent initial state ρ1 (B) is prepared.
+Nm
+2. The gate i=1 Zivi is applied to the register containing |y⟩, yielding the state ρ2 (B, v).
+3. A decoding operator:
+OB =
+
+X
+
+|B ⊺ y⟩ (⟨y| ⊗ ⟨B ⊺ y|)
+
+(131)
+
+y∈Fm
+2 :|y|≤ℓ
+
+is applied, yielding the state ρ3 (B, v).
+Nm
+4. The Fourier transform i=1 Hi is applied, yielding the final state A (B, v).
+We now claim that, conditioned on the event:
+EB := {∃SB ⊆ [n] : |SB | ≤ ϵn ∧ ΠSB B ⊺ ∈ H≥∆ } ,
+
+(132)
+
+where ΠSB and H≥∆ are defined in Definition 34, one can commute step 2 after step 3 via the application of a single
+operator with bounded locality.
+Proposition 36 (Commuting decoding and phasing). Condition on the event EB (from Eq. (132)) occurring. If
+2ℓ + 1 ≤ ∆, for all v there exists a state ρ̃ (B) and a unitary operator VB,v supported only on SB (also from
+Eq. (132)), such that
+†
+ρ3 (B, v) = VB,v ρ̃ (B) VB,v
+.
+
+(133)
+
+Proof. We begin with the state
+Nmρ1 (B) as above. Under the standard algorithmic procedure of DQI, we would next
+apply the phasing operation i=1 Zivi to produce ρ2 (B, v), followed by a decoding isometry OB to yield the state
+ρ3 (B, v). We here will wish to instead first apply a decoding operator directly to the state ρ1 (B), producing a state
+independent of v, and then apply a different operation which restores the phases we neglected, so that the final state
+is exactly equal to the desired state ρ3 (B, v). We show that this latter operation can in fact be implemented with
+support contained entirely in SB .
+Assuming that event EB occurs, there is a set SB ∈ [n] such that, restricted only those the checks in SB , the code
+specified by B ⊺ still has distance at least ∆. Further, we assume that the parameter ℓ of DQI is such that 2ℓ + 1 ≤ ∆,
+which means that all errors of weight ≤ ℓ can be corrected using only the information from the syndromes computed
+by checks in SB . Therefore, there is a decoding isometry
+X
+WB :=
+|B ⊺ y⟩ (⟨y| ⊗ ⟨B ⊺ y|)
+(134)
+y∈Fm
+2 :|y|≤ℓ
+
+which can be implemented by acting solely on SB . We denote this decoder by WB even though it appears identical
+to OB because while its action is identical to that of OB , it explicitly only acts on SB and therefore may differ from
+†
+OB in algorithmic aspects such as efficient
+implementability. Let ρ̃(B) = WB ρ1 (B)WB
+. Then define VB,v to (a)
+Nm
+vi
+undo WB , (b) compute the phases i=1 Zi on the register holding |y⟩, and (c) re-do WB . This is a sequence of
+isometries which start and end on the same dimension, and thus is a unitary operation. Moreover, the support of this
+operator VB,v is contained SB since the only part of the input state which is acted on is SB . Finally, by construction,
+†
+ρ3 (B, v) = VB,v ρ̃(B)VB,v
+
+as claimed.
+
+(135)
+
+25
+Due to Proposition 36, the result of DQIℓ can, when the event EB (Eq. (132)) occurs, be written in the following
+way:
+!
+!
+m
+m
+O
+O
+†
+A (B, v) =
+Hi VB,v ρ̃ (B) VB,v
+Hi .
+(136)
+i=1
+
+i=1
+
+With this more convenient form of the DQI state, we are able to complete the proof of Theorem 35.
+Proof of Theorem 35. Condition on the event EB (Eq. (132)) occurring. Then:
+!
+!
+m
+m
+O
+O
+†
+A (B, v) =
+Hi VB,v ρ̃ (B) VB,v
+Hi .
+i=1
+
+(137)
+
+i=1
+
+Now consider:
+
+TrSB (A (B, v)) = 
+
+
+O
+
+
+
+Hi  TrSB (ρ̃ (B)) 
+
+i̸∈SB
+
+
+O
+
+Hi  .
+
+(138)
+
+i̸∈SB
+
+This state is independent of v, so for any v, v ′ ∈ Fm
+2 :
+∥TrSB (A (B, v) − A (B, v ′ ))∥W2 = 0.
+
+(139)
+
+The desired result then follows by the definition of stability (Definition 16).
+B.
+1.
+
+Locally Restrictable Codes
+
+Restrictability of Good Locally Generated Ensembles
+
+The assumption of restrictability from Definition 34 captures a sufficient condition for DQI to be stable. Showing
+restrictability directly is tedious, so we instead show that if an ensemble of codes has high distance with high probability
+and that it satisfies a property we call “local generation”, then it is also locally restrictable. Informally, a locally
+generated code is one which has some block structure in the rows of the check matrix. That is, the sampling process
+involves a sequence of sampling at most a small fraction of all the checks (perhaps with some very complicated
+distribution), and then concatenating all the checks together by stacking the rows of each parity check matrix.
+Therefore, sampling a larger parity check matrix essentially involves repeatedly sampling many smaller matrices and
+then stacking them. This is visualized in Fig. 5.
+
+FIG. 5. Informal visualization of a locally generated code. Sampling a larger code is equivalent to sampling smaller horizontal
+slices and then stacking them.
+
+We now give a formal definition.
+Definition 37 (Locally generated codes). Let λ−1 ∈ (0, 1) be a constant and ϵ−1 an integer dividing λ−1 m. We say
+that an ensemble Dm,λ−1 is ϵ-locally generated if the following two distributions are equal. In the first, we sample
+−1
+H ∈ F2λ m×m from Dm,λ−1 and then restrict to only between rows κϵλ−1 m + 1 through (κ + 1)ϵλ−1 m, for any integer
+−1
+κ from 0 to 1/ϵ. In the second, we sample H ′ ∈ F2ϵλ m×m from Dm,ϵλ−1 .
+
+26
+The final definition we will need is of a good ensemble. Informally, a good ensemble is a collection of distributions
+such that each distribution yields a high distance code with high probability.
+Definition 38 (Good ensemble). Let λ−1 ∈ (0, 1) be a constant. An ensemble Dm,λ−1 is (∆(λ−1 ), pres (n, λ−1 ))-good
+if with probability at least 1 − pres (n, λ−1 ), a parity check matrix H ∼ Dm,λ−1 has distance at least ∆(λ−1 ).
+We can now show that ensembles which are good and locally generated are locally restrictable, and thus satisfy the
+requirements for stability.
+Theorem 39 (Good and locally structured ensembles are restrictable). Let Dm,λ−1 be an ensemble of codes which is
+(∆(λ−1 ), pres (n, λ−1 ))-good and ϵ-locally generated. Then Dm,λ−1 is (ϵ, ∆(ϵλ−1 ), pres (n, ϵλ−1 ))-restrictable.
+−1
+
+Proof. Sample H ∼ Dm,λ−1 , so that H ∈ Fλ2 m×m . By the definition of restrictability (Definition 34), we must
+demonstrate the existence of a fraction of ϵ checks for which the code is still good. Choose the first ϵλ−1 m checks,
+i.e., the first ϵλ−1 m rows of H. This yields a matrix H res = H|1,...,ϵλ−1 m given by the restriction of H to the first
+ϵλ−1 m rows. By the definition of locally generated codes (Definition 37), H res is equivalent in distribution to that of
+−1
+a sample H ′ ∼ Dm,ϵλ−1 , where H ′ ∈ F2ϵλ m×m . Finally, by the definition of a good ensemble (Definition 38), with
+probability at least 1 − pres (n, ϵλ−1 ), the distance of H ′ is at least ∆(ϵλ−1 ). By equivalence in distribution, H res
+must also have distance at least ∆(ϵλ− ) with probability at least 1 − pres (n, ϵλ−1 ). Therefore, H meets the conditions
+of restrictability.
+Remark 40. In practice, only the ϵ-locally generated aspect of Theorem
+39 matters. To see why this is the case,
+
+
+assume we show a certain ϵ-locally generated code is ∆˜ λ−1 , pres -good; by Theorems 39 and 35 this implies that
+
+DQIℓ is stable for any ℓ satisfying 2ℓ + 1 ≤ ∆˜ ϵλ−1 . However, if one is able to implement DQI for some ℓ̃ satisfying
+ℓ̃
+
+
+
+2ℓ̃ + 1 = ∆ λ−1 ≥ ∆˜ λ−1 ,
+
+(140)
+
+
+this result immediately improves to a stability result for DQIℓ̃ with 2ℓ̃ + 1 ≤ ∆ ϵλ−1 errors. This can be made
+formal with the following corollary.
+Corollary 41 (DQI versus any locally generated code). Let Dm,λ−1 be an ϵ-locally generated distribution over parity
+−1
+check matrices B ⊺ ∈ Fλ2 m×m . Suppose that there is a decoding algorithm which corrects ℓ(λ−1 , n) errors with high
+probability. Then Dm,λ−1 is (ϵ, ∆, pres )-restrictable, where ∆ = 2ℓ(ϵλ−1 , n) + 1 and pres = pfail (ϵλ−1 , n).
+Proof. The desired result follows immediately from Theorem 39 and the fact that a code for which all errors up to
+weight ℓ are correctable has distance at least 2ℓ + 1.
+
+2.
+
+Random Code Constructions
+
+Before we proceed, we provide some additional ensembles beyond the Gallager ensemble, which we will then show
+are all restrictable ensembles. In each case, we fix a constant λ−1 ∈ (0, 1) and implicitly assume that λ−1 m ∈ Z. The
+constant r = 1 − λ−1 ∈ (0, 1) is known as the design rate of an ensemble. When we refer to an ensemble of codes, we
+mean a collection of distributions Dn,λ , i.e., one distribution for each n and λ.
+Definition 42 (Bernoulli ensemble). Fix λ−1 ∈ (0, 1) a constant. The Bernoulli ensemble with probability p is the
+−1
+distribution defined by the process in which each entry of the parity check matrix H ∈ Fλ2 m×m is i.i.d. Bern(p).
+The Bernoulli ensemble does not give uniform check weights. That is, the weight of two distinct checks may differ
+slightly. If we insist that all checks must have the same weight, we must instead use the right-regular ensemble,
+defined as follows.
+Definition 43 (Right-regular ensemble). Fix λ−1 ∈ (0, 1) a constant. The right-regular ensemble with check sparsity
+−1
+d is defined by a parity check matrix H ∈ Fλ2 m×m whose rows are independently generated. For each row, we
+randomly choose d indices (without replacement) on whose corresponding bit to place a 1. The bits on the remaining
+n − d indices are set to 0.
+
+27
+3.
+
+Distance of Random Locally-Generated Codes
+
+We now prove that the Gallager ensemble and the ensembles we defined above are locally generated and have
+high distance. Specifically, we will show that the Gallager ensemble has distance Ω(n). For the Bernoulli and rightregular ensembles, we are only able to show that they have distance Ω(n/ log n), and require check sparsity O(log n).
+Therefore, the below proofs only explicitly subject DQI to stability obstructions if the check weight scales as O(log n)
+and for degree ℓ = O(n/ log n). This shortcoming is, however, of little consequence with respect to DQI. This is
+because of Corollary 41. The notion of local generation is independent of the distance, but together they imply a
+restrictability condition. Consequently, if one manages to run DQI on these ensembles (for any choice of check weight,
+e.g. constant or log n) with ℓ = ω(n/ log n), e.g. ℓ = Θ(n), with high probability, then it must be that DQI is using a
+decoder which can correct ℓ errors with high probability. This implies that in fact the ensemble is (Ω(ℓ), pres )-good,
+which in combination with local generation implies the restrictability condition which we have shown obstructs DQI
+at that given ℓ. We give the below distance computations over Bernoulli and right-regular ensembles primarily to
+show that locally generated codes with good (or nearly good) distance are relatively abundant and easy to construct.
+Importantly, Definition 34 establishes the notion of restrictability in terms of a constraint matrix B with a corresponding code parity check matrix H = B ⊺ . Below, we will work directly with ensembles of the parity check matrices,
+with the understanding that they relate to a corresponding distribution over constraint matrices via a transpose.
+Lemma 44 (Gallager ensemble is locally generated). Let n = m kd . The Gallager ensemble G(m, k, d) of rate parameter
+n
+λ−1 = m
+= kd and weight parameter k ≥ 3 is ϵ-locally generated, where ϵ = k1 .
+Proof. The Gallager construction sequentially and independently samples m/d rows of the parity check matrix at a
+time. In total, there are n = λ−1 m rows. Thus, we may partition the sampling into blocks, so the block proportion
+is given by
+ϵ=
+
+m/d
+λ
+1
+= = .
+λ−1 m
+d
+k
+
+(141)
+
+It is well known that the Gallager ensemble is good.
+−1
+
+Lemma 45 (Gallager ensemble is good). Fix constants λ−1 , δ ∈ (0, 1). Let H ∈ Fλ2 m×m be sampled from a Gallager
+ensemble G(m, k, d = kλ) with locality parameter k and n = λ−1 m. Then if λ−1 > H2 (δ), there exists a threshold
+constant k0 (δ) ≥ 1 (scaling as 1/δ) such that if k ≥ k0 , the ensemble is (δm, 1/nΩ(1) )-good.
+Proof. This claim was first shown by Gallager [30]. A simplified proof is given in Mosheiff et al. [31] Theorem 2.14,
+which gives the failure probability in the simple asymptotics we use rather than complicated exact combinatorial
+quantities.
+Theorem 46 (Restrictability of Gallager ensemble). Let n be a scaling parameter, k, d be constants,m = nd/k, and
+λ−1 = n/m ∈ (0, 1). Let ϵ ∈ (0, 1) be a constant such that ϵ ≥ 1/k and choose δ ∈ (0, 1) such that λ−1 > H2 (δ)/ϵ.
+The Gallager ensemble G(m, k, d) of rate parameter λ−1 is (ϵ, ∆, pres )-restrictable, where ∆ = δm and pres = 1/nΩ(1) .
+Proof. Follows immediately from Theorem 39 and Lemmas 44 and 45.
+We next study the Bernoulli ensemble, which is maximally locally generated since its entries are i.i.d. The following
+lemma calculates the probability that a Binomial random variable is even.
+Lemma 47 (Binomial parity). Let X ∼ Bin(n, p). Then P[X ≡ 0 (mod 2)] = 12 + 12 (1 − 2p)n .
+Proof. By direct computation with the binomial theorem, one can check that
+P[X ≡ 0 (mod 2)] − P[X ≡ 1 (mod 2)] = ((1 − p) − p)n .
+
+(142)
+
+At the same time, P[X ≡ 0 (mod 2)] + P[X ≡ 1 (mod 2)] = 1. Adding the two expressions and simplified proves the
+claim.
+We will also need to bound a binomial by a linear function. The Taylor expansion implies that for sufficiently small
+input, this bound must exist. The following lemma formalizes this argument.
+Lemma 48 (Binomial linear bound). Let q ∈ [0, 1] and 1 ≤ w ≤ 1/q. Then (1−q)w ≤ 1−cqw, where c = 1−1/e ≤ 0.7.
+
+28
+Proof. Let f (q) = (1 − q)w . Then f ′′ (q) = w(w − 1)(1 − q)w−2 ≥ 0 since w ≥ 1 and 1 − q ∈ [0, 1]. Hence, f is a convex
+function on [0, 1]. Note that f (0) = 1 and f (1/w) = (1 − w1 )w =: cw . The line passing through both points is given
+by g(q) := 1 − (1 − cw )wq, since g(1/w) = 1 − (1 − cw ) = cw = f (1/w). By convexity, on the interval 0 ≤ q ≤ 1/w
+(equivalently, for q ≥ 0 and w ≤ 1/q), f (q) ≤ g(q). Finally, we apply the exponential inequality (1 + x) ≤ ex for all
+x ∈ R, to get
+f (q) ≤ g(q) = 1 − (1 − cw )wq = 1 − wq + cw wq ≤ 1 − wq + e−1 wq = 1 − (1 − e−1 )wq = 1 − cqw.
+
+(143)
+
+Lemma 49 (Almost-local Bernoulli ensemble is nearly good). Let λ−1 ∈ (0, 1) be a constant, and assume n = λ−1 m ∈
+−1
+iid
+Z. Sample H ∈ Fλ2 m×m via Hij ∼ Bern(p), where p = C logmm . Then there exists a threshold constant C ∗ (λ−1 )
+1
+1
+m
+which scales as λ, such that for C > C ∗ (λ−1 ), the distance of the code corresponding to H is ∆ ≥ 2p
+= 2C
+log m with
+probability 1 − o(1/n).
+m
+Proof. We proceed by a weight enumerator analysis of random codes. Fix an error e ∈ Fm
+2 of weight w ≤ C log m = 1/p.
+He is the linear combination of some columns of H, specified by the support of e. The probability that He = 0
+−1
+is given by P[He = 0] = (P[(He)1 = 0])λ m by independence. (He)1 is just the linear combination of w random
+Bern(p) variables, so
+λ−1 m 
+λ−1 m
+
+1 1
+1 1
+w
+λ−1 m
++ (1 − 2p)
++ (1 − 2cpw)
+≤
+(144)
+P[He = 0] = (P[(He)1 = 0])
+=
+2 2
+2 2
+
+by Lemma 47 and Lemma 48, where c = 1 − 1/e. Simplifying and using the exponential bound 1 + x ≤ ex ,
+
+λ−1 m
+
+−1
+1 1
+P[He = 0] ≤
++ (1 − 2cpw)
+= (1 − cpw)λ m ≤ exp −λ−1 cpwm = exp{−Crw log m},
+2 2
+where r = λ−1 c is a constant. Now, by union bound,
+
+
+m
+m
+P ∃e ∈ F2 : 1 ≤ |e| ≤
+, He = 0 ≤
+C log m
+
+X
+
+P[He = 0]
+
+(146)
+
+
+m
+P[He = 0]
+w
+
+(147)
+
+mw P[He = 0]
+
+(148)
+
+mw e−Crw log m
+
+(149)
+
+exp{−(Cr − 1)w log m}.
+
+(150)
+
+m
+e : 1≤|e|≤ C log
+m
+
+m/C log m 
+
+=
+
+(145)
+
+X
+
+w=1
+m/C log m
+
+≤
+
+X
+w=1
+m/C log m
+
+≤
+
+X
+w=1
+m/C log m
+
+=
+
+X
+w=1
+
+Thus, so long as Cr > 3, each term is o(m−2w ), and since w ≥ 1, each term is actually o(1/m2 ). There are at most
+m terms, so the entire expression is o(1/m) = o(1/n) as desired. In other words, we need
+C>
+
+3
+3
+λ =: C ∗ (λ−1 ).
+=
+cλ−1
+(1 − 1/e)
+
+(151)
+
+For intuition, if λ−1 is 0.9, then C ∗ (λ−1 ) ≈ 5.28.
+We remark that the notion of restrictability manifests in a reduction by a constant factor of the distance and in
+an inflation by a constant factor of the check sparsity. This is because if we reduce to the first ϵ fraction of rows, the
+new parameter λ′ (ϵ) satisfies (λ′ )−1 = ϵλ−1 . Thus the threshold C ∗ is given by
+C ∗ (ϵλ−1 ) =
+
+3
+λ
+1
+= C ∗ (λ−1 ).
+(1 − 1/e) ϵ
+ϵ
+
+Hence, the check weight increases by a factor of 1/ϵ and the distance decreases by a factor of ϵ.
+
+(152)
+
+29
+Theorem 50 (Restrictability of Bernoulli ensemble). Fix λ−1 ∈ (0, 1) a constant. The Bernoulli ensemble (Definition 42) with probability parameter
+p = C ∗ (ϵλ−1 )
+
+1
+log m
+log m
+= C ∗ (λ−1 )
+m
+ϵ
+m
+
+(153)
+
+is (ϵ, ∆, pres )-restrictable, where ∆ = 2C ∗ (λϵm
+−1 ) log m and pres = o(1/n).
+Proof. Follows immediately from Lemma 49 and the fact that the distribution’s entries are i.i.d.
+Since the sparsities are not fixed in the Bernoulli ensemble, we also bound them probabilistically. The log-local
+parameter p = C logmm yields check sparsities and bit sparsities of size ∼ log n with high probability.
+−1
+
+Lemma 51 (Bernoulli ensemble weight bounds). Let λ−1 ∈ (0, 1) be a constant. Let H ∈ Fλ2 m×m be sampled
+P
+iid
+Hij ∼ Bern(p) with p = C logmm and C ≥ λ−1 C ≥ 4. Then the check sparsity Wr := maxi j Hij and bit sparsity
+√
+√
+P
+Wc = maxj i Hij (sums are as integers, not mod 2) are at most (1 + 2/ C)C log m and (1 + 2/ λ−1 C)Cλ−1 log m,
+respectively, with probability 1 − 1/nΩ(1) , where n = λ−1 m.
+Proof. We apply a Chernoff bound for Bernoulli random variables, which states that for X ∼ Bin(m, p), and δ ∈ [0, 1]
+ 2
+
+δ mp
+P[X − mp ≥ δmp] ≤ exp −
+.
+(154)
+3
+(r)
+
+Let wi
+
+j Hij be the weight of the ith row
+(r)
+(c)
+Wr = maxi wi and Wc = maxj wj . By Chernoff,
+
+=
+
+P
+
+(r)
+
+P[wi
+
+(c)
+
+and wj
+
+=
+
+P
+
+i Hij
+
+be the weight of the jth column. Then
+
+
+ 2
+δ C log m
+.
+− C log m ≥ δC log m] ≤ exp −
+3
+
+(155)
+
+(r)
+
+The event {Wr − C log m ≥ δC log m} is the same event as {∃i : wi − C log m ≥ δC log m}. By a union bound,
+
+  2
+
+ 2
+δ C log m
+δ C log m
+(r)
+≤ exp −
+− log m
+(156)
+P[∃i : wi − C log m ≥ δC log m] ≤ m exp −
+3
+3
+  2
+
+
+δ C
+= exp −
+− 1 log m .
+(157)
+3
+p
+√
+2
+This will be exp{−Ω(log m)} if δ 3C > 1, i.e. if δ > 3/C. So, δ = 2/ C suffices, and when C ≥ 4, δ ≤ 1 as
+needed. The proof proceeds analogously for the column weight, except that we now sum of λ−1 m bits instead, so
+mp 7→ λ−1 mp = λ−1 C log m.
+Let us now show that the almost-local right-regular ensemble from Definition 43 is nearly good. Roughly speaking,
+we will achieve the same guarantees as the Bernoulli code, but this time with a guarantee that every parity check has
+the exact same sparsity. The difference is that the right-regular ensemble has an exact fixed sparsity of every check.
+Lemma 52 (Almost local right-regular ensemble is nearly good). Let λ−1 ∈ (0, 1) be a constant, and assume
+−1
+n = λ−1 m ∈ Z. Sample H ∈ Fλ2 m×m from the right-regular ensemble in Definition 43. Then there exists a
+threshold constant C ∗ (λ−1 ), which scales as λ, such that for C > C ∗ (λ−1 ) and d = C log m, the distance of the code
+m
+1
+m
+corresponding to H is ∆ ≥ 2d
+= 2C
+log m with probability 1 − o(1/n).
+−1
+
+λ m×m
+Proof. Fix an error e ∈ Fm
+be a matrix whose rows are independently randomly generated by
+2 . Let H ∈ F2
+choosing d positions to be 1 and the remaining m − d positions
+0. Let w = |e| be the weight of the error. Then
+P
+for any i ∈ [λ−1 m], P[(He)i = 0] is the probability that j:ej =1 Hij = 0. Each row Hi is generated independently
+according to a distribution which is invariant under bit swapping, we may without loss of generality assume that e is
+of the form (1, 1, . . . , 1, 0, 0, . . . , 0). In other words,
+
+
+ 
+
+w
+d
+X
+X
+1
+w m−w
+P[(He)i = 0] = P 
+Hij = 0 = m
+.
+(158)
+j
+d−j
+d
+j=1
+j=0:j∈2Z
+
+30
+We now upper bound this exact probability by a simpler expression. We imagine the process of generating Hi to
+consist of sequentially sampling k elements of [n] without replacement to place the 1’s. Define the random variable
+(i)
+Xj , for i fixed and j ∈ [d], which is −1 if the jth sampled index is ≤ w and +1 otherwise. Then
+
+
+
+
+w
+d
+X
+Y
+(i)
+P
+Hij = 0 = P 
+Xj = 1 .
+j=1
+
+since
+
+(159)
+
+j=1
+
+Pw
+
+j=1 Hij = 0 if and only if the parity of the first w bits of Hi is 0, which by constructions occurs if and only
+(i)
+(i)
+(i)
+if the product of all d random variables Xj , for j ∈ [d], is +1. Next, note that for any j, j ′ ∈ [d], Xj and Xj ′ are
+(i)
+(i)
+anti-correlated because if Xj = −1, then there is one less ‘1’ bit available so Xj ′ is more likely to be +1. Therefore,
+
+by definition of anti-correlation,
+
+
+E
+
+d
+Y
+
+
+(i)
+Xj  ≤
+
+j=1
+
+d
+Y
+
+(i)
+
+(i)
+
+E[Xj ] = (E[X1 ])d
+
+(160)
+
+j=1
+
+where the last step follows by exchange symmetry. Since the probability that the first index sampled is ≤ w is w/m,
+we find that
+
+w
+w
+w
+(i)
+=1−2 .
+(161)
+E[Xj ] = (−1) + (+1) 1 −
+m
+m
+m
+Lastly, note that for X ∈ {±1} a random variable,
+E[X] = P[X = 1] − P[X = −1] = P[X = 1] − (1 − P[X = 1]) = 2P[X = 1] − 1.
+
+(162)
+
+Thus, P[X = 1] = 12 (1 + E[X]). Putting Eqns. (158), (159), (160), (161), and (162) together,
+
+
+
+
+d
+
+ 1
+Y
+1
+1
+w d
+(i) 
+(i) d
+
+≤
+P[(He)i = 0] =
+Xj
+1+ 1−2
+1+E
+1 + E[X1 ] =
+.
+2
+2
+2
+m
+j=1
+
+(163)
+
+Since every row is independently generated, we obtain the probability that e is a codeword as
+ 
+λ−1 m
+
+1
+w d
+P[He = 0] =
+1+ 1−2
+.
+2
+m
+
+(164)
+
+Let D = dist(H) be the distance of the code with parity check matrix H. By a union bound,
+P[D ≤ ∆] ≤
+
+∆   
+X
+n
+1
+w=1
+
+w
+
+2
+
+λ−1 m
+
+w d
+1+ 1−2
+.
+m
+
+(165)
+
+Note that so long as d ≤ m/2w, Lemma 48 gives (1 − 2w/m)d ≤ 1 − 2cwd/m, where c = 1 − 1/e. If we define p = d/m,
+m
+we will be in the exact setting of Eq. (145) in the proof of Lemma 49, since d = C log m so p = C log
+, and w ≤ 1/2p.
+m
+The exact same calculation then goes through to complete the proof.
+As in the case of the Bernoulli ensemble, the right-regular ensemble is obviously locally generated because every
+parity check is generated i.i.d. If we restrict to a ϵ fraction of checks, the threshold scales as 1/ϵ. Thus, the check
+weight increases by a factor of 1/ϵ and the distance decreases by a factor of ϵ.
+Theorem 53 (Restrictability of right-regular ensemble). Fix λ−1 ∈ (0, 1) a constant. The right-regular ensemble
+(Definition 43) with sparsity parameter
+d = C ∗ (ϵλ−1 ) log m =
+
+1 ∗ −1
+C (λ ) log m
+ϵ
+
+is (ϵ, ∆, pres )-restrictable, where ∆ = 2C ∗ (λϵm
+−1 ) log m and pres = o(1/n).
+
+(166)
+
+31
+C.
+
+Stability of DQI on Constructed Ensembles
+
+As a consequence of Theorems 46, 50, and 53, DQI is stable on all the ensembles we have defined.
+Corollary 54 (DQI is stable on Gallager ensemble). Let k, d be constants, and let n be the scaling parameter. Define
+n
+m = n kd and λ−1 = m
+= kd ∈ (0, 1). Let Pcon be a distribution of matrices B ∈ Fn×m
+such that B ⊺ is drawn from
+2
+the G(m, k, d) Gallager ensemble (Definition 14). Let δ ∈ (0, 1) be any constant such that ϵλ−1 > H2 (δ). Then DQIℓ
+is (ϵn, 0, n−Ω(1) )-stable if ℓ ≤ δm.
+Proof. Follows immediately from Theorems 35 and 46.
+For the below codes whose distances we do not prove are linear in n, we emphasize that if DQI could correct ℓ
+errors beyond the threshold of O(m/ log m) which we prove, then the stability at the new threshold of ℓ nonetheless
+holds by Corollary 41.
+Corollary 55 (DQI is stable on Bernoulli ensemble). Let λ−1 ∈ (0, 1) be a constant, and let n be the scaling parameter,
+defining m = λn. Let Pcon be a distribution of matrices B ∈ Fn×m
+such that B ⊺ is drawn from the Bernoulli ensemble
+2
+log m
+3
+λ
+−1
+−Ω(1)
+with probability parameter p = C m , where λ C ≥ 4 and C > C ∗ (ϵλ−1 ) = 1−1/e
+)-stable
+ϵ . DQIℓ is (ϵn, 0, n
+ϵm
+if ℓ ≤ 2C ∗ (λ−1 ) log m .
+Proof. Follows immediately from Theorems 35 and 50.
+Corollary 56 (DQI is stable on right-regular ensemble). Let λ−1 ∈ (0, 1) be a constant, and let n be the scaling
+parameter, defining m = λn. Let Pcon be a distribution of matrices B ∈ Fn×m
+such that B ⊺ is drawn from the right2
+3
+λ
+∗
+−1
+regular ensemble with sparsity parameter d = C log m, where C > C (ϵλ ) = 1−1/e
+ϵ . Then DQIℓ is (ϵn, 0, o(1/n))ϵm
+stable if ℓ ≤ 2C ∗ (λ−1 ) log m .
+Proof. Follows immediately from Theorems 35 and 53.
+V.
+
+STATISTICAL PROPERTIES OF TRANSPOSED GALLAGER MAX-k-XOR-SAT
+
+We now prove two main statistical properties about transposed Gallager MAX-k-XOR-SAT:
+1. We compute the maximum attainable value (Sec. V A).
+2. We compute the 2-OGP and chaos property thresholds (Sec. V B).
+While similar properties had previously been computed for MAX-k-XOR-SAT with non-constant k [6, 36], to the
+best of our knowledge these are the first proofs of these properties for fixed-k MAX-k-XOR-SAT, and thus may be
+of independent interest.
+A.
+
+Maximum Value of Transposed Gallager MAX-k-XOR-SAT
+
+We first prove the maximum w.h.p. attainable value for MAX-k-XOR-SAT instances drawn from the transposed
+Gallager ensemble (Definition 8). First, we prove that MAX-k-XOR-SAT over this distribution exhibits concentration, namely, that the maximum number of satisfied clauses exponentially concentrates around its mean. We then
+show that the maximum fraction of satisfied clauses is, with probability exponentially close to 1 over this ensemble,
+given by:
+
+
+1
+−1
+∗
+θ := 1 − H2
+1−
+(167)
+λ
+at sufficiently large k. In the large λ limit, we can expand the inverse binary entropy near 1 to find this expression
+takes the form:
+r
+ 1
+1
+ln (2)
+∗
+θ = +
++ oλ λ− 2 .
+(168)
+2
+2λ
+This functional form was conjectured by Ref. [22] for MAX-k-XOR-SAT instances drawn from this ensemble; we
+prove this is indeed the correct functional form.
+We now formally state the main result of this section.
+
+32
+Theorem 57 (Maximum value of transposed Gallager MAX-k-XOR-SAT). Let θ∗ be defined as in Eq. (167). For
+any ϵ > 0,
+
+
+1
+∗
+max (m − ∥Bz ⊕ v∥1 ) − θ ≥ ϵ ≤ exp (− Ω (n)) .
+P(B,v)∼P1
+(169)
+m z∈Fn2
+
+Furthermore, for any ϵ > 0, there exists a kϵ = Oϵ−1 log ϵ−1 such that, for all k ≥ kϵ ,
+
+
+1
+(170)
+maxn (m − ∥Bz ⊕ v∥1 ) − θ∗ ≥ ϵ ≤ exp (− Ω (n)) .
+P(B,v)∼P1
+m z∈F2
+1.
+
+Concentration
+
+We first prove a concentration bound that we will use later.
+Proposition 58 (Concentration). Let
+g ∗ (B, v) := maxn (m − ∥Bz ⊕ v∥1 ) .
+z∈F2
+
+There exists a universal constant C > 0 such that:
+
+
+
+P(B,v)∼P1 g ∗ (B, v) − Ev∼Ppar [g ∗ (B, v)] ≥ tm ≤ 2 exp −Cmt2 .
+
+(171)
+
+(172)
+
+Proof. This concentration property follows from the fact that Lispchitz functions of a uniformly random point on
+the hypercube concentrate. In particular, there exists a universal constant C > 0 such that, for any function
+m
+f : {0, 1} → R satisfying:
+|f (v) − f (v ′ )| ≤
+
+L
+∥v ⊕ v ′ ∥1
+m
+
+(173)
+
+m
+
+for all v ∈ {0, 1} , we have for v drawn uniformly at random that [37, Theorem 5.2.5]:
+
+
+Cmt2
+P [|f (v) − E [f (v)]| ≥ t] ≤ 2 exp − 2
+.
+L
+
+(174)
+
+We define:
+g (v; B, z) := m − ∥Bz ⊕ v∥1 .
+
+(175)
+
+This function is obviously L-Lipschitz in v according to Eq. (173) with L = m. As the supremum of a set of L-Lipschitz
+functions is L-Lipschitz, we have from Eq. (174) that:
+
+
+
+
+Ct2
+P(B,v)∼P1 g ∗ (B, v) − Ev∼Ppar [g ∗ (B, v)] ≥ t ≤ 2 exp −
+.
+(176)
+m
+Taking t 7→ tm yields the final result.
+2.
+
+Upper Bound
+
+We first upper bound the (w.h.p.) maximum number of satisfiable clauses, i.e., we first prove Eq. (169). To achieve
+this, we define the random counting variable for any 0 < θ < 1:
+Nθ := |{z ∈ Fn2 : ∥Bz ⊕ v∥1 ≤ (1 − θ) m}| .
+Our desired upper bound then can be framed as an upper bound on:
+X
+P(B,v)∼P1 [Nθ ≥ 1] ≤ Ev∼Ppar [Nθ ] =
+P(B,v)∼P1 [∥Bz ⊕ v∥1 ≤ (1 − θ) m] .
+z∈Fn
+2
+
+(177)
+
+(178)
+
+33
+In what follows we assume θ ≥ 12 for brevity, as θ = 21 is trivially asymptotically achieved by random guessing.
+Note that v has i.i.d. Bernoulli entries. This probability is therefore then just the probability a binomial random
+variable with m trials succeeds at least θm times. We therefore have from the CDF of the binomial distribution that:
+E(B,v)∼P1 [Nθ ] = 2n I1/2 (θm + 1, m − θm − 1)
+= 2n I1/2 (θλn + 1, (1 − θ) λn − 1)
+
+(179)
+
+= exp2 (− (λ − 1) n + H2 (θ) λn + O (log (n))) ,
+where Ip is the regularized incomplete beta function with parameter p and H2 is the binary entropy function (in bits).
+This gives in the n → ∞ limit:
+P(B,v)∼P1 [Nθ ≥ 1] ≤ exp (− Ω (n))
+
+(180)
+
+
+
+1
+,
+θ > θ∗ := 1 − H−1
+1
+−
+2
+λ
+
+(181)
+
+for any:
+
+
+
+where the inverse of the binary entropy is here defined with the codomain 0, 12 .
+
+3.
+
+Lower Bound
+
+We now lower bound the (w.h.p.) maximum number of satisfiable clauses at sufficiently large k, which will complete
+the proof of Eq. (170) (and therefore Theorem 57) given Eq. (169). Recalling the definition of Nθ from Eq. (177), we
+will achieve this by using the Paley–Zygmund inequality:
+2
+
+P [Nθ ≥ 1] ≥
+
+E [Nθ ]
+,
+E [Nθ2 ]
+
+(182)
+
+as well as a boosting trick due to Frieze [38]. Once again, in what follows we assume θ ≥ 12 for brevity, as asymptotically
+uniformly random z achieve θ = 12 w.h.p.
+We have already calculated the numerator of the right-hand side of Eq. (182) in Eq. (179), leaving only the second
+moment of Nθ to bound. We have by Markov’s inequality and the law of total probability:
+X X
+ 
+P(B,v)∼P1 [∥Bz ⊕ v∥1 ≤ (1 − θ) m ∧ ∥Bz ′ ⊕ v∥1 ≤ (1 − θ) m]
+E(B,v)∼P1 Nθ2 =
+n
+′
+z∈Fn
+2 z ∈F2
+
+=
+
+X X
+
+X
+
+n
+′
+z∈Fn
+2 z ∈F2
+
+ṽ∈Fm
+2
+s.t. ∥ṽ∥1 ≤(1−θ)m
+
+X X
+
+X
+
+n
+′
+z∈Fn
+2 z ∈F2
+
+ṽ∈Fm
+2
+
+P(B,v)∼P1 [Bz ⊕ v = ṽ]
+× P(B,v)∼P1 [∥Bz ′ ⊕ v∥1 ≤ (1 − θ) m | Bz ⊕ v = ṽ]
+
+≤
+
+P(B,v)∼P1 [Bz ⊕ v = ṽ]
+
+(183)
+
+s.t. ∥ṽ∥1 ≤(1−θ)m
+
+× PB∼Pcon [∥B (z ⊕ z ′ ) ⊕ ṽ∥1 ≤ (1 − θ) m]
+= 2−m
+
+X X
+
+X
+
+n
+′
+z∈Fn
+2 z ∈F2
+
+ṽ∈Fm
+2
+s.t. ∥ṽ∥1 ≤(1−θ)m
+
+PB∼Pcon [∥B (z ⊕ z ′ ) ⊕ ṽ∥1 ≤ (1 − θ) m] .
+
+As the summand depends only on z ⊕ z ′ , we can write this more simply as:
+X
+ 
+E(B,v)∼P1 Nθ2 ≤ 2−(λ−1)n
+y∈Fn
+2
+
+X
+ṽ∈Fm
+2
+s.t. ∥ṽ∥1 ≤(1−θ)m
+
+PB∼Pcon [∥By ⊕ ṽ∥1 ≤ (1 − θ) m] .
+
+(184)
+
+34
+Finally, we can more conveniently write the sum as an expectation over ṽ being drawn from a Bernoulli distribution
+conditioned on tm of the entries being nonzero, i.e.,
+X
+ 
+E(B,v)∼P1 Nθ2 ≤ 2−(λ−1)n+H2 (θ)λn+O(log(n)) sup
+P(B,ṽ)∼Pcon ⊗Um,(1−t)m [∥By ⊕ ṽ∥1 ≤ (1 − θ) m]
+t∈[0,θ] y∈Fn
+2
+s.t. tm∈Z
+
+=: 2−(λ−1)n+H2 (θ)λn+O(log(n))
+
+(185)
+
+M (t; θ) ,
+
+sup
+t∈[0,θ]
+s.t. tm∈Z
+
+where Um,w is the uniform distribution over Fm
+2 conditioned on the bit string having Hamming weight w.
+We now specialize to B ⊺ being drawn from the Gallager ensemble. By the definition of the Gallager ensemble, we
+can write By in terms of independent components:
+#
+"
+k
+X
+M
+⊺
+≤ (1 − θ) m
+M (t; θ) =
+BYi
+P(B,ṽ)∼Pcon ⊗Um,(1−t)m ṽ ⊕
+k× n
+k
+
+i=1
+
+Y ∈F2
+
+1
+
+"
+
+"
+= 2n EY ∼U k⊗ nk P(B,ṽ,(yi ) )∼Pcon ⊗Um,(1−t)m
+i
+
+ṽ ⊕
+
+k
+M
+
+(186)
+
+##
+BYi⊺
+
+i=1
+
+≤ (1 − θ) m
+
+.
+
+1
+
+L
+n
+k×n/k
+denotes summation modulo 2, the Y ∼ U k⊗ k is drawn uniformly at random from F2
+Here,
+, and we use Yi
+⊺
+to denote the ith row of Y . By the definition of the Gallager ensemble, each BYi is manifestly independent; if Yi
+has Hamming weight ∆i , BYi⊺ is distributed uniformly randomly over vectors in Fm
+2 with Hamming weight λk∆i .
+Motivated by this, defining the product distribution:
+!
+k
+O
+Ũ∆,t :=
+Um,λk∆i ⊗ Um,(1−t)m ,
+(187)
+i=1
+
+we can rewrite M (t; θ) succinctly as:
+"
+n
+
+M (t; θ) = 2 E∆∼Bin n , 1 ⊗k Pu∼Ũ∆,t
+(k 2)
+
+" k+1
+M
+
+##
+≤ (1 − θ) m
+
+ui
+
+i=1
+
+(188)
+
+.
+
+1
+
+We now fix 0 < ϵ < 1, which we will set later. We now define the following set of ∆ excluding exceptionally small ∆i :
+(
+)
+
+
+k
+n
+1X
+k∆i
+k∆i
+ϵ
+Gϵ := 0 ⪯ ∆ ⪯ 1 :
+min
+,1 −
+≥
+.
+(189)
+k
+k i=1
+n
+n
+2
+We have for any 0 < ϵ < 1:
+n
+
+M (t; θ) ≤ 2
+
+sup Pu∼Ũ∆,t
+
+" k+1
+M
+
+∆∈Gϵ
+
+i=1
+
+#
+≤ (1 − θ) m + 2n P∆∼Bin n , 1 ⊗k [∆ ̸∈ Gϵ ] .
+(k 2)
+
+ui
+
+(190)
+
+1
+
+We can simply bound the second term using the density of the binomial distribution. First, we define an equivalency
+relation ∼ on ∆ ∈ Gϵ∁ :
+′
+
+∆ ∼ ∆ ⇐⇒
+
+k 
+^
+
+
+min
+
+i=1
+
+k∆i
+k∆i
+,1 −
+n
+n
+
+
+
+
+= min
+
+k∆′i
+k∆′i
+,1 −
+n
+n
+
+
+.
+
+(191)
+
+1
+i
+Note the size of each equivalency class is at most 2k , and each has unique representative with each k∆
+n ≤ 2 . We
+therefore have that:
+
+(192)
+
+Gϵ∁ ≤ 2k Gϵ∁ / ∼ ,
+where Gϵ / ∼ is the quotient set:
+(
+Gϵ∁ / ∼=
+
+k
+1 X k∆i
+ϵ
+n
+1:
+<
+0⪯∆⪯
+2k
+k i=1 n
+2
+
+)
+.
+
+(193)
+
+35
+As
+
+Pk
+
+i=1 ∆i is binomial distributed with n trials, we have:
+
+P
+
+∆∼Bin(
+
+n 1
+k,2
+
+⊗k
+λ
+
+)
+
+h
+ϵ i
+[∆ ̸∈ Gϵ ] ≤ 2k P∆∼Bin(n, 1 ) ∆ < n
+2
+2
+−n+H2 ( 2ϵ )n+O(log(n))
+.
+=2
+
+(194)
+
+Before continuing with the remaining probability term in Eq. (190), we claim the following property of Gϵ which
+we will find useful later.
+Lemma 59 (Existence of I). For every
+(
+∆ ∈ Gϵ :=
+
+
+
+k
+n
+1X
+k∆i
+k∆i
+ϵ
+0⪯∆⪯ 1:
+min
+,1 −
+≥
+k
+k i=1
+n
+n
+2
+
+)
+(195)
+
+and c ∈ (0, 1), there exists an index set I ⊆ [n] of cardinality ⌊ck⌋ such that:
+
+
+^
+k∆i
+1−ϵ
+k∆i
+1 − 2 min
+∀i ∈ I,
+≤
+,1 −
+.
+n
+n
+1−c
+
+(196)
+
+i∈I
+
+Proof. Note we can rewrite Gϵ as:
+)
+k
+1X
+2k∆i
+n
+1−
+≤1−ϵ .
+0⪯∆⪯ 1:
+k
+k i=1
+n
+
+(
+Gϵ =
+
+(197)
+
+For a given ∆ ∈ Gϵ , let I be the index set associated with the smallest ⌊ck⌋ of the
+xi := 1 −
+
+2k∆i
+.
+n
+
+(198)
+
+Let xi∗ be the largest xi of the i ∈ I. We have:
+k
+
+1X
+xi ≤ 1 − ϵ
+k i=1
+=⇒ xi∗ ≤ (1 − ϵ) k −
+
+X
+
+xi −
+
+X
+
+i̸=i∗ ∈I
+
+xi
+
+i̸∈I
+
+≤ (1 − ϵ) k − I ∁ xi∗
+
+(199)
+
+≤ (1 − ϵ) k − (1 − c) kxi∗
+k
+(1 − ϵ)
+=⇒ xi∗ ≤
+(1 − c) k + 1
+1−ϵ
+≤
+.
+1−c
+
+We now consider the remaining probability term in Eq. (190). We can equivalently write this term as a probability
+of the sum (over F2 ) of independent vectors being zero (up to a multiplicative factor). To see this, we sample another
+independent vector of i.i.d. Bernoulli random variables uk+2 conditioned on having Hamming weight at most (1 − t′ ) m
+for some t′ ∈ [0, θ]. Writing:
+(200)
+
+U∆,t,t′ := Ũ∆,t ⊗ Um,(1−t′ )m ,
+we have:
+sup Pu∼Ũ∆,t
+
+∆∈Gϵ
+
+" k+1
+M
+i=1
+
+#
+H2 (θ)λn
+
+≤ (1 − θ) m ≤ 2
+
+ui
+1
+
+sup
+
+sup
+
+∆∈Gϵ t′ ∈[0,θ]
+s.t. tm∈N
+
+Pu∼U∆,t,t′
+
+"k+2
+M
+i=1
+
+#
+ui = 0 .
+
+(201)
+
+36
+We can now use techniques from [39] to bound this probability. In what follows, we use the shorthand:
+
+if i ≤ k;
+ λk∆i ,
+wi = (1 − t) m, if i = k + 1;
+ (1 − t′ ) m, if i = k + 2
+
+(202)
+
+for the Hamming weight of ui . Using [39, Lemma 2.2], the probability can be exactly written as:
+
+Pu∼U∆,t,t′
+
+"k+2
+M
+
+#
+
+m   k+2
+X
+m Y
+
+−m
+
+ui = 0 = 2
+
+x
+
+x=0
+
+i=1
+
+i)
+λ(w
+,
+x
+
+(203)
+
+Kwi (x) .
+
+(204)
+
+i=1
+
+where
+i)
+λ(w
+=
+x
+
+wi
+X
+
+x
+β
+
+β
+
+(−1)
+
+ m−x 
+wi −β
+
+m
+wi
+
+β=0
+
+
+
+m
+wi
+
+=
+
+−1
+
+Here, Kw denotes the wth binary Kravchuk polynomial. We now fix any c ∈ (0, 1) (such that ck is an integer) and I
+(w )
+
+as in Lemma 59. We can bound via Hölder’s inequality and the fact that all λx i
+
+Pu∼U∆,t,t′
+
+"k+2
+M
+i=1
+
+#
+
+1
+
+ui = 0 = Qk+2
+
+m
+wi
+
+i=1
+
+≤ Qk
+
+ Ex∼Bin(m, 1 )
+2
+
+"
+ Ex∼Bin(m, 1 )
+
+1
+
+Kwi (x)
+#
+
+(205)
+
+Kwi (x)
+
+i=1
+
+
+m
+wi
+
+k
+Y
+
+2
+
+Y
+
+i∈I
+
+#
+
+i=1
+
+1
+
+m
+i=1 wi
+
+≤Q
+
+"k+2
+Y
+
+≤ 1:
+
+1
+h
+i ck
+ck
+.
+Ex∼Bin(m, 1 ) |Kwi (x)|
+2
+
+i∈I
+
+
+Fortunately, the moments of the |Kwi (x)| over x ∼ Bin m, 21 are known [40]. We have the bound [40, Corollary 4]:
+Y
+i∈I
+
+!
+ck
+
+wi wi 
+mX 
+ψ ck, min 1 −
+,
+,
+ck i=1
+m m
+
+s  
+1
+h
+i ck
+Y m
+ck
+Ex∼Bin(m, 1 ) |Kwi (x)|
+≤
+exp2
+2
+wi
+i∈I
+
+(206)
+
+where:
+p
+
+ψ (p, x) := p − 1 + log2 ((1 − δ) + δ p ) −
+
+p
+H2 (x) − px log2 (1 − 2δ) ,
+2
+
+(207)
+
+with δ implicitly defined via:
+
+x=
+
+1
+−δ
+2
+
+
+
+p−1
+
+(1 − δ)
+− δ p−1
+.
+p
+(1 − δ) + δ p
+
+(208)
+
+In Appendix C, Proposition 74, we prove the following general upper bound on ψ:
+ψ (p, x) ≤
+
+p−1
+4
+p
+(1 − 2x) 2 + H2 (x) − 1.
+ln (2)
+2
+
+(209)
+
+This gives:
+
+w 
+w
+X
+wi 
+1 X 
+wi wi 
+1X
+4
+i
+i
+ψ k, min 1 −
+,
+≤ −1 +
+H2
++
+1 − 2 min
+,1 −
+ck
+m m
+2
+m
+ln (2) ck
+m
+m
+i∈I
+
+i∈I
+
+4
+≤
+ln (2)
+
+
+
+1−ϵ
+1−c
+
+i∈I
+
+ ck−1
+2
+−1+
+
+1X
+2
+
+i∈I
+
+H2
+
+w 
+i
+
+m
+
+ck−1
+2
+
+(210)
+,
+
+37
+where the final line follows from the definition of I. Using Stirling’s approximation then gives:
+!
+!
+"k+2
+#
+
+ ck−1
+w  1 X
+w 
+2
+M
+1−ϵ
+1X
+4
+i
+i
+−
++ O (log (n))
+m+
+H2
+H2
+Pu∼U∆,t,t′
+ui = 0 ≤ exp2 − 1 −
+ln (2) 1 − c
+2
+m
+2
+m
+i=1
+i∈I
+i∈I
+!
+!
+
+ ck−1
+2
+1−ϵ
+4
+= exp2 − 1 −
+m + O (log (n)) .
+ln (2) 1 − c
+(211)
+Taking c = ϵ/2 then gives:4
+"k+2
+#
+
+
+ 
+M
+Pu∼U∆,t,t′
+(212)
+ui = 0 ≤ exp2 − 1 − e− Ωk (k) m + O (log (n))
+i=1
+
+for any fixed ϵ.
+Putting everything together, for any choice of 0 < ϵ < 1,
+− Ωk (k)
+
+M (t; θ) ≤ 2−((1−e
+
+)λ−1)n+H2 (θ)λn+O(log(n)) + 2H2 ( 2ϵ )n+O(log(n)) ,
+
+and therefore:
+
+
+ 
+− Ωk (k)
+)λ−1)n+H2 (θ)λn+O(log(n)) + 2H2 ( 2ϵ )n+O(log(n)) .
+E(B,v)∼P1 Nθ2 ≤ 2−(λ−1)n+H2 (θ)λn+O(log(n)) 2−((1−e
+
+(213)
+
+(214)
+
+We now return to the Paley–Zygmund inequality. Reusing the first moment calculation from Eq. (179), we have as
+n → ∞:
+2
+
+P(B,v)∼P1 [Nθ ≥ 1] ≥
+
+E(B,v)∼P1 [Nθ ]
+E(B,v)∼P1 [Nθ2 ]
+
+2−(λ−1)n+H2 (θ)λn+O(log(n))
+≥
+.
+− Ωk (k)
+)λ−1)n+H2 (θ)λn+O(log(n)) + 2H2 ( 2ϵ )n+O(log(n))
+2−((1−e
+
+(215)
+
+
+1 − λ−1 . For any constant 0 < ϵ < 1, for sufficiently large k (logarithmic in 1/ϵ),
+We now set θ = θ∗ := 1 − H−1
+2
+this gives:
+P(B,v)∼P1 [Nθ ≥ 1] ≥ 2− H2 ( 2 )n+O(log(n)) .
+ϵ
+
+(216)
+
+We now boost this lower bound using a trick by Frieze [38]. Define:
+µ (B, v) := maxn (m − ∥Bz ⊕ v∥1 )
+z∈F2
+
+(217)
+
+for simplicity in what follows. Fix any 0 < δ < 1. First, we claim that there exists some kδ such that, for sufficiently
+large n and any k ≥ kδ , for any B,
+
+
+δ
+Ev∼Ppar [µ (B, v)] ≥ 1 −
+θ∗ λn.
+(218)
+2
+To see this, assume (looking toward contradiction) that it is not. We then have by the concentration of the maximal
+function value (Proposition 58) that there exists some universal constant C > 0 such that:
+
+
+δ
+P(B,v)∼P1 [µ (B, v) ≥ θ∗ λn] ≤ P(B,v)∼P1 µ (B, v) − Ev∼Ppar [µ (B, v)] ≥ θ∗ λn
+2
+
+(219)
+2 ∗2
+≤ 2 exp −4Cδ θ λn
+
+≤ 2 exp −Cδ 2 λn .
+
+4 Assuming ϵk is an even integer, such that the condition that ck is an integer is satisfied; we will neglect repeating this for the rest of
+
+the proof for brevity.
+
+38
+However, we showed in Eq. (216) that there exists some kδ depending only on C and δ (and logarithmic in 1/δ) such
+that, for all k ≥ kδ ,
+
+
+P(B,v)∼P1 [µ (B, v) ≥ θ∗ λn] ≥ exp −0.1Cδ 2 n ≥ exp −0.1Cδ 2 λn ;
+(220)
+this follows by taking ϵ sufficiently small in Eq. (216). In particular, for sufficiently large n, we have a contradiction.
+Therefore, Eq. (218) holds true for any choice of 0 < δ < 1 and B as n → ∞ for sufficiently large k. Once again using
+the concentration of the maximal
+function value (Proposition 58), we therefore have that for any 0 < δ < 1 there
+
+exists a kδ = Oδ−1 log δ −1 such that for any k ≥ kδ and sufficiently large n:
+(221)
+
+P(B,v)∼P1 [µ (B, v) ≥ (1 − δ) θ∗ λn] ≤ exp (− Ω (n)) .
+This taken in combination with Eq. (180) proves Theorem 57.
+B.
+
+Transposed Gallager MAX-k-XOR-SAT Exhibits an Overlap Gap Property
+
+We now state our two main results of this section. First, we prove that transposed Gallager MAX-k-XOR-SAT
+exhibits the chaos property (Definition 20) at any given R. Then, we further prove that transposed Gallager MAX-kXOR-SAT exhibits the R-OGP (Definition 19), and compute the threshold in the special case R = 2. We conjecture
+that the true R-OGP threshold (i.e., the threshold when R is chosen optimally) is much smaller; this is motivated by
+the fact that both of the stable algorithms beyond DQI considered in Sec. VI achieve only a satisfied fraction 1/2 in
+the k → ∞ limit, whereas what we compute for the 2-OGP does not satisfy this property. We leave the computation
+of the optimal OGP threshold for future work.
+We begin with the chaos property.
+Theorem 60 (Transposed Gallager MAX-k-XOR-SAT exhibits the chaos property). Fix any 0 < ν2 < 1/2 and
+R ∈ N. For any
+
+
+
+
+1
+1
+1
+µ > µ∗ := 1 − H−1
+1
+−
+−
+1
+−
+H
+(ν
+)
+,
+(222)
+2
+2
+2
+Rλ λ
+R
+it is the case that:
+
+
+(µ,0,ν2 )
+̸= ∅ ≤ exp (− Ω (n)) ,
+P(B,v(r) )R ∼P(1) S
+R
+2
+(B,v(r) )r=1
+r=1
+
+(223)
+
+R
+(µ,0,ν2 )
+R×n
+is the random set of tuples z (r) r=1 ∈ {−1, 1}
+satisfying:
+where S
+R
+(r)
+(B,v )r=1
+1. µ-SAT fraction: For all r ∈ [R],
+
+
+gX (R) z (R) ≥ µλn.
+
+(224)
+
+2. k-minimum Hamming semimetric bound: Recalling the k-minimum Hamming semimetric (Definition 18),
+for all r ̸= r′ ∈ [R],
+
+
+′
+(225)
+dk z (r) , z (r ) ≤ ν2 n.
+In particular, choosing:
+
+
+R = ν2−2 ,
+
+(226)
+
+Eq. (229) holds for any:
+µ > 1 − H−1
+2
+
+
+
+H2 (ν2 )
+1 − (1 + oν2 (1))
+λ
+
+
+
+1
+= + (1 + oν2 (1) + oλ (1))
+2
+
+Theorem 60 will be proved in the course of proving the 2-OGP.
+
+r
+
+ν2 ln (ν2 )
+.
+2λ
+
+(227)
+
+39
+Theorem 61 (Transposed Gallager MAX-k-XOR-SAT exhibits a 2-OGP). Fix any 0 ≤ ν1 < ν2 < 1/2. For any
+(κ)
+κ ∈ [0, 1], fix P2 to be a κ-correlated ensemble (Definition 9). For any
+µ>µ
+
+∗
+
+:= 1 − H−1
+2
+
+
+
+
+1
+2e
+1
+−
+H2 (ν2 ) −
+exp (−ν1 k) ,
+1−
+2λ 2λ
+ln (2)
+
+(228)
+
+it is the case that:
+
+
+(µ,ν1 ,ν2 )
+
+P(B,v(r) )2 ∼P(κ) S
+2
+2
+(B,v(r) )r=1
+r=1
+
+
+̸= ∅ ≤ exp (− Ω (n)) ,
+
+(229)
+
+2
+(µ,ν1 ,ν2 )
+2×n
+where S
+is the random set of tuples z (r) r=1 ∈ {−1, 1}
+satisfying:
+2
+(r)
+(B,v )r=1
+1. µ-SAT fraction: For all r ∈ [2],
+
+
+gX (2) z (2) ≥ µλn.
+
+(230)
+
+2. k-minimum Hamming semimetric bound: Recalling the k-minimum Hamming semimetric (Definition 18),
+
+
+dk z (1) , z (2) ∈ [ν1 n, ν2 n] .
+
+(231)
+
+ν1 = 0.1,
+
+(232)
+
+In particular, choosing:
+
+ν2 = 0.1 +
+
+1
+ln (k)
+
+2,
+
+(233)
+
+Eq. (229) holds for any:
+p
+
+
+ln (2)
+1
+1
+√ .
+µ > 1 − H−1
+1
+−
+(1
++
+o
+(1))
+=
++
+(1
++
+o
+(1)
++
+o
+(1))
+k
+k
+λ
+2
+2λ
+2
+2 λ
+
+(234)
+
+Finally, when the v (r) are drawn independently (κ = 1),
+P(
+
+2
+(1)
+B,v (r)
+∼P2
+r=1
+
+)
+
+
+
+(µ,0,ν2 )
+S
+̸= ∅ ≤ exp (− Ω (n))
+2
+(B,v(r) )r=1
+
+(235)
+
+with the same choice of µ, ν2 .
+Proof. Consider the random set as defined in the theorem statement:
+(
+(µ,ν)
+
+:=
+S
+2
+(B,v(r) )r=1
+
+
+
+z
+
+(r)
+
+2
+r=1
+
+∈ F2×n
+:
+2
+
+2
+^
+r=1
+
+Bz
+
+(r)
+
+⊕v
+
+(r)
+
+)
+1  (1) (2) 
+∈ [ν1 , ν2 ] .
+≤ (1 − µ) m ∧ dk z , z
+n
+1
+
+(236)
+
+We define the counting variable that is the cardinality of this set:
+(µ,ν)
+
+Nµ,ν := S
+.
+2
+(B,v(r) )r=1
+
+(237)
+
+2
+For simplicity of notation in what follows, we let Z ⊂ F2×n
+denote the set of Z = z (r) r=1 such that they satisfy
+2
+Eq. (231).
+We consider the two discussed cases separately: when the v (r) are drawn independently and when they are not.
+We begin with the latter case. The former case will also prove Theorem 60.
+
+40
+Dependent v (r)
+
+1.
+
+We first define the set of low-weight vectors:
+(
+2
+
+x(r)
+X =
+r=1
+
+2
+^
+
+∈ F2×n
+:
+2
+
+)
+(r)
+
+(238)
+
+≤ (1 − µ) m .
+
+x
+
+1
+
+r=1
+
+We have by Markov’s inequality and the law of total probability that:
+#
+" 2
+X
+^
+Bz (r) ⊕ v (r) ≤ (1 − µ) m
+P [Nµ,ν ≥ 1] ≤
+P
+
+=
+
+X X
+
+P
+
+Z∈Z X∈X
+
+=
+
+1
+
+r=1
+
+Z∈Z
+
+" 2
+^
+
+#
+Bz (r) ⊕ v (r) = x(r)
+
+r=1
+
+X X X
+Z∈Z X∈X y∈Fm
+2
+
+P
+
+Bz
+
+(r)
+
+⊕v
+
+(r)
+
+(r)
+
+=x
+
+v
+
+(1)
+
+(239)
+h
+
+=y P v
+
+(1)
+
+=y
+
+i
+
+r=1
+
+X X X
+
+= 2−m
+
+#
+
+" 2
+^
+
+Z∈Z X∈X y∈Fm
+2
+
+P
+
+" 2
+^
+
+#
+Bz (r) ⊕ v (r) = x(r) v (1) = y .
+
+r=1
+
+By the assumed dependence structure, there exists some projector Υ such that:
+
+
+v (2) = v (1) ⊕ Υ v (1) ⊕ ṽ (2) ,
+
+(240)
+
+where ṽ (2) is independent from v (1) . We therefore have:
+#
+" 2
+X X X
+^
+−m
+(1)
+(r)
+(r)
+(r)
+P [Nµ,ν ≥ 1] ≤ 2
+v =y
+P
+Bz ⊕ v = x
+Z∈Z X∈X y∈Fm
+2
+
+= 2−m
+
+X X X
+
+r=1
+
+hn
+o
+
+
+i
+P Bz (1) ⊕ x(1) = y ∧ Bz (2) ⊕ y ⊕ Υ y ⊕ ṽ (2) = x(2)
+
+Z∈Z X∈X y∈Fm
+2
+
+= 2−m
+
+X X X
+
+hn
+
+o
+
+
+
+
+i
+Bz (1) ⊕ x(1) = y ∧ B z (1) ⊕ z (2) ⊕ Υ y ⊕ ṽ (2) = x(1) ⊕ x(2)
+
+hn
+
+o
+
+
+i
+Bz (1) ⊕ x(1) = y ∧ B z (1) ⊕ z (2) ⊕ Υ ṽ (2) = x(1) ⊕ x(2)
+
+P
+
+(241)
+
+Z∈Z X∈X y∈Fm
+2
+
+= 2−m
+
+X X X
+
+P
+
+Z∈Z X∈X y∈Fm
+2
+
+= 2−m
+
+X X
+
+h 
+
+i
+P B z (1) ⊕ z (2) = x(1) ⊕ x(2) ⊕ Υ ṽ (2) ,
+
+Z∈Z X∈X
+
+with the penultimate line following as ṽ (2) and y ⊕ ṽ (2) are distributed identically, and the final line following from
+the law of total probability.
+We now focus on the probability term. Recall from the definition of the Gallager ensemble that:
+k
+
+ M
+
+
+B z (1) ⊕ z (2) =
+BΓi z (1) ⊕ z (2) ,
+
+(242)
+
+i=1
+
+
+where the BΓi z (1) ⊕ z (2) are distributed as independent, uniformly random vectors with Hamming weight constraint kλ z (1) ⊕ z (2) . We have already calculated a bound on this probability in Eq. (205). Writing:
+
+
+ui := BΓi z (1) ⊕ z (2)
+(243)
+for 1 ≤ i ≤ k and:
+
+
+uk+1 := π x(1) ⊕ x(2) ⊕ Υ ṽ (2)
+
+(244)
+
+41
+for π a uniformly random permutation, and defining the shorthand notation:
+
+
+,
+wi = kλ Γi z (1) ⊕ z (2)
+
+(245)
+
+1
+
+we have (Eq. (205)):
+Pu∼U∆,t,t′
+
+"k+1
+M
+i=1
+
+#
+ui = 0 ≤ Qk
+
+"
+
+1
+
+m
+i=1 wi
+
+ Ex∼Bin(m, 1 )
+
+k
+Y
+
+2
+
+#
+Kwi (x)
+
+(246)
+
+,
+
+i=1
+
+where Kw denotes the wth binary Kravchuk polynomial. From here, we will proceed slightly differently from the
+proof of Theorem 57. Defining:
+w
+wj 
+j
+xi := min
+,
+(247)
+,1 −
+n
+n
+
+Pk
+wj
+wj
+j=1 min n , 1 − n
+
+pi :=
+,
+(248)
+min wni , 1 − wni
+we have via Hölder’s inequality and the Kravchuk moment bound [40, Corollary 4]:
+"k+1
+#
+k
+Y
+M
+1
+pi p1i
+[|K
+(x)|
+]
+E
+Pu∼U∆,t,t′
+ui = 0 ≤ Qk
+1
+
+w
+i
+x∼Bin
+m,
+( 2)
+m
+i=1 wi
+i=1
+i=1
+!
+k
+X
+1
+−1
+pi ψ (pi , xi ) ,
+≤ qQ
+ exp2 m
+k
+m
+
+(249)
+
+i=1
+
+i=1 wi
+
+where ψ is as in Eq. (207). Now, recall that ψ has upper bound (Proposition 74):
+ψ (p, x) ≤
+
+p−1
+4
+p
+(1 − 2x) 2 + H2 (x) − 1,
+ln (2)
+2
+
+(250)
+
+giving:
+Pu∼U∆,t,t′
+
+"k+1
+M
+i=1
+
+#
+ui = 0 ≤ qQ
+
+1
+
+
+k
+m
+i=1 wi
+
+exp2
+
+m
+
+k
+X
+
+p−1
+i
+
+
+
+i=1
+
+w 
+pi −1
+4
+pi
+i
+(1 − 2xi ) 2 + H2
+−1
+ln (2)
+2
+m
+
+k
+
+≤ exp2
+
+pi −1
+4 X −1
+pi (1 − 2xi ) 2
+− 1−
+ln (2) i=1
+
+!
+
+!
+(251)
+
+!
+m + O (log (n)) .
+
+Using the standard upper bound 1 − x ≤ exp (−x) for x ≥ 0 gives:
+"k+1
+#
+!
+!
+k
+M
+4 X −1
+p exp (− (pi − 1) xi ) m + O (log (n))
+Pu∼U∆,t,t′
+ui = 0 ≤ exp2 − 1 −
+ln (2) i=1 i
+i=1
+!
+!
+k
+4e X −1
+≤ exp2 − 1 −
+p exp (−pi xi ) m + O (log (n)) .
+ln (2) i=1 i
+Finally, substituting the definition of pi yields:
+ 
+"k+1
+#
+M
+ui = 0 ≤ exp2 − 1 −
+Pu∼U∆,t,t′
+i=1
+
+ln (2)
+
+4e
+Pk
+
+k
+X
+
+j=1 xj i=1
+
+
+xi exp −
+
+k
+X
+
+
+
+(252)
+
+
+
+xj  m + O (log (n)) .
+
+(253)
+
+j=1
+
+We now use the ν1 bound in the definition of Z, which implies:
+k
+X
+j=1
+
+xj ≥ ν1 k.
+
+(254)
+
+42
+This gives:
+Pu∼U∆,t,t′
+
+"k+1
+M
+
+#
+ui = 0 ≤ exp2
+
+− 1−
+
+i=1
+
+ 
+= exp2 − 1 −
+
+ln (2)
+
+k
+X
+
+4e
+Pk
+
+j=1 xj i=1
+
+!
+
+!
+
+xi exp (−ν1 k) m + O (log (n))
+
+
+
+4e
+exp (−ν1 k) m + O (log (n)) .
+ln (2)
+
+(255)
+
+Putting everything together,
+P [Nµ,ν1 ,ν2 ≥ 1] ≤ 2
+
+−m
+
+X X
+
+ 
+exp2 − 1 −
+
+Z∈Z X∈X
+
+
+
+4e
+exp (−ν1 k) m + O (log (n)) .
+ln (2)
+
+(256)
+
+Counting:
+n
+
+∥Z∥ ≤ 2 × 2
+
+∥X ∥ ≤
+
+O(log(n))
+
+2O(log(n))
+
+
+
+n
+ν2 n
+
+
+
+
+= exp2 (n + H2 (ν2 ) n + O (log (n))) ,
+
+m
+(1 − µ) m
+
+2
+= exp2 (2 H2 (µ) m + O (log (n))) ,
+
+(257)
+(258)
+
+we finally have:
+
+
+P [Nµ,ν1 ,ν2 ≥ 1] ≤ exp2 n + H2 (ν2 ) n + 2 H2 (µ) m − m − 1 −
+
+
+
+4e
+exp (−ν1 k) m + O (log (n))
+ln (2)
+
+(259)
+
+=: exp2 (Ψ (µ, ν1 , ν2 ) n + O (log (n))) ,
+where in the final line we defined the function:
+Ψ (µ, ν1 , ν2 ) := 1 + H2 (ν2 ) + 2λ H2 (µ) − 2λ +
+
+4eλ
+exp (−ν1 k) .
+ln (2)
+
+(260)
+
+Demonstrating Eq. (229) for any given µ > µ∗ then boils down to choosing ν1 , ν2 , and R such that:
+Ψ (µ, ν1 , ν2 ) < 0,
+
+(261)
+
+that is,
+H2 (µ) < 1 −
+
+1
+1
+2e
+−
+H2 (ν2 ) −
+exp (−ν1 k) .
+2λ 2λ
+ln (2)
+
+(262)
+
+This proves Eq. (228).
+We now prove Eq. (234). First, choosing:
+ν1 = 0.1
+
+(263)
+
+gives:
+1−
+
+1
+2e
+1
+1
+2e
+1
+−
+H2 (ν2 ) −
+exp (−ν1 k) ≤ 1 −
+−
+H2 (ν2 ) −
+exp (−0.1k) ,
+2λ 2λ
+ln (2)
+2λ 2λ
+ln (2)
+
+(264)
+
+giving the sufficient condition:
+H2 (µ) < 1 −
+
+1
+1
+−
+H2 (ν2 ) − exp (− Ωk (k))
+2λ 2λ
+
+for any ν2 > ν1 = 0.1. The final result follows from substituting ν2 and the general expansion near x = 0:
+r
+1
+ln (2) x
+−1
+H2 (1 − x) = + (1 + ox (1))
+.
+2
+2
+
+(265)
+
+(266)
+
+43
+2.
+
+Independent v (r)
+
+We now briefly discuss the case when the v (r) are drawn independently. We generalize to the general case R ≥ 2
+to simultaneously prove Theorem 60. By Markov’s inequality and the properties of the Bernoulli distribution:
+#
+"R
+X
+^
+(r)
+(r)
+≤ (1 − µ) m
+P [Nµ,ν1 ,ν2 ≥ 1] ≤
+P
+Bz ⊕ v
+Z∈Z
+
+=
+
+X
+
+1
+
+r=1
+
+2−R(1−H2 (µ))m+O(log(n))
+
+Z∈Z
+
+(267)
+
+≤ exp2 (n + (R − 1) H2 (ν2 ) n + R H2 (µ) m − Rm + O (log (n)))
+
+
+=: exp2 Ψ̃ (µ, ν2 ) n + O (log (n)) ,
+where in the final line we defined the function:
+Ψ̃ (µ, ν2 ; R) := 1 + (R − 1) H2 (ν2 ) + Rλ H2 (µ) − Rλ.
+
+(268)
+
+Ψ̃ (µ, ν2 ; R) < 0
+
+(269)
+
+Taking the condition:
+
+proves Theorem 60. Furthermore, Ψ̃ (µ, ν2 ; 2) ≤ Ψ (µ, ν1 , ν2 ), where Ψ is defined in Eq. (260). In particular, for any
+choice of µ, ν1 , ν2 where Ψ (µ, ν1 , ν2 ) < 0, it is the case that:
+Ψ̃ (µ, ν2 ; 2) < 0.
+
+(270)
+
+This completes the proof of Theorem 61.
+VI.
+
+ALGORITHMIC IMPLICATIONS AND A CLASSICAL ALGORITHM
+
+We here combine the results proved in Secs. III, IV, and V to prove concrete bounds on the performance of DQI for
+MAX-k-XOR-SAT when the transpose of the constraint matrix B is drawn from the Gallager ensemble. We also
+here discuss the performance of approximate message passing (AMP), a classical algorithm widely believed to achieve
+the OGP threshold for combinatorial optimization problems.
+First, we show the following.
+Theorem 62 (DQI is topologically obstructed for transposed Gallager MAX-k-XOR-SAT). Fix any c∗ ≥ 1 and:
+ ∗
+c
+ℓ
+≤ (1 + ok (1)) H−1
+.
+(271)
+2
+m
+kλ
+For sufficiently large n, DQIℓ does not succeed in sampling a bit string z ∈ Fn2 achieving a satisfied fraction:
+r
+
+
+4c∗ log2 (k)
+1
+g (z)
+2c∗ ln (k)
+−1
+> µtop := 1 − H2
+1 − (1 + ok (1))
+= + (1 + ok (1))
+m
+kλ
+2
+kλ
+
+(272)
+
+with probability more than 12/13 over both the randomness of the algorithm and P1 .
+Proof. In Theorem 60, we showed the quantum chaos property held for any R and any 0 < ν2 < 1/2 at a threshold:
+r
+
+
+H2 (ν2 )
+1
+ν2 ln (ν2 )
+−1
+1 − H2
+1 − (1 + oν2 (1))
+= + (1 + oν2 (1) + oλ−1 (1))
+.
+(273)
+λ
+2
+2λ
+
+Recall as well from Corollary 54 that DQIℓ is ϵn, 0, n− Ω(1) -stable over the Gallager ensemble when:
+1
+,
+k
+
+(274)
+
+ϵ
+ℓ
+< H−1
+.
+2
+m
+λ
+
+(275)
+
+ϵ≥
+
+Fix ϵ = (1 + ok (1)) c∗ /k such that Eqs. (271) and (275) are both satisfied. The result then follows immediately from
+Theorem 21 by fixing ν2 = 4ϵ and pf = 1/13.
+
+44
+1.15
+1.10
+1.05
+
+min Pk [ ]
+
+1.00
+0.95
+0.90
+0.85
+0.80
+0.75
+2
+
+4
+
+6
+
+8
+
+10
+
+k
+
+12
+
+14
+
+16
+
+18
+
+FIG. 6.
+q Numerically computed values for minγ∈L Pk [γ] for k ∈ {2, . . . , 19} (blue dots). We also perform a least-square error
+fit to
+
+c ln(k)
+k
+
+(orange line), which we conjecture is the correct functional form at large k.
+
+Remark 63. Recall that λ−1 = 1 − r for the Gallager ensemble, where r is the rate of the code. The best-known
+provably efficient LDPC decoders can only decode up to an error weight scaling as Eq. (271), and there is a folklore
+belief that (up to the value of c∗ ) this scaling is optimal [25, 26].
+Now, compare the topological obstruction we show in Theorem 62 to what DQI is known to optimally achieve in
+expectation with the same assumption on ℓ [22, Theorem 4.1]:
+⟨g⟩DQI
+m
+
+r
+=
+
+ℓ
++
+2m
+
+s 
+v
+!2
+u c∗ (1 − r)
+1
+ℓ
+1
+u
+
+.
+1−
+≤ + (1 + ok (1)) t
+k
+2
+m
+2
+k log
+2
+
+(276)
+
+1−r
+
+While this bound is of a slightly different nature than Theorem 7—which is a “with high probability” statement,
+rather than a statement only in expectation—this suggests that DQI does not perform optimally even among stable
+algorithms. This is because the bound shown in Theorem 62 is a function only of the stability of DQI, not any other
+details of the algorithm. Motivated by this observation, we show in Appendix B that a depth-1 quantum algorithm
+known as QAOA [11] achieves the same k scaling as µtop for MAX-k-XOR-SAT, beyond what DQI can achieve in
+expectation:
+h
+i
+r
+Ev∼Ppar ⟨g⟩QAOA
+⟨g⟩DQI
+1
+ln (k)
+≥ + (1 + ok (1))
+>
+,
+(277)
+m
+2
+4ekλ
+m
+where the final inequality holds at sufficiently large k. Here, ⟨·⟩QAOA denotes an expectation over the randomness of
+the algorithm, and Ev denotes an expectation over the randomness of the parity constraints v ∼ Ppar .
+We now consider what is optimally achieved by classical algorithms. It is widely believed that the classical algorithm known as approximate message passing (AMP) achieves the OGP threshold for combinatorial optimization
+problems [5–10]. Much like DQI, AMP has the nice property that its optimal performance can be computed for
+Gaussian spin glass models without running the algorithm [27]. This analysis can be extended to MAX-k-XOR-SAT
+using the algorithmic universality result of Ref. [10], though unfortunately only over ensembles whose constraint matrices have independent entries (which is not the case for the Gallager ensemble). For instance, a constraint matrix
+with i.i.d. Bernoulli entries as considered in Ref. [10] suffices.
+Up to this technicality, when applied to MAX-k-XOR-SAT, the SAT fraction achieved by AMP is [10, 28, 29]:
+µAMP =
+
+1
+1
++ √ min Pk [γ] ,
+2 2 λ γ∈L
+
+(278)
+
+where Pk is known as the Parisi functional and L the space of functions [0, 1) → R≥0 satisfying certain reguarlization
+conditions [28]. As Pk and L are convex, one can efficiently optimize the functional numerically [27, 29]. Ref. [29]
+
+45
+provides code to minimize Pk [γ] over the domain:
+U := L ∩ {γ non-decreasing} ;
+
+(279)
+
+we repurpose this code to calculate minγ∈L Pk [γ] by removing the restriction that γ be non-decreasing, and optimize
+over piecewise functions with 3 constant components. In Fig. 6 we plot the calculated value of minγ∈L Pk [γ] as
+a function of k; our results at k = 2 and k = 3 agree with what was previously computed in the literature [27].
+Note that while this is a convex optimization problem and therefore standard convex optimization algorithms should
+always yield the global optimum, we found in practice that it was very numerically unstable; for this reason we plot
+the minimum found value over 5 runs of the optimization procedure for each data point over random
+initializations.
+q
+
+We also perform a least-squares fit of minγ∈L Pk [γ] using the conjectured functional form
+numerical estimate c ≈ 3.530. Taken together,
+r
+⟨g⟩DQI
+0.882 ln (k)
+1
+µAMP ≈ +
+>
+,
+2
+kλ
+m
+
+c ln(k)
+k , yielding the
+
+(280)
+
+with the inequality holding at sufficiently large k. As AMP optimizes to what is known as the branching OGP
+threshold [28]—a generalization of the R-OGP that is beyond the scope of this work—we conjecture that µAMP ≥
+⟨g⟩DQI /m even at small k. Proof of this conjecture would follow from suitably tight bounds on the optimal R-OGP
+and branching OGP thresholds at R > 2, which we leave for future work.
+ACKNOWLEDGMENTS
+
+The authors thank Madhu Sudan for an insightful discussion and Kunal Marwaha for comments on a draft of this
+work. E.R.A. is funded in part by the Walter Burke Institute for Theoretical Physics at Caltech. J.Z.L. is funded by
+a National Defense Science and Engineering Graduate (NDSEG) fellowship and by the U.S. Department of Energy,
+Office of Science, National Quantum Information Science Research Centers, Co-design Center for Quantum Advantage
+(C2QA) under contract number DE-SC0012704.
+Appendix A: Background on the Quantum Wasserstein Distance
+
+We here give background on the quantum Wasserstein distance. The quantum Wasserstein distance was originally
+introduced in Ref. [24], though here we will mainly consider the slightly more general definition introduced in Ref. [21].
+Informally, the quantum Wasserstein distance is a quantum “earth mover’s” metric in that states which differ only
+by a channel acting on ℓ qubits differ in Wasserstein distance by O (ℓ); in this way, it can be thought of as a quantum
+generalization of the Hamming distance (and indeed, it reduces to the Hamming distance on bit strings). More
+formally, it is defined in the following way. Here, ∥·∥1 denotes the trace norm, and On is the space of Hermitian
+observables on n qubits. We also use the notation TrI to denote the partial trace when tracing out the qubits labeled
+by the index set I. To begin, we define the quantum Wasserstein F -norm—note that this is not a true norm as it is
+not homogeneous.
+Definition 64 (Quantum Wasserstein F -norm [21, Definition 43]). Let X be a Hermitian, traceless observable on n
+qubits. The quantum Wasserstein F -norm of order p is defined as:
+1!
+n
+p
+X
+1
+∥X∥Wp :=
+min
+Xi
+,
+(A1)
+2
+{Xi }n
+i=1 ∈B(X)
+1
+i=1
+where
+(
+B (X) =
+
+n
+{Xi }i=1 : X =
+
+n
+X
+
+)
+Xi ∧ Xi ∈ On ∧ Tr{i} (Xi ) = 0 .
+
+(A2)
+
+i=1
+
+We can define a metric using this F -norm, which we call the quantum Wasserstein distance of order p.
+Definition 65 (Quantum Wasserstein distance of order p [21, Definition 44]). For ρ, σ ∈ Snm , their quantum Wasserstein distance of order p is:
+Wp (ρ, σ) := ∥ρ − σ∥Wp .
+
+(A3)
+
+46
+Unlike more traditional metrics on the space of quantum states—such as the trace distance—the quantum Wasserstein distance is not unitarily invariant, i.e., U XU † W does not necessarily equal ∥X∥Wp for unitary U . Furp
+thermore, the norm is not necessarily contractive under quantum channels. That said, the metric still has some nice
+properties which we review in what follows.
+First, there is an equivalence of quantum Wasserstein norms.
+Proposition 66 (Equivalence of quantum Wasserstein norms [21, Proposition 45]). For any q ≤ p,
+q
+
+p
+
+q
+
+∥X∥Wq ≤ ∥X∥Wp ≤ np−q ∥X∥Wq .
+
+(A4)
+
+Furthermore, there is an equivalence of norms between the quantum Wasserstein and trace norms.
+Proposition 67 (Equivalence of trace and quantum Wasserstein norms [24, Proposition 2]). For any traceless X ∈
+On ,
+1
+n
+∥X∥1 ≤ ∥X∥W1 ≤ ∥X∥1 .
+2
+2
+
+(A5)
+
+Second, though the quantum Wasserstein norm is generally not contractive under the action of quantum channels,
+it is contractive under the action of tensor-product channels.
+Proposition 68 (Contractivity under tensor product channels [21, Proposition 47]). For any channel of the form
+B
+
+n
+
+1 X O (b)
+Λi ,
+Λ=
+B
+i=1
+
+(A6)
+
+∥Λ (X)∥Wp ≤ ∥X∥Wp .
+
+(A7)
+
+b=1
+
+we have:
+
+This inequality is saturated when Λ is a tensor product of unitary channels.
+More generally, local operations have bounded influence on the quantum Wasserstein distance.
+Proposition 69 (Continuity of the Wp distance). Let I ⊆ [n], and let X be a traceless Hermitian operator on n
+qubits with the property TrI (X) = 0. Then,
+  p1
+3
+∥X∥Wp ≤ |I|
+∥X∥1 .
+4
+
+(A8)
+
+Proof. This is an immediate generalization of Proposition 5 of Ref. [24].
+In particular, quantum channels acting on k qubits only change the quantum W2 distance by O (k); this is an
+immediate generalization of Corollary 2 of Ref. [24].
+Corollary 70 (Wp bound for local channels). Let Λ be a superoperator acting on at most k qubits. Then:
+∥ρ − Λ (ρ)∥Wp ≤ 2k
+
+  p1
+3
+∥Λ (ρ)∥1→1 ,
+4
+
+(A9)
+
+where ∥·∥1→1 denotes the superoperator norm with respect to the trace norm.
+Finally, the quantum Wasserstein distance over mixtures of product states in a shared basis upper bounds the
+classical Wasserstein distance. To state this result, we first define the notion of a coupling between two probability
+distributions p and q, specializing to discrete spaces for simplicity.
+Definition 71 (Coupling on a discrete space). Let p and q be probability distributions over a set X of finite cardinality.
+A probability distribution π on X × X is called a coupling between p and q if:
+X
+p (x) =
+π (x, y) ,
+(A10)
+y∈X
+
+q (y) =
+
+X
+x∈X
+
+π (x, y) .
+
+(A11)
+
+47
+Couplings are used to define the classical Wasserstein distance, summarized as follows. Here, dH denotes the
+Hamming distance.
+Definition 72 (Classical Wasserstein distances [24, Definition 2]). The classical Wasserstein distance of order α
+between two distributions p and q over a discrete space X is defined as:
+1
+
+Wα (p, q) :=
+
+inf
+π∈C(p,q)
+
+E(x,y)∼π dH (x, y)
+
+α α
+
+(A12)
+
+.
+
+We now state the relation between the quantum and classical Wasserstein distances.
+Proposition 73 (Quantum Wasserstein distance over mixtures of product states [21, Proposition 54]). Consider
+quantum states ρ and σ mutually diagonalized by the same product state basis {s}s∈{0,1}×n :
+X
+
+ρ=
+
+p (s) |s⟩ ⟨s| ,
+
+(A13)
+
+q (s) |s⟩ ⟨s| .
+
+(A14)
+
+s∈{0,1}×n
+
+X
+
+σ=
+
+s∈{0,1}×n
+
+Let C (p, q) be the set of couplings between p and q. Then, for any α ≥ 1,
+inf
+π∈C(p,q)
+
+1
+α 
+E(s,t)∼π ∥|s⟩ ⟨s| − |t⟩ ⟨t|∥W1 α ≤ Wα (ρ, σ) ≤
+
+1
+
+X
+
+inf
+π∈C(p,q)
+
+s,t∈{0,1}
+
+π (s, t) α ∥|s⟩ ⟨s| − |t⟩ ⟨t|∥W1 .
+
+(A15)
+
+×n
+
+Appendix B: QAOA for MAX-k-XOR-SAT
+
+We here prove the claim made in the main text that depth-1 QAOA [11] achieves an expected satisfied fraction of:
+i
+h
+Ev∼Ppar ⟨g⟩QAOA
+m
+
+1
+≥ + (1 + ok (1))
+2
+
+r
+
+ln (k)
+.
+4ekλ
+
+(B1)
+
+We begin with Ref. [29, Theorem 1], which shows that depth-1 QAOA achieves an expected satisfied fraction of:
+h
+i
+Ev∼Ppar ⟨g⟩QAOA
+m
+
+=
+
+k
+k 
+1 is 
+−
+p + iqckλ − p − iqckλ
+2
+4
+
+(B2)
+
+s = sin (γ) ,
+c = cos (γ) ,
+p = cos (2β) ,
+q = sin (2β) ,
+
+(B3)
+(B4)
+(B5)
+(B6)
+
+for MAX-k-XOR-SAT with v ∼ Ppar , where:
+
+for any γ, β ∈ [0, 2π] which can be optimized over. Choosing:
+s
+γ=
+
+4k
+π2
+
+ln
+
+kλ
+
+1
+β= √ ,
+2 k
+
+
+,
+
+(B7)
+(B8)
+
+48
+we have in the large-k limit that:
+
+p ± iqc
+
+
+kλ k
+
+= 1 −
+
+1
++O k
+2k
+
+
+−2
+
+
+±
+
+
+3
+
+i
+√ + Ok k − 2
+k
+
+
+!kλ k
+
+
+ln π4k2
+
+1−
++ Õk k −2
+2kλ
+
+
+ k
+ 
+ i
+1
+4k
+1
++ Ok k −2 ± 1 + Õk k −1 √ exp − ln
+2k
+2
+π2
+k
+
+
+ k
+1
+πi
+−2
+= 1−
+±
++ Õk k
+2k 2k
+
+
+
+1 πi
+= exp − ±
++ Õk k −1 .
+2
+2
+
+
+=
+
+1−
+
+(B9)
+
+This gives:
+h
+i
+Ev∼Ppar ⟨g⟩QAOA
+m
+
+1
+≥ +
+2
+
+r
+
+ 1
+ln (k)
++ Ok k − 2 .
+4ekλ
+
+(B10)
+
+Appendix C: Bound on ψ
+
+Recall from Sec. V the function ψ (p, x) governing the asymptotic behavior of moments of Kravchuk polynomials [40]:
+p
+
+ψ (p, x) := p − 1 + log2 ((1 − δ) + δ p ) −
+
+p
+H2 (x) − px log2 (1 − 2δ) ,
+2
+
+(C1)
+
+with δ implicitly defined via:
+
+x=
+
+1
+−δ
+2
+
+
+
+p−1
+
+(1 − δ)
+− δ p−1
+.
+p
+(1 − δ) + δ p
+
+(C2)
+
+We here prove an upper bound on this function.
+Proposition 74. Let ψ (p, x) be as in Eq. (C1). Then for any p ≥ 3:
+ψ (p, x) ≤
+
+p−1
+4
+p
+(1 − 2x) 2 + H2 (x) − 1.
+ln (2)
+2
+
+(C3)
+
+Proof. First, immediately from Eq. (C2) we have the bound:
+1
+−δ
+x≤ 2
+,
+1−δ
+
+(C4)
+
+1 − 2x
+2 (1 − x)
+
+(C5)
+
+δ
+≤ 1 − 2x.
+1−δ
+
+(C6)
+
+1 − 2δ
+2x
+=
+p
+p−1
+p
+(1 − δ) + δ
+(1 − δ)
+− δ p−1
+
+(C7)
+
+and in particular:
+δ≤
+and
+
+Similarly, using the equality:
+
+49
+and the inequality Eq. (C6) we have:
+p
+
+1−x=
+
+1
+2 −δ
+
+(1 − δ) + δ p −
+
+p−1
+
+
+
+(1 − δ)
+p
+(1 − δ) + δ p
+
++
+
+1
+2 −δ
+
+ p−1
+δ
+
+p−1
+
+(1 − δ)
++ δ p−1
+p
+2 ((1 − δ) + δ p )
+
+
+p
+1
+(1 − δ) + (1 − δ) δ p−1
+=
+p
+2 (1 − δ)
+(1 − δ) + δ p
+
+
+1
+δ p−1 (1 − 2δ)
+=
+1+
+p
+2 (1 − δ)
+(1 − δ) + δ p
+!
+1
+2x
+=
+1+
+(1−δ)p−1
+2 (1 − δ)
+−1
+δ p−1
+!
+2x
+1
+1+
+≤
+.
+−(p−1)
+2 (1 − δ)
+(1 − 2x)
+−1
+=
+
+(C8)
+
+This gives a general bound on ψ:
+
+
+p
+x
+ψ (p, x) ≤ p − 1 + log2 ((1 − δ) + δ ) − H2 (x) − px log2
+2
+1−x
+p
+p
+= log2 ((1 − δ) + δ p ) + p log2 (2 (1 − x)) + H2 (x) − 1
+2
+
+
+δp
+p
+= p log2 (1 − δ) + log2 1 +
++ p log2 (2 (1 − x)) + H2 (x) − 1
+p
+2
+(1 − δ)
+!
+2x
+p
+p
+≤ log2 (1 + (1 − 2x) ) + p log2 1 +
++ H2 (x) − 1.
+−(p−1)
+2
+(1 − 2x)
+−1
+p
+
+p
+
+(C9)
+
+We now bound the first two terms to be take more convenient forms. We use in what follows the upper bound for
+x ≥ 0 [41, Theorem 2.4]:5
+sinh (x)
+≥ cosh
+x
+
+
+
+x
+√
+3
+
+
+,
+
+(C10)
+
+ln (1 + x) ≤ x,
+r
+(1 − x) ≤ exp (−rx) .
+
+(C11)
+(C12)
+
+along with the standard upper bounds (for r ≥ 0):
+
+For the first term, we have the upper bound:
+p
+
+p
+
+log2 (1 + (1 − 2x) ) ≤
+
+sinh(x)
+5 We use the usual identification of lim
+= 1.
+x→0
+x
+
+(1 − 2x)
+.
+ln (2)
+
+(C13)
+
+50
+For the second term, we calculate:
+log2
+
+1+
+
+!
+
+2x
+(1 − 2x)
+
+−(p−1)
+
+−1
+
+p−1
+
+≤
+
+2x (1 − 2x)
+
+
+p−1
+ln (2) 1 − (1 − 2x)
+
+≤
+
+2x (1 − 2x)
+ln (2) (1 − exp (−2 (p − 1) x))
+
+=
+
+x exp ((p − 1) x) (1 − 2x)
+ln (2) sinh ((p − 1) x)
+
+≤
+
+exp ((p − 1) x) (1 − 2x)
+ 
+ln (2) (p − 1) cosh √x3
+
+p−1
+
+p−1
+
+p−1
+
+1
+
+=
+
+exp ((p − 1) x) (1 − 2x) 2
+
+1
+(p−1)− 2√
+3
+
+ln (2) (p − 1) cosh
+exp
+≤
+
+
+
+x
+√
+3
+
+
+
+1
+
+(1 − 2x) 2
+
+1
+
+(1 − 2x) 2
+ 
+
+1
+(p−1)+ 2√
+3
+
+(C14)
+
+x
+√
+3
+
+1
+(p−1)+ 2√
+3
+
+ln (2) (p − 1) cosh
+
+
+
+x
+√
+3
+
+
+
+1
+1
+2
+(p−1)+ 2√
+3
+(1 − 2x) 2
+ln (2) (p − 1)
+p−1
+2
+≤
+(1 − 2x) 2 .
+ln (2) (p − 1)
+
+≤
+
+p−1
+
+p
+
+Noting (1 − 2x) ≤ (1 − 2x) 2 as p ≥ 3 allows us to combine the two terms into:
+p
+
+p−1
+p−1
+(3p − 1)
+(1 − 2x)
+2
++
+(1 − 2x) 2 ≤
+(1 − 2x) 2 .
+ln (2)
+ln (2) (p − 1)
+ln (2) (p − 1)
+
+(C15)
+
+Furthermore, as p ≥ 3 implies that:
+3p − 1
+≤ 4,
+p−1
+
+(C16)
+
+p−1
+p−1
+(3p − 1)
+4
+(1 − 2x) 2 ≤
+(1 − 2x) 2 .
+ln (2) (p − 1)
+ln (2)
+
+(C17)
+
+we can further simplify this as:
+
+This completes the proof.
+
+[1] P. W. Shor, Polynomial-time algorithms for prime factorization and discrete logarithms on a quantum computer, SIAM
+review 41, 303 (1999).
+[2] C. Gyurik, A. Schmidhuber, R. King, V. Dunjko, and R. Hayakawa, Quantum computing and persistence in topological
+data analysis, arXiv preprint arXiv:2410.21258 (2024).
+[3] D. W. Berry, Y. Su, C. Gyurik, R. King, J. Basso, A. D. T. Barba, A. Rajput, N. Wiebe, V. Dunjko, and R. Babbush,
+Analyzing prospects for quantum advantage in topological data analysis, PRX Quantum 5, 010319 (2024).
+[4] A. W. Harrow, A. Hassidim, and S. Lloyd, Quantum algorithm for linear systems of equations, Physical review letters 103,
+150502 (2009).
+[5] D. Gamarnik, The overlap gap property: A topological barrier to optimizing over random structures, Proc. Natl. Acad.
+Sci. U.S.A. 118, e2108492118 (2021).
+[6] W.-K. Chen, D. Gamarnik, D. Panchenko, and M. Rahman, Suboptimality of local algorithms for a class of max-cut
+problems, Ann. Probab. 47, 1587 (2019).
+[7] D. Gamarnik, E. C. Kızıldağ, W. Perkins, and C. Xu, Algorithms and barriers in the symmetric binary perceptron model
+(2022), arXiv:2203.15667 [cs.CC].
+
+51
+[8] D. Gamarnik and E. C. Kızıldağ, Algorithmic obstructions in the random number partitioning problem, Ann. Appl. Probab.
+33, 5497 (2023).
+[9] B. Huang and M. Sellke, Tight Lipschitz hardness for optimizing mean field spin glasses, Commun. Pure Appl. Math. 78,
+60 (2025).
+[10] H. E. Cheairi and D. Gamarnik, Algorithmic universality, low-degree polynomials, and max-cut in sparse random graphs
+(2024), arXiv:2412.18014 [cs.DS].
+[11] E. Farhi, J. Goldstone, and S. Gutmann, A quantum approximate optimization algorithm (2014), arXiv:1411.4028 [quantph].
+[12] M. Cerezo, A. Arrasmith, R. Babbush, S. C. Benjamin, S. Endo, K. Fujii, J. R. McClean, K. Mitarai, X. Yuan, L. Cincio,
+et al., Variational quantum algorithms, Nature Reviews Physics 3, 625 (2021).
+[13] E. Farhi, D. Gamarnik, and S. Gutmann, The quantum approximate optimization algorithm needs to see the whole graph:
+A typical case (2020), arXiv:2004.09002 [quant-ph].
+[14] E. R. Anschuetz, Critical points in quantum generative models, in International Conference on Learning Representations,
+edited by K. Hofmann, A. Rush, Y. Liu, C. Finn, Y. Choi, and M. Deisenroth (OpenReview, 2022).
+[15] E. R. Anschuetz and B. T. Kiani, Quantum variational algorithms are swamped with traps, Nat. Commun. 13, 7760 (2022).
+[16] J. Basso, D. Gamarnik, S. Mei, and L. Zhou, Performance and limitations of the QAOA at constant levels on large sparse
+hypergraphs and spin glass models, in 2022 IEEE 63rd Annual Symposium on Foundations of Computer Science (FOCS)
+(2022) pp. 335–343.
+[17] A. Anshu and T. Metger, Concentration bounds for quantum states and limitations on the QAOA from polynomial
+approximations, Quantum 7, 999 (2023).
+[18] A. Chen, N. Huang, and K. Marwaha, Local algorithms and the failure of log-depth quantum advantage on sparse random
+CSPs (2023), arXiv:2310.01563 [quant-ph].
+[19] M. Goh, The overlap gap property limits limit swapping in the qaoa (2025), arXiv:2404.06087 [quant-ph].
+[20] E. R. Anschuetz, A unified theory of quantum neural network loss landscapes, in International Conference on Learning
+Representations, edited by Y. Yue, A. Garg, N. Peng, F. Sha, and R. Yu (OpenReview, 2025).
+[21] E. R. Anschuetz, Efficient learning implies quantum glassiness (2025), arXiv:2505.00087 [quant-ph].
+[22] S. P. Jordan, N. Shutty, M. Wootters, A. Zalcman, A. Schmidhuber, R. King, S. V. Isakov, T. Khattar, and R. Babbush,
+Optimization by Decoded Quantum Interferometry (2025), arXiv:2408.08292 [quant-ph].
+[23] I. S. Reed and G. Solomon, Polynomial codes over certain finite fields, Journal of the society for industrial and applied
+mathematics 8, 300 (1960).
+[24] G. De Palma, M. Marvian, D. Trevisan, and S. Lloyd, The quantum Wasserstein distance of order 1, IEEE Trans. Inf.
+Theory 67, 6627 (2021).
+[25] V. V. Zyablov and M. S. Pinsker, Estimation of the error-correction complexity for Gallager low-density codes, Problemy
+Peredachi Informatsii 11, 23 (1975).
+[26] T. Richardson and R. Urbanke, Modern coding theory (Cambridge university press, 2008).
+[27] A. E. Alaoui and A. Montanari, Algorithmic thresholds in mean field spin glasses (2020), arXiv:2009.11481 [cond-mat.statmech].
+[28] A. El Alaoui, A. Montanari, and M. Sellke, Optimization of mean-field spin glasses, Ann. Probab. 49, 2922 (2021).
+[29] K. Marwaha and S. Hadfield, Bounds on approximating Max kXOR with quantum and classical local algorithms, Quantum
+6, 757 (2022).
+[30] R. Gallager, Low-density parity-check codes, IRE Transactions on information theory 8, 21 (2003).
+[31] J. Mosheiff, N. Resch, N. Ron-Zewi, S. Silas, and M. Wootters, Low-density parity-check codes achieve list-decoding
+capacity, SIAM Journal on Computing 53, FOCS20 (2021).
+[32] A. Bärtschi and S. Eidenbenz, Short-depth circuits for dicke state preparation, in 2022 IEEE International Conference on
+Quantum Computing and Engineering (QCE) (IEEE, 2022) pp. 87–96.
+[33] E. R. Anschuetz, D. Gamarnik, and B. Kiani, Combinatorial NLTS from the overlap gap property, Quantum 8, 1527
+(2024).
+[34] M. Rahman and B. Virág, Local algorithms for independent sets are half-optimal, Ann. Probab. 45, 1543 (2017).
+[35] D. Gamarnik and M. Sudan, Performance of sequential local algorithms for the random NAE-$K$-SAT problem, SIAM
+Journal on Computing 46, 590 (2017).
+[36] C.-N. Chou, P. J. Love, J. S. Sandhu, and J. Shi, Limitations of local quantum algorithms on random MAX-k-XOR and
+beyond, in 49th International Colloquium on Automata, Languages, and Programming (ICALP 2022), Leibniz International
+Proceedings in Informatics (LIPIcs), Vol. 229, edited by M. Bojańczyk, E. Merelli, and D. P. Woodruff (Schloss Dagstuhl
+– Leibniz-Zentrum für Informatik, Dagstuhl, Germany, 2022) pp. 41:1–41:20.
+[37] R. Vershynin, Concentration without independence, in High-Dimensional Probability: An Introduction with Applications
+in Data Science, Cambridge Series in Statistical and Probabilistic Mathematics (Cambridge University Press, 2018) pp.
+98–126.
+[38] A. Frieze, On the independence number of random graphs, Discrete Math. 81, 171 (1990).
+[39] N. J. Calkin, Dependent sets of constant weight binary vectors, Comb. Probab. Comput. 6, 263 (1997).
+[40] N. Kirshner and A. Samorodnitsky, A moment ratio bound for polynomials and some extremal properties of Krawchouk
+polynomials and Hamming spheres, IEEE Trans. Inf. Theory 67, 3509 (2021).
+[41] J. Sándor, Two applications of the Hadamard integral inequality, Notes Number Theory Discrete Math. 23, 52 (2017).
+
+

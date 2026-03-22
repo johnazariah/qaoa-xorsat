@@ -1,0 +1,27 @@
+graph LR
+    subgraph VF["VARIABLE FOLD (easy)"]
+        direction TB
+        vf1["(D-1) identical child
+        CONSTRAINT branches"]
+        vf2["Independent — multiply"]
+        vf3["B .^= (D-1)
+        element-wise power
+        then apply mixer"]
+        vf1 --> vf2 --> vf3
+    end
+
+    subgraph CF["CONSTRAINT FOLD (hard at k>2)"]
+        direction TB
+        cf1["(k-1) identical child
+        VARIABLE branches"]
+        cf2["Coupled through k-body gate"]
+        cf3["NAIVE: O(4^kp)
+        triple loop"]
+        cf4["WHT: O(p . 4^p)
+        convolution theorem"]
+        cf1 --> cf2 --> cf3
+        cf2 --> cf4
+    end
+
+    style VF fill:#f0fdf4,stroke:#16a34a,color:#14532d
+    style CF fill:#fef2f2,stroke:#dc2626,color:#7f1d1d

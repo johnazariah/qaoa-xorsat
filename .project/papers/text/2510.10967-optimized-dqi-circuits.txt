@@ -1,0 +1,4678 @@
+Verifiable Quantum Advantage via Optimized DQI Circuits
+Tanuj Khattar,1, ∗ Noah Shutty,1, † Craig Gidney,1 Adam Zalcman,1
+Noureldin Yosri,1 Dmitri Maslov,1 Ryan Babbush,1 and Stephen P. Jordan1
+
+arXiv:2510.10967v1 [quant-ph] 13 Oct 2025
+
+1
+
+Google Quantum AI, Venice, CA 90291
+(Dated: October 09, 2025)
+
+Decoded Quantum Interferometry (DQI) provides a framework for superpolynomial quantum
+speedups by reducing certain optimization problems to reversible decoding tasks. We apply DQI
+to the Optimal Polynomial Intersection (OPI) problem, whose dual code is Reed-Solomon (RS).
+We establish that DQI for OPI is the first known candidate for verifiable quantum advantage with
+e )
+optimal asymptotic speedup: solving instances with classical hardness O(2N ) requires only O(N
+quantum gates, matching the theoretical lower bound. Realizing this speedup requires highly efficient reversible RS decoders. We introduce novel quantum circuits for the Extended Euclidean
+Algorithm, the decoder’s bottleneck. Our techniques, including a new representation for implicit
+Bézout coefficient access, and optimized in-place architectures, reduce the leading-order space complexity to the theoretical minimum of 2nb qubits while significantly lowering gate counts. These
+improvements are broadly applicable, including to Shor’s algorithm for the discrete logarithm. We
+analyze OPI over binary extension fields GF (2b ), assess hardness against new classical attacks, and
+identify resilient instances. Our resource estimates show that classically intractable OPI instances
+(requiring > 1023 classical trials) can be solved with approximately 5.72 million Toffoli gates. This
+is substantially less than the count required for breaking RSA-2048, positioning DQI as a compelling
+candidate for practical, verifiable quantum advantage.
+
+Data availability: Code and assets created for this paper are available on Zenodo [1].
+CONTENTS
+
+I. Introduction
+
+2
+
+II. Methods for Optimized Implementation
+A. The DQI Quantum Circuit: An Improved Construction for Qubit Efficiency
+B. Efficient Quantum Circuits for Extended Euclidean Algorithm
+1. Explicit versus Implicit Access to Bézout Coefficients
+2. Synchronized Reversible EEA for Explicit Bézout coefficients
+3. Dialog Representation for Implicit Bézout coefficients
+C. Optimal Polynomial Intersection (OPI) over binary extension fields
+D. Decoding Reed Solomon Codes using the Extended Euclidean Algorithm
+
+4
+5
+7
+8
+10
+10
+13
+13
+
+III. Classical Attacks on OPI
+A. Optimizing Prange’s Algorithm
+B. Extended Prange’s Algorithm over Extension Fields
+1. Expectation-Optimal XP Allocation Strategies via Linear Programming
+2. Probability-Optimal XP Allocation Strategies via a Knapsack Solver
+3. Search for good target sets for OPI over binary extension fields
+4. Upper bounds on affine intersections of Maiorana-McFarland target sets
+C. Asymptotic Classical Hardness of Twisted Bent Target OPI
+
+15
+15
+16
+16
+17
+17
+18
+24
+
+IV. Asymptotically Optimal Quantum Speedup
+A. Asymptotically Optimal Implementation
+B. Asymptotic Optimality
+
+25
+25
+26
+
+V. Resource Estimates
+A. Logical Costs
+
+27
+27
+
+∗ Corresponding author: tanujkhattar4@gmail.com
+† Corresponding author: shutty@google.com
+
+2
+B. Physical Costs
+
+28
+
+VI. Conclusion
+
+32
+
+References
+
+33
+
+A. Optimizing the number of trials of Extended Prange
+1. Upper Bound on the objective function
+
+34
+36
+
+B. Sparse Dicke State Preparation
+1. The unranking strategy
+e
+2. Divide and Conquer Unranking for O(m)
+Dicke State Preparation
+3. Iterative Unranking for low constant factor Dicke State Preparation
+
+37
+37
+38
+39
+
+C. Improved arithmetic circuits for binary extension fields
+1. Parity Control Toffoli P CT OF and Parity CNOT P CN OT
+2. GF(2m ) arithmetic circuits
+3. Measurement-based Uncomputation for GF2 Multiplication.
+
+39
+39
+39
+40
+
+D. Bounding the number of iterations for Synchronized Reversible Polynomial EEA
+1. Worst-Case Analysis: Full PEEA (GCD)
+2. Worst-Case Analysis: Half PEEA (Reed-Solomon Decoding)
+
+41
+42
+43
+
+E. Deferred proofs of upper bounds on affine intersections of Maiorana-McFarland target sets
+
+43
+
+F. Reference Python Implementation
+1. Reed Solomon Decoding using Synchronized EEA for Explicit Bézout coefficients
+2. Reed Solomon Decoding using Dialog based EEA for Implicit Bézout Coefficients
+
+48
+48
+48
+
+I.
+
+INTRODUCTION
+
+The pursuit of verifiable quantum advantage is a central goal in quantum computing. Quantum advantage refers
+to solving problems efficiently on a quantum computer where no efficient classical algorithm is known. Verifiability
+implies we can efficiently check the solution on a classical computer. Verifiable quantum advantage problems are a
+useful model of future applications of quantum computers to classical search and optimization problems abundant in
+industry.
+A fundamental question in this pursuit concerns the efficiency of the quantum speedup itself. Given a problem
+instance with a target classical hardness of O(2N ) (where N is the security parameter), what is the required quantum
+runtime? The theoretical lower bound is Ω(N ) quantum gates [2]. However, existing candidates for verifiable superpolynomial advantage exceed this bound. For example, achieving O(2N ) hardness in integer factorization requires
+e 6 ) gates (against the General Number Field Sieve), while Elliptic Curve Cryptography
+Shor’s algorithm [3] to use O(N
+2
+e
+(ECC) requires O(N ) gates (against Pollard Rho).
+One corollary of the resource estimation performed in this work is to demonstrate that Decoded Quantum Interferometry (DQI) [4], when applied to the Optimal Polynomial Intersection (OPI) problem, is the first known candidate for
+verifiable quantum advantage that achieves the optimal asymptotic speedup (up to polylogarithmic factors), requiring
+e ) quantum gates to solve instances with O(2N ) classical hardness:
+only O(N
+Theorem I.1. There is an NP-search / optimization problem where the runtime of the best-known classical algorithm
+e ) quantum gates.
+for the problem is 2N and which can be solved with a circuit of O(N
+We prove this theorem in Section IV. We compare this against prior speedups based on Shor’s algorithm in Table I.
+To understand how DQI achieves this speedup, we must formalize the class of problems it addresses. DQI provides
+a framework for approximating solutions to constraint satisfaction problems, specifically max-LINSAT, where its
+efficiency is tied to the efficiency of reversibly decoding a related error-correcting code.
+Definition I.2 (max-LINSAT [4]). Let Fq be a finite field. Given an m × n matrix B over Fq (with m > n), and for
+each constraint i = 1, 2, . . . , m, a subset Fi ⊂ Fq . The max-LINSAT problem is to find an assignment x ∈ Fnq that
+Pn
+maximizes the number of satisfied constraints, where the i-th constraint is satisfied if j=1 Bij xj ∈ Fi .
+
+3
+Problem
+
+Classical Runtime
+
+Factoring
+Jacobi Factoring
+Elliptic Curve Cryptography
+
+2O(n ) (GNFS)
+e 1/3
+2O(n ) (GNFS)
+e
+O(n)
+(Pollard Rho)
+2
+
+e 2 )†
+O(n
+e
+O(n)
+e 2)
+O(n
+
+e 6)
+O(N
+e 3)
+O(N
+e 2)
+O(N
+
+OPI
+Best Possible
+
+2n (Extended Prange)
+2n
+
+e
+O(n)
+n
+
+e )
+O(N
+Ω(N )
+
+e
+
+Quantum Gate Cost (for clasGate Cost sical runtime 2N )
+
+1/3
+
+TABLE I: Asymptotic costs for verifiable quantum advantage with classical hardness 2N . † By [5], one can factor n
+√
+e 3/2 ) gates. In this case, the overall circuit size is still O(n
+e 2 ),
+bit integers by running n + 4 quantum circuits of O(n
+N
+4.5
+but even counting a single quantum circuit, the quantum gate cost for classical runtime 2 is N .
+The DQI algorithm addresses max-LINSAT by defining a related objective function, f (x), as the number of satisfied
+constraints minus the number of unsatisfied constraints. This can be expressed as:
+
+
+(
+m
+n
+X
+X
++1 if y ∈ Fi
+
+
+f (x) =
+fi
+Bij xj , where fi (y) =
+.
+(1)
+−1 if y ∈
+/ Fi
+i=1
+j=1
+Maximizing f (x) is equivalent to maximizing
+the number of satisfied constraints. The DQI algorithm works by
+P
+preparing a quantum state |P (f )⟩ = x P (f (x))|x⟩, where P is a polynomial of degree ℓ designed to enhance the
+amplitudes of states |x⟩ where f (x) is large. The core insight of DQI is that the preparation of this state can be reduced
+T
+to a decoding problem on the dual code C ⊥ = {d ∈ Fm
+q : B d = 0}. The algorithm involves creating a superposition
+T
+of errors e and their syndromes B e. To achieve the necessary interference that amplifies good solutions, the error
+register |e⟩ must be coherently uncomputed, which necessitates a reversible quantum implementation of a decoder for
+C ⊥ . The performance of DQI is directly tied to the error-correction capability of this decoder. The degree ℓ of the
+enhancing polynomial P corresponds to the maximum number of errors the decoder must correct. A key result of
+the DQI framework [4] is the semicircle law, which provides a rigorous performance guarantee based on the decoding
+capability.
+Theorem I.3 (DQI Semicircle Law (Informal) [4]). Given a max-LINSAT instance where the allowed sets Fi have
+size r over a field of size q. If the dual code C ⊥ can be efficiently decoded up to ℓ errors, DQI can sample solutions
+that satisfy an expected fraction of constraints ⟨s⟩/m approaching:
+s
+
+ℓ
+m
+
+
+
+r
+1−
+q
+
+s
+
+
++
+
+ℓ
+1−
+m
+
+ !2
+r
+.
+q
+
+(2)
+
+This theorem formalizes the intuition that a better decoder (a larger correctable error fraction ℓ/m) leads to a
+better optimization result. Consequently, the efficiency of the reversible decoder dominates the resource requirements
+of the entire DQI algorithm.
+In this work, we focus on constructing efficient quantum circuits for DQI applied to the Optimal Polynomial
+Intersection (OPI) problem, identified in [4] as a candidate for superpolynomial quantum speedup.
+Definition I.4 (Optimal Polynomial Intersection (OPI)). Let Fq be a finite field and n < q − 1. Given m = q − 1
+subsets Fy ⊂ Fq for each y ∈ F∗q , find a polynomial Q ∈ Fq [y] of degree at most n − 1 that maximizes the objective
+function: fOPI (Q) = |{y ∈ F∗q : Q(y) ∈ Fy }|.
+When OPI is cast as max-LINSAT, the constraint matrix B is a Vandermonde matrix, implying the dual code
+C ⊥ is a Reed-Solomon (RS) code. For OPI, DQI can achieve approximation ratios that appear beyond the reach of
+known polynomial-time classical algorithms [4]. RS codes possess efficient classical decoders, such as the BerlekampMassey decoder [6] or the Extended Euclidean Algorithm (EEA) [7]. Our primary contribution is the development of
+highly optimized, reversible quantum circuits for syndrome decoding of Reed-Solomon codes using Extended Euclidean
+Algorithm-based decoders. We introduce several key strategies to minimize the quantum resources required:
+1. Analysis of OPI over Binary Extension Fields: We shift the analysis from prime fields to binary extension
+fields, GF(2b ). This choice significantly reduces the cost of the underlying quantum arithmetic (leveraging
+
+4
+techniques like Karatsuba multiplication [8, 9] and Itoh-Tsujii inversion [9, 10]). Crucially, we analyze the
+classical hardness in this setting, confirming that the problem remains intractable against known classical attacks
+like Prange’s algorithm [11] and a novel variant, the Extended Prange’s algorithm (XP), tailored for extension
+fields.
+2. Optimized Quantum Circuits for the Extended Euclidean Algorithm: We introduce two distinct
+compilation strategies for the EEA, each achieving minimal qubit overhead while being tailored for different
+algorithmic requirements. These strategies are general and shall offer substantial improvements for other quantum algorithms utilizing the EEA, such as those in elliptic curve cryptography [12–14] and DQI with EEA-based
+decoders for other codes like algebraic geometry codes [15] and RS codes with prime fields [4].
+• For scenarios requiring explicit access to the Bézout coefficients, we present an improved synchronized
+circuit for the classic Euclidean algorithm [12, 16]. By storing quotients in-place within shared registers
+and merging arithmetic cycles, we deterministically achieve a leading-order space complexity of 2nb qubits
+and substantially reduce gate counts.
+• For scenarios where implicit access is sufficient, we introduce the novel Dialog representation. This data
+structure records the execution trace of a constant-time EEA, allowing our circuits to capitalize on the
+low gate costs of modern, division-free EEA algorithms [17] without incurring their typically large qubit
+overhead [14, 18].
+3. Holistic Reversible Reed-Solomon Decoder Design: We construct end-to-end reversible quantum circuits
+for the full RS decoder that integrate our optimized EEA modules. Our design is compatible with both the
+explicit and implicit EEA approaches and fully accounts for the resource costs of the subsequent decoding
+stages—Chien Search and Forney’s algorithm—when operating on the compact, shared-register data structures
+produced by our EEA implementations.
+We synthesize these techniques to construct end-to-end quantum circuits and provide detailed resource estimates
+using Qualtran [19]. Our results demonstrate that classically intractable instances of OPI (requiring > 1023 classical
+trials) can be solved with modest quantum resources. For instance, an (m = 4095, n = 70, b = 12) instance requires
+approximately 5.72 × 106 Toffoli gates and 1885 logical qubits. This is roughly 1000x fewer Toffolis than that
+required for factoring 2048-bit RSA integers [20], suggesting that DQI may offer a compelling near-term path to
+practical, verifiable quantum advantage in optimization. We also provide a physical resource estimate showing that
+the (m = 4095, n = 70, b = 12) OPI instance can be solved using eight hundred thousand physical qubits and 1
+hour of runtime under standard assumptions for superconducting architectures: a square grid of qubits with nearest
+neighbor connections, a uniform gate error rate of 0.1%, a surface code cycle time of 1 microsecond, and a control
+system reaction time of 10 microseconds.
+
+II.
+
+METHODS FOR OPTIMIZED IMPLEMENTATION
+
+We begin by presenting an improved, space-efficient construction of the DQI quantum circuit. We then present new
+techniques for compiling the Extended Euclidean Algorithm (EEA) for the two regimes—first, where one needs to
+explicitly compute the Bézout coefficients in memory, and second, where an implicit access to the Bézout coefficients
+is sufficient. For both scenarios, our goal is to find a construction that minimizes the qubit counts. For the first case,
+we make several improvements to the classical reversible EEA construction by [12, 16], resulting in lower qubit and
+gate counts. For the second case, we first formalize the idea of having implicit access to the Bézout coefficients and
+show how one can take advantage of the low gate counts for constant-time division-free variants of EEA [17, 21] while
+avoiding the high ancilla overhead. In both cases, we achieve the theoretical minimum leading order space complexity
+of 2nb + O(log2 (n)). We believe these improved techniques for compiling the Extended Euclidean Algorithm will
+be useful beyond DQI, especially in the context of Elliptic Curve Cryptography [14, 22]. We then specialize the
+discussion to the Optimal Polynomial Intersection (OPI) problem over binary extension fields, motivated by the fact
+that arithmetic circuits over binary extension fields are significantly cheaper to compile. In the end, we show how the
+decoding problem for Reed-Solomon codes can be solved using the Extended Euclidean Algorithm, along with other
+subroutines like Chien Search [23] and Forney’s algorithm [24]. We present optimized quantum circuits to account for
+the cost of these subroutines. Table II provides a reference for the key parameters used throughout our analysis.
+
+5
+TABLE II: Key parameters and their dual roles in the DQI framework [4], connecting the optimization problem
+with the corresponding coding theory problem. For Reed Solomon codes, the field size q ≥ m. For our resource
+estimates, m = q − 1 and ℓ ≈ n/2.
+Symbol Role in Optimization (max-LINSAT/OPI)
+
+Role in Coding Theory (C ⊥ )
+
+q
+
+Size of the finite field Fq over which the problem is Alphabet size of the code.
+defined.
+
+b
+
+Bit-length of the field elements, where b = ⌈log2 q⌉.
+
+Bit-length of the code symbols.
+
+m
+
+Number of constraints in the optimization problem.
+
+Block length of the dual code C ⊥ .
+
+n
+
+Number of variables in the optimization problem.
+
+Dimension of the primal code C; length of the syndrome
+of dual code C ⊥ .
+
+ℓ
+
+Maximum number of errors DQI is configured to handle, The error-correction capability (number of correctable erwhich sets the degree of the enhancing polynomial P .
+rors) of the decoder for C ⊥ .
+
+r
+
+Size of the allowed sets Fi for each constraint.
+
+(Not a standard coding parameter, but influences the
+problem instance).
+
+B
+
+The m × n constraint matrix defining the instance.
+
+Generator matrix of the primal code C = {xB : x ∈ Fn
+q }.
+
+B⊺
+
+The n × m matrix used to compute the syndrome.
+
+Parity-check matrix of the dual code C ⊥ = {c ∈ Fm
+q :
+B T c = 0}.
+
+A.
+
+The DQI Quantum Circuit: An Improved Construction for Qubit Efficiency
+
+PThe goal of the Decoded Quantum Interferometry (DQI) circuit is to efficiently prepare the state |P (f )⟩ =
+x P (f (x))|x⟩, where P is an appropriately normalized degree-ℓ polynomial. In the original construction[4, Section8], the algorithm requires simultaneous instantiation of an mb-sized error register, to hold a superposition of error
+T
+patterns e ∈ Fm
+q , and an nb-sized syndrome register to hold the syndrome values s = B e. This leads to a total
+space complexity of (m + n)b plus the ancilla overhead due to reversible decoding. Note that the decoding problem is
+defined on an input of size nb (the length of the syndrome), and hence for the regime where m ≫ n, the multiplicative
+mb qubit overhead in the DQI circuit is prohibitive.
+We present an optimized circuit construction that significantly reduces qubit overhead by reformulating the Dicke
+state preparation, syndrome computation, and reversible decoding steps (stages 1, 2 and 3). The Dicke states in
+the DQI circuit are used to encode the locations of ℓ < n2 errors in the length m codeword. Instead of using a
+dense representation consisting of m qubits, we use a sparse representation consisting of ℓ · ⌈log2 m⌉ ≤ ℓ · b qubits
+to encode this information. We show how to efficiently prepare Sparse Dicke States in Appendix B. Next, instead of
+generating the entire mb-qubit error state |e⟩ to encode the values of errors at each of the m locations in the codeword,
+we employ a sequential approach utilizing Measurement-Based Uncomputation (MBU) [25, 26]. We iterate through
+the m constraints, generate one error symbol ei (of size b qubits) at a time, update the syndrome register with its
+contribution, and immediately uncompute ei via measurement in the X-basis. This leads to phase errors that we
+later fix as part of the reversible decoding step, where we sequentially generate each decoded error term ei and apply
+a phase fixup using the measurement result ci . This allows us to reuse a single b-qubit ancilla register for all error
+terms during state preparation. Using Sparse Dicke state preparation and sequential computation of the error terms,
+the ancilla cost for preparing the nb-qubit syndrome register reduces to nb qubits. We will later show how to perform
+the reversible decoding on the nb-qubit syndrome register using nb + O(log2 (n)) ancilla qubits, thus achieving a total
+space cost of 2nb + O(log2 (n)) qubits.
+The following description of the DQI quantum circuit is for the general max-LINSAT case over a Galois field Fq .
+The construction proceeds through four main stages. The evolution of the quantum state across these stages is
+summarized below, utilizing an error locator register (ℓ · b qubits), an error value register (b qubits), and a syndrome
+register (n · b qubits). We omit normalization factors for clarity.
+
+6
+
+|0⟩ℓb |0⟩b |0⟩nb
+
+
+
+Stage 1
+
+−−−−−−−−−−−−−−−−−−−−→
+Sparse Dicke State Preparation
+
+ℓ
+X
+k=0
+
+X
+
+
+wˆk 
+
+
+1≤j1 <j2 <···<jk ≤m
+jk+1 ...jℓ =0
+
+
+|j1 ⟩b |j2 ⟩b · · · |jℓ ⟩b 
+ |0⟩b |0⟩nb
+
+ −1/2 !
+m
+where ŵk = wk
+k
+
+
+
+ℓ
+X
+
+
+ 2a: Check if i ∈ [j1 , . . . jℓ ] and store the result in qubit yi X
+
+m
+
+−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−→
+ŵk |SDk ⟩lb |yi ⟩
+g̃i (ei ) |ei ⟩b |s⟩nb 
+
+
+
+
+
+
+
+
+e
+∈F
+k=0
+
+
+i
+q
+
+
+
+
+
+
+
+
+ℓ
+
+
+X
+X
+ 2b: Apply Gi on qubit yi to generate error term ei
+
+m
+
+
+
+
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+→
+ŵ
+|SD
+⟩
+g̃
+(e
+)
+|e
+⟩
+|s⟩
+k
+i
+i
+i
+nb
+
+
+k
+lb
+b
+
+
+
+
+ei ∈Fq
+
+k=0
+
+ℓ
+
+X
+
+2c: Update syndrome register |s⟩ with BiT ·ei X
+
+m
+
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+→
+ŵ
+|SD
+⟩
+g̃i (ei ) |ei ⟩b |s + BiT · ei ⟩nb
+
+k
+k
+lb
+
+
+
+ei ∈Fq
+k=0
+
+
+
+
+
+ℓ
+ 2d: MBU on error register |ei ⟩ (record ci ) X
+X
+
+
+
+ŵk |SDkm ⟩lb
+g̃i (ei )(−1)ei ·ci |s + BiT · ei ⟩nb
+ −−−−−−−−−−−−−−−−−−−−−−−−−−→
+
+ei ∈Fq
+k=0
+!
+ℓ
+m
+X
+X Y
+Stage 2
+ŵk
+g̃i (ei ) (−1)c·e |B T e⟩nb
+−−−−−−−−−−−−−−−→
+Syndrome Computation
+
+Stage 3
+
+−−−−−−−−−−−−−→
+Reversible Decoding
+
+k=0
+
+ℓ
+X
+
+ŵk
+
+k=0
+
+Stage 4
+
+−−−−−−−−−−−−−−→
+IQFT + Measurement
+
+X
+
+|e|=k
+
+Repeat i = 1 . . . m
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+i=1
+
+X
+
+m
+Y
+
+|e|=k
+
+i=1
+
+!
+]
+g̃i (ei ) |B T e⟩nb ≡ |P
+(f )⟩nb
+
+P (f (x))|x⟩nb ≡ |P (f )⟩nb
+
+x
+
+Pl
+• Stage 1: Sparse Dicke State Preparation: We prepare a superposition k=0 wk |k⟩, using classically precomputed coefficients wk which define the optimal enhancing polynomial P [27–29]. This is used to prepare the
+ℓ · b-qubit error locator register into the corresponding superposition of Sparse Dicke states:
+
+
+
+l
+−1/2
+X
+
+m
+
+wk
+
+k
+
+k=0
+
+
+X
+1≤j1 <j2 <···<jk ≤m
+jk+1 ...jℓ =0
+
+
+|j1 ⟩b |j2 ⟩b · · · |jℓ ⟩b 
+
+
+(3)
+
+In Appendix B, we describe a way to prepare Sparse Dicke States using 2 · k · log2 m qubits and O(m.k + k 2 b2 )
+gates. The sparse construction is useful in reducing the qubit counts for instances where n ≪ m.
+• Stage 2: Sequential Syndrome Computation and MBU: This stage translates the error locator register
+into a superposition of syndromes, using our space-efficient sequential approach.
+Defining the Constraint Encoding Gates Gi : The operations in this
+stage depend on the specific constraints of
+Pm
+the optimization problem. Recall the objective function f (x) = i=1 fi (bi · x) with fi : Fq → {+1, −1}. As
+detailed in [4, Section 8.2.1], we find it convenient to work in terms of gi , which we define as fi shifted and
+rescaled such that:
+fi (x) − f¯
+,
+(4)
+gi (x) :=
+c
+where f¯ is the average value of fi over Fq and c is a normalization constant. This
+P standardization ensures that
+the Fourier transform of gi , denoted g̃i (e), vanishes at e = 0 and is normalized ( e |g̃i (e)|2 = 1). We then define
+an isometry Gi , which acts on a singe qubit yi storing whether an error occurs at index i or not, and maps it
+to a superposition over b-qubit error terms that encode these Fourier coefficients:
+X
+Gi |0⟩ = |0⟩b , Gi |1⟩ =
+g̃i (e)|e⟩b .
+(5)
+e∈Fq ,e̸=0
+
+7
+Sequential Syndrome Computation: We now iterate i from 1 to m, utilizing a single b-qubit ancilla register:
+(2a) Check if marked in Sparse Dicke State: Check whether index i is contained in the Sparse Dicke state
+and record the outcome in a qubit yi . Naively, this requires performing a b-bit comparison with each of
+the ℓ registers per iteration, requiring a total of m · ℓ · b gates across m iterations. However, since we are
+sequentially comparing each of the ℓ registers in the Sparse Dicke State with consecutive classical constants
+i = 1, 2, . . . , m, we can use a unary iteration [30, 31] circuit to merge adjacent comparisons and get a total
+cost of m · ℓ gates across all m iterations.
+(2b) Error Generation: Apply Gi on the i-th qubit of the mask register |yi ⟩ to temporarily generate the i’th
+error term |ei ⟩b using the b-qubit ancilla register.
+(2c) Syndrome Update: Compute the contribution of ei to the syndrome register |s⟩ by coherently adding
+bi · ei to |s⟩ (where bi is the i-th column of B T ).
+(2d) Measurement-Based Uncomputation: Immediately uncompute the ancilla |ei ⟩ using MBU [25, 26].
+The b qubits are measured in the X basis, recording the classical outcome ci . This resets the ancilla for
+the next iteration but introduces a known phase kickback (−1)ci ·ei .
+At the end of the iteration, we simply do a measurement-based uncomputation of the Sparse Dicke state and
+perform phase fixups corresponding to the error locations during the reversible decoding step. By reusing a
+single ancilla register across all m iterations, we avoid the mb-qubit overhead of the original DQI construction.
+The final state of the system is
+!
+m
+l
+X
+wk X Y
+ci .ei
+q 
+g̃i (ei )(−1)
+|B T e⟩nb .
+(6)
+m
+k=0
+
+k
+
+|e|=k
+
+i=1
+
+• Stage 3: Phase Fixups via Reversible Decoding: In the original DQI construction [4], a reversible
+decoder was used to uncompute the explicit error register |e⟩. In our construction, the error register was already
+uncomputed via MBU in Stage 2. However, we must now correct the phase errors (−1)c·e introduced by the
+measurements. Here, we perform reversible decoding using the syndrome register |s⟩ = |B T e⟩. We sequentially
+compute each decoded error term ei and use the measurement results ci to fix the phase error (−1)ci .ei . For
+the Optimal Polynomial Intersection (OPI) problem, this requires a reversible implementation of a decoder
+for Reed-Solomon codes, like the Berlekamp-Massey algorithm [6] or the Extended Euclidean Algorithm-based
+decoder [7, 32]. The final state of the system after this step is:
+!
+m
+l
+X
+wk X Y
+]
+q 
+g̃i (ei ) |B T e⟩nb ≡ |P
+(f )⟩nb
+(7)
+m
+k=0
+
+k
+
+|e|=k
+
+i=1
+
+• Stage 4: Final Transformation and Measurement: After the successful phase fixups, the syndrome register
+is left in a state that is the Quantum Fourier Transform of the desired output state. To obtain the final state, an
+Inverse Quantum Fourier Transform (IQFT) is applied to the n qudits of the syndrome register. This produces
+the final DQI state:
+X
+|P (f )⟩ =
+P (f (x))|x⟩.
+(8)
+x
+
+B.
+
+Efficient Quantum Circuits for Extended Euclidean Algorithm
+
+The Extended Euclidean Algorithm (EEA) is a cornerstone of computational number theory and a critical subroutine
+in algorithms for both classical and quantum computing [33]. While often introduced for integers, its principles
+generalize to other Euclidean domains like univariate polynomials with coefficients in a finite field, which is relevant
+to Reed-Solomon decoding. Given two polynomials, A(z) and B(z), Euclid’s algorithm iteratively generates a sequence
+of remainder polynomials ri (z) using the recurrence ri−2 (z) = ri−1 (z)qi (z) + ri (z), where r−1 (z) = A(z), r0 (z) = B(z)
+and the quotient qi (z) is chosen such that deg(ri (x)) < deg(ri−1 (x)). The EEA is an extension to Euclid’s algorithm,
+which, alongside this sequence, also maintains two corresponding cofactor sequences, ui (z) and vi (z), that are updated
+at each step to preserve a crucial linear relationship known as Bézout’s identity. At every iteration i, the triplet
+(ri (z), ui (z), vi (z)) satisfies the invariant:
+A(z)ui (z) + B(z)vi (z) = ri (z).
+
+(9)
+
+8
+This process is guaranteed to terminate because the degree of the remainder polynomial, deg(ri (z)), is a non-negative
+integer that strictly decreases with each iteration. The algorithm stops when the remainder rm (z) becomes the zero
+polynomial. At this point, the previous remainder, rm−1 (z), is the gcd(A(z), B(z)), and the corresponding cofactors
+um−1 (z) and vm−1 (z) are the final Bézout coefficients.
+Each step of the EEA can be expressed as an application of a 2 × 2 transition matrix τ i on the vector [ri−2 , ri−1 ]T .
+The product of the first i transition matrices store the Bézout coefficients ui , ui−1 and vi , vi−1 . This matrix representation of the EEA will be useful as we describe our new constructions below.
+
+
+ri−1
+ri
+
+
+
+
+
+
+
+0 1
+ri−2
+=
+1 −qi
+ri−1
+| {z }
+
+τ
+
+
+
+vi−1
+vi
+
+
+
+= τi
+
+
+
+vi−2
+vi−1
+
+
+
+
+
+
+
+ui−1
+ui−2
+= τi
+ui
+ui−1
+
+(10)
+
+i
+
+τ total = τ m · τ m−1 . . . τ 1 =
+
+
+
+um−1 vm−1
+um
+vm
+
+
+
+
+ 
+gcd(A, B)
+A
+= τ total
+0
+B
+
+(11)
+
+One important application of the Extended Euclidean Algorithm is to compute multiplicative inverses in a finite
+field Fq ∼
+= Fp [z]/P (z), where P (z) is an irreducible polynomial. To find the inverse of a polynomial A(z), one
+applies the EEA to P (z) and A(z). This yields cofactor polynomials u(z) and v(z) such that P (z)u(z) + A(z)v(z) =
+gcd(P (z), A(z)) = 1. Taking this equation modulo P (z) gives A(z)v(z) ≡ 1 (mod P (z)), revealing that the Bézout
+coefficient v(z) is the modular inverse. This operation is the principal computational bottleneck in Shor’s algorithm
+for Elliptic Curve Cryptography (ECC), a cornerstone of modern public-key infrastructure. As a result, a significant
+body of research, summarized in Table III and Table IV, has been dedicated to designing resource-efficient quantum
+circuits for the EEA.
+Early work by Kaye and Zalka [12] and Proos and Zalka [16] showed that the standard Euclidean Algorithm based
+on polynomial long division is stepwise reversible and can be compiled using 3nb + O(log n) qubits using a registersharing technique, where the registers holding the remainders and the Bézout coefficients are overlapped to use a
+total of 2nb qubits and another nb ancilla qubits are used to store the quotient in each iteration. By tolerating a
+small error, they show how to further reduce the qubit counts down to 2nb + O(log n), by using a O(log n) sized
+register to store the quotients since large quotients occur relatively rarely in the EEA. Their circuit design relies on
+a complex synchronization scheme, and they do not analyze the constant factors for gate counts. More recent works
+[13, 14, 18, 34] focus on using constant-time division-free variants of the Extended Euclidean Algorithm, like Binary
+GCD [21] and Bernstein-Yang GCD [17], to reduce the gate counts but suffer from significantly higher qubit counts
+because each iteration of these constant-time EEA algorithms is not stepwise reversible and generates additional
+garbage that leads to a higher ancilla overhead.
+In this work, we provide two improved constructions for compiling the EEA, the first where the EEA explicitly
+computes the Bézout coefficients in memory, and the second where it suffices to have an implicit representation of
+Bézout coefficients. For both the constructions, we reduce the qubit counts to 2nb + O(log n), which is the best one
+can hope for given the input size is 2nb, and our gate counts are lower than previous state of the art.
+TABLE III: Cost of compiling the Extended Euclidean Algorithm for two degree-n polynomials over Fq with
+b = ⌈log2 q⌉. Gate cost is specified in terms of the number of calls to the dominant subroutine of quantum-quantum
+multiplication of elements in the underlying field Fq .
+Source
+EEA Technique
+Qubit Cost
+Dominant gate cost
+Kaye and Zalka [12]
+Euclids GCD
+3nb + O(log2 n)
+12n2 multiplications
+Roetteler et al. [13]
+Binary GCD
+4nb + 2n + O(log n)
+4n2 multiplications
+Banegas et al. [18]
+Bernstein-Yang GCD 4nb + n + O(log n)
+4n2 multiplications
+Kim and Hong [34]
+Bernstein-Yang GCD 4nb + 0.5n + O(log n) 4n2 multiplications
+This Work (Explicit Bézout)
+Euclids GCD
+2nb + O(log2 n)
+6n2 multiplications
+This Work (Implicit Bézout) Bernstein-Yang GCD
+2nb + O(log2 n)
+2n2 multiplications
+
+1.
+
+Explicit versus Implicit Access to Bézout Coefficients
+
+A key theme of our work is the optimization of quantum circuits by carefully considering how the results of the
+EEA are used by the broader algorithm. We distinguish between two computational models: one requiring explicit
+
+9
+access to the Bézout coefficients, and another where implicit access is sufficient. This distinction allows us to select
+the most resource-efficient EEA implementation for the task at hand.
+As outlined at the beginning of this section, any execution of the EEA can be viewed as generating a sequence of
+2 × 2 transition matrices, τ 1 , τ 2 , . . . , τ m . The product of these matrices, τ total = τ m · τ m−1 · · · τ 1 , contains the
+final Bézout coefficients as its entries.
+• Explicit Access: This is the conventional model, where the primary goal of the EEA circuit is to compute and
+store the full product matrix τ total . In the context of polynomial inputs, this means computing the coefficients
+of the final Bézout polynomials (e.g., vm−1 (z)) and storing them explicitly in a quantum register. This approach
+is necessary when the full polynomial is required for subsequent algebraic manipulations.
+• Implicit Access. In this model, we avoid the costly step of multiplying the sequence of transition matrices.
+Instead, we only compute and store a compact representation of each individual matrix τ i . This metadata is
+sufficient to reconstruct and apply each τ i on the fly. The full Bézout coefficients are never materialized in
+memory but exist implicitly as the result of applying the sequence of stored transformations. Any operation
+requiring the Bézout coefficients is simply reformulated as a sequential application of the τ i matrices.
+We illustrate the power of this implicit approach with two concrete examples:
+1. Modular Polynomial Division: Consider the task of computing A(z)B(z)−1 (mod P (z)), where P (z) is an
+irreducible polynomial.
+• The explicit “invert-then-multiply” approach first runs EEA(P, B) to explicitly compute and store the
+inverse polynomial vm−1 (z) = B(z)−1 (mod P (z)). It then performs a separate quantum-quantum multiplication of A(z) by this inverse polynomial.
+• The implicit “direct division” approach instead runs EEA(P, B) to generate the sequence of matrices
+τ 1 , τ 2 , . . . , τ m . To compute the division, it applies a sequence of matrix-vector multiplications to a different input vector, [0, A(z)]T . The final state after applying τ total is precisely [A(z)B(z)−1 , 0]T (mod P (z)),
+avoiding the need to ever store the full inverse polynomial.
+We compare the costs of these approaches for modular division in Table IV.
+2. Polynomial Evaluation: Consider evaluating the Bézout coefficient polynomial vm−1 (z) at a specific point
+γ ∈ Fq .
+• With explicit access, one would use the stored coefficients of vm−1 (z) and perform a standard polynomial
+evaluation (e.g., via Horner’s method), requiring a series of quantum-classical multiplications.
+• With implicit access, we first evaluate the simple polynomial entries within each transition matrix τ i at
+the point γ. This yields a sequence of constant 2 × 2 matrices with entries in Fq . We then apply this
+sequence of constant matrices to an initial vector, such as [0, 1]T . The result of these operations over Fq
+is the desired value, vm−1 (γ). Once again, we did not ever store the full Bézout coefficient polynomial
+vm−1 (z) in memory.
+Our work provides optimized circuits for both models. For explicit access, we improve upon the synchronized
+algorithm by Proos and Zalka [16], while for implicit access, we use the constant-time division-free variants of EEA
+[17, 21] as basis for the Dialog representation detailed in the following subsections.
+TABLE IV: Cost of compiling modular division using Extended Euclidean Algorithm for two degree n polynomials
+over Fq with b = ⌈log2 q⌉. Gate cost is specified in terms of the number of calls to the dominant subroutine of
+quantum-quantum multiplication of elements in the underlying field Fq . We wish to achieve
+A(z)
+|A(z)⟩b |B(z)⟩b → |junk⟩ | B(z)
+(mod p(z))⟩ . When accounting for qubit costs, we assume multiplication of two
+b
+elements in Fq does not consume any ancilla.
+Source
+Approach
+Qubit Cost
+Gate cost
+Kaye and Zalka [12]
+invert-then-multiply
+4nb + O(log2 n)
+13n2 multiplications
+Roetteler et al. [13]
+invert-then-multiply 6nb + 2n + O(log n) 5n2 multiplications
+Banegas et al. [18]
+invert-then-multiply 6nb + n + O(log n) 5n2 multiplications
+Kim and Hong [34]
+invert-then-multiply 6nb + 0.5n + O(log n) 5n2 multiplications
+This Work (Explicit Bézout) invert-then-multiply
+4nb + O(log2 n)
+7n2 multiplications
+This Work (Implicit Bézout)
+direct-division
+4nb + O(log2 n)
+4n2 multiplications
+
+10
+2.
+
+Synchronized Reversible EEA for Explicit Bézout coefficients
+
+We advance the synchronized register-sharing framework of Zalka et al. [12, 16] through two key innovations,
+resulting in an implementation that is both rigorously space-optimal and time-efficient.
+First, we achieve the 2N b space bound deterministically via in-register quotient storage. Prior synchronized implementations utilized an auxiliary register for the quotient q. To maintain low space overhead, this register was
+heuristically bounded to O(log N ) qubits, incurring a fidelity loss for large quotients. We eliminate this auxiliary
+register entirely by utilizing the guaranteed available padding within the shared register (storing the pair (ui , ri ))
+to temporarily store qi+1 . This makes the 2N b + O(log N ) space complexity rigorous, without relying on heuristics.
+Fig. 1 shows the evolution of the state of the system for each logical iteration of the synchronized Extended Euclidean
+Algorithm.
+Second, we introduce a unified cycle architecture to reduce time complexity constants. The baseline synchronized
+approach cycles through four distinct circuit blocks (Division, Normalization, Bézout Update, Swap), leading to
+redundant arithmetic operations. For example, both the Division and Bézout Update step would need n quantumquantum multiplications and controlled additions each, even though for any step of the EEA these two cycles act on
+different parts of the shared registers storing the remainders and Bézout polynomials. In our unified architecture,
+a single, optimized circuit executes every cycle, with its behavior controlled by the synchronization counter. For
+example, our architecture integrates the arithmetic for Division and Bézout Update steps, such that a total of n
+quantum-quantum multiplications and controlled additions are performed, effectively halving the dominant gate costs.
+Furthermore, we optimize the access to the in-register quotient by integrating localized CSWAPs within the sequential
+arithmetic loop, avoiding expensive generalized quantum addressing mechanisms.
+In Appendix D we show that our synchronized reversible EEA requires 6n iterations to terminate in the worst case.
+Fig. 9 in Appendix F gives a complete Python implementation that uses 2nb+O(log2 n) space and n quantum-quantum
+multiplications per iteration, resulting in the leading order gate cost of 6n2 quantum-quantum multiplications.
+3.
+
+Dialog Representation for Implicit Bézout coefficients
+
+To understand the power of our implicit access model, it is useful to think not just about algorithms, but about
+different ways to represent mathematical objects. The familiar binary representation of an integer, for instance, is a
+list of 0 and 1 symbols. It is a representation (known since the square-and-multiply exponentiation algorithm) because
+the integer can be recreated from the symbols by initializing an accumulator to 0, and then iterating through the list
+of symbols and applying operations depending on the symbol (with ‘0’ meaning multiply accumulator by 2 and ‘1’
+meaning multiply accumulator by 2 and add 1 ). The binary representation has many strengths. For example, digital
+logic circuits can implement the addition of binary integers in logarithmic depth. However, binary representation
+is not always the optimal choice. For example, carry-save adders use a slightly larger representation that enables
+performing addition in constant depth [35].
+In this paper, we employ a different representation of numbers and polynomials. We call this representation the
+Dialog representation. Concretely, the Dialog is the sequence of transition matrices, τ 1 , τ 2 , . . . , τ m , generated by
+executing the Extended Euclidean Algorithm on the input pair A, B. For constant-time division-free GCD algorithms
+[17, 21], this corresponds to a recording of the conditional branch decisions taken in each iteration. Abstractly,
+the Dialog is a decomposition of a pair of inputs (numbers or polynomials) into a series of small invertible matrix
+multiplications. This sequence is a valid representation because it provides a complete recipe to recover the original
+inputs from the output. Specifically, the total transformation τ total = τ m · τ m−1 · · · τ 1 maps the input vector [A, B]T
+to the output vector [gcd(A, B), 0]T . Consequently, applying the inverse transformation, τ −1
+total , to the output recovers
+the original inputs.
+
+
+ 
+ 
+gcd(A, B)
+A
+A
+= τ total
+= τ m · τ m−1 . . . τ 1
+0
+B
+|
+{z
+} B
+Dialog Representation
+
+
+
+
+
+um
+um−1
+
+um · C
+um−1 · C
+
+
+
+
+
+ 
+1
+= τ total
+0
+ 
+C
+= τ total
+0
+
+
+
+vm
+
+
+
+ 
+0
+= τ total
+1
+
+
+
+ 
+0
+= τ total
+C
+
+vm−1
+
+
+vm · C
+vm−1 · C
+
+
+
+ 
+A
+gcd(A, B)
+−1
+= τ total
+0
+B
+
+
+A·C
+B·C
+
+
+
+=τ
+
+−1
+total
+
+
+
+gcd(A, B) · C
+0
+
+11
+
+FIG. 1: Evolution of the state of the system for our improved construction of Zalka’s reversible EEA [12, 16] with
+in-register quotient storage which deterministically reduces the qubit counts to 2nb + O(log n). Step-0 shows the
+initial configuration of the system. Empty space corresponds to qubits in the |0⟩ state. The direction of the arrow
+denotes the order in which the coefficients of the polynomials are stored, where the tip of the arrow stores the
+highest degree coefficients and the tail stores the lowest degree coefficient. At each step, three key invariants are
+satisfied - (a) deg(ui ) + deg(ri ) ≤ n, (b) deg(ri ) < deg(ri−1 ) and deg(ui ) > deg(ui−1 ) and (c)
+deg(ui ) + deg(ri−1 ) = n. Step-1 iteratively computes each term of the quotient qi+1 = ⌊ri−1 /ri ⌋ where
+deg(qi+1 ) = deg(ri−1 ) − deg(ri ) = m − deg(ui ) − deg(ri ), and thus the quotient is stored in-place within the shared
+register storing ui and ri . Step-2 performs right shift until the leader order coefficient of ri+1 is non-zero, such that
+at the end of step 2, the polynomial long division is finished and we have successfully computed both ri+1 and qi+1
+Step-3 iteratively right shifts ui−1 until deg(ui−1 ) = deg(ui ). Step-4 iteratively computes ui+1 = ui−1 − qi+1 ui by
+iteratively performing ui−1 = (ui × qi+1,j − ui−1 ) × x for all j in [0, . . . , deg(qi+1 )]. The multiplication by x
+corresponds to a right shift for ui−1 . Step-5 Swaps the two registers and finishes one logical iteration of the EEA.
+Every symbol in the dialog representation must correspond to a small invertible matrix. When a representation has
+this property, we call it a linear representation. Note that the binary representation is not linear, because the ‘1’
+symbol needs to increment the accumulator, and this action does not correspond to a matrix multiplication. The
+linearity of the dialog representation is a powerful property that allows us to perform complex algebraic manipulations
+by simply operating on the dialog itself. For example:
+• Direct Modular Division and Multiplication: Since the transformation from inputs to outputs is linear,
+we can apply it to different vectors. To compute C(z)B(z)−1 (mod P (z)) where gcd(P (z), B(z)) = 1, we first
+compute the Dialog representation of (P (z), B(z)). We can then apply the forward transformation τ total to the
+scaled vector [0, C(z)]T . By linearity, this directly yields the result [C(z)B(z)−1 , 0]T (mod P (z)) without ever
+materializing the inverse. Similarly, we can also perform modular multiplication by applying τ −1
+total to the vector
+[C(z), 0]T to obtain [0, B(z)]T (mod P (z)).
+• Evaluating the Bézout Polynomial: To evaluate the Bézout Polynomial vm (z) at a point γ ∈ Fq , we can
+distribute the evaluation across the composition. We simply evaluate the polynomial entries of each transformation matrix τ i (z) at γ to get a sequence of constant matrices, and then multiply these constant matrices
+together.
+This linear representation is most powerful when the transformation matrices τ i are themselves simple. For this
+reason, we construct the Dialog not from the classic EEA, but from constant-time, division-free algorithms like
+Bernstein-Yang [17], whose steps correspond to simple, constant-time matrix operations such as these:
+
+12
+• Doubling: The operation b(z) ← b(z)/z corresponds to:
+
+Mdouble =
+
+
+
+1 0
+0 1/z
+
+• Inversion: The operation (a(z), b(z)) ← (b(z), a(z)) corresponds to the matrix:
+
+Minvert =
+
+
+0 1
+1 0
+
+• Addition: The operation b(z) ← b(z) − c · a(z), where c ∈ Fq , corresponds to the matrix:
+
+Madd (c) =
+
+1 0
+−c 1
+
+
+
+In this case, the Dialog is simply the list of coefficients ci and the swap decisions from each step, such that it
+defines the ordered list of transformation matrices τ i . The name Dialog itself is a mnemonic for the core arithmetic
+operations involved: Doubling (or shifting), Inversion (or swap), and Addition/subtraction, and the representation
+is similar to a logarithm because it makes multiplication and division easy but addition and subtraction hard. For
+two input polynomials of degree up to n − 1, the Dialog consists of 2n field elements.
+A naïve quantum circuit for constructing the dialog would require 2nb qubits to store and manipulate the remainder
+polynomials r−1 = A(z), r0 = B(z), r1 , . . . rm and another 2nb qubits to store the dialog, resulting in overall qubit
+count of 4nb + O(log2 n). In order to reduce the qubit counts to 2nb + O(log2 n), we once again use a register sharing
+technique by observing a key invariant of the constant-time EEA [17]: In each iteration, as one field element is
+computed and appended to the Dialog, the total number of coefficients required to represent the active polynomials,
+ri−1 (z) and ri (z), decreases by one. This inverse relationship between the size of the Dialog and the size of the
+remaining polynomial data allows for an elegant quantum circuit that dynamically reclaims and repurposes qubits.
+Our construction uses a shared quantum register, poly, which stores the coefficients of the remainder polynomials
+ri−1 (z), ri (z) and another quantum register, dialog, that stores the growing Dialog. At any point in time, we have the
+invariant: len(poly) + len(dialog) = 2n such that the total space occupied is 2nb + O(log2 n). The architecture can
+be described as follows:
+1. Initialization: The poly register is initialized to hold the coefficients of the two input polynomials, a(z) and
+b(z), stored from opposite ends of the register. This creates a layout with a central padded region:
+[a0 , a1 , . . . , ana , 0, 0, 0, bnb , . . . , b1 , b0 ]
+2. Constant-Time Iteration Loop: The circuit proceeds for a fixed 2n iterations, where n is the maximum
+degree of the input polynomials. This ensures the algorithm completes for any input. Inside each iteration
+i=1, 2, . . . , 2n:
+• The control flow (e.g., the decision to swap the logical polynomials) is managed by the integer delta and the
+constant term of b(z) (i.e., poly[−1]). A swap is performed by efficiently reversing the entire poly register,
+an operation implementable with a sequence of len(poly)// 2 CSWAP gates.
+• The field element coeff for the update step is calculated from the constant terms of the active polynomials
+(poly [0] and poly[−1]).
+• The polynomial subtraction, b(z) ← b(z) − coeff · a(z), is performed in-place. As per [17, Theorem A.1],
+after i iterations, we have
+2 deg(ak ) ≤ 2d − 1 − i + δn
+2 deg(bk ) ≤ 2d − 1 − i − δn
+When coeff ̸= 0, after the conditional swap, we always have δi ≤ 0 such that deg(b(z)) > deg(a(z)). Thus,
+i
+in the shared register representation, we perform poly[n − j − 1] −= coeff ∗ poly[j ] ∀j ∈ [0, len(poly)+δ
+).
+2
+
+13
+• As a result of the subtraction and a subsequent logical right-shift of b(z), the rightmost b qubits of the
+register (previously holding b0 ) become free.
+• This newly freed block of b qubits is immediately removed from the poly register and appended at the
+end of the dialog register, thus immediately re-purposing to store the computed coeff , which is the next
+element of the Dialog.
+Crucially, at any intermediate step i of the algorithm, the poly and dialog registers contain a complete, holistic
+representation of the EEA’s state. The growing dialog register holds the partially constructed Dialog (from step
+1 to i), while the shrinking poly register holds the coefficients of the current remainder polynomials, ri−1 (z) and ri (z).
+From these two registers of total size 2nb, one can always reconstruct the full mathematical state: the remainders are
+available directly, and the corresponding Bézout coefficients, ui (z) and vi (z), can be computed by playing back the
+partial Dialog. After the full 2n iterations, the original polynomials have been completely reduced, and the Dialog
+has expanded to occupy the entire 2nb qubits. The final state of the system is the complete Dialog, from which
+the gcd and the final Bézout coefficients can be derived implicitly. This in-place architecture, detailed in Fig. 11 of
+Appendix F, successfully constructs the full Dialog representation using a leading-order qubit cost of only 2nb.
+C.
+
+Optimal Polynomial Intersection (OPI) over binary extension fields
+
+While the original DQI paper focused on the Optimal Polynomial Intersection (OPI) problem over prime fields Fp ,
+we now study the problem defined over binary extension fields, GF(2b ). The primary motivation for this is the prospect
+of substantially more efficient quantum circuits. Arithmetic in fields of characteristic 2 is often less resource-intensive
+to implement on a quantum computer. For instance, addition is a simple bitwise XOR, implementable with a linear
+number of CNOT gates. Quantum-Classical multiplication and Squaring are linear reversible circuits that can also
+be implemented using only the CNOT gates. Quantum-quantum multiplication based on Karatsuba algorithm [8]
+uses O(blog2 3 ) Toffoli gates, O(b2 ) CNOT gates, and no ancilla. Inversion can be reduced to only O(log2 b) quantumquantum multiplications, resulting in low Toffoli counts [10, 36]. Appendix C details our optimized implementations
+of arithmetic circuits for GF (2b ). This reduction in the cost of the underlying field arithmetic translates directly to
+lower resource requirements for the overall DQI algorithm.
+The OPI problem and the DQI algorithm generalize naturally to this setting, as discussed in [4, Section 14]. The
+problem can be stated analogously:
+Definition II.1 (OPI over GF(2b )). Let q = 2b . Given integers n < q − 1, an instance of the Optimal Polynomial
+Intersection problem over GF(2b ) is as follows. For each non-zero element y ∈ F∗q , let Fy be a subset of the finite field
+Fq . The problem is to find a polynomial Q ∈ Fq [y] of degree at most n − 1 that maximizes the objective function:
+fOP I (Q) = |{y ∈ F∗q : Q(y) ∈ Fy }|
+For a general OPI instance, the subsets Fy can be arbitrary. As described in Section II A, implementing the DQI
+algorithm requires constructing constraint-encoding gates Gi that prepare a superposition related to these sets. For
+an arbitrary set Fy , this step would require a generic quantum state preparation, costing roughly O(q) gates for each
+of the m constraints.
+To reduce the gate cost of the constraint encoding step while maintaining the classical hardness of the problem,
+we focus our resource analysis on a specific, structured variant of OPI where the sets Fy are chosen to allow for
+highly efficient implementations of the Gi gates. Specifically, we introduce and analyze the Twisted Bent Target
+OPI (Definition III.5). In this variant, the sets Fy are constructed from Maiorana-McFarland bent functions. This
+structure ensures that each gate Gi can be implemented with a gate cost that scales as O(log q) rather than O(q).
+D.
+
+Decoding Reed Solomon Codes using the Extended Euclidean Algorithm
+
+Having developed efficient quantum circuits for the EEA under both explicit and implicit access models, we now
+apply them to the central challenge of our work: constructing a complete, reversible decoder for Reed-Solomon (RS)
+codes. This decoder is the computational core of the DQI algorithm when applied to the OPI problem. Syndrome
+decoding of Reed-Solomon codes addresses the problem of recovering an error pattern e = [e0 , e1 , . . . , em−1 ], where
+each ei ∈ Fq and the number of non-zero errors |e| is at most ℓ. The input to the decoder is a list of known syndromes,
+which are represented as the coefficients of a syndrome polynomial, S(z) = s0 + s1 z + · · · + sn−1 z n−1 . The full
+decoding procedure involves three main stages: first, solving the key equation using the EEA; second, finding the
+error locations using a Chien search; and third, finding the error values using Forney’s algorithm.
+
+14
+a. Solving the Key Equation: The core of the decoding process is to solve the fundamental key equation, a
+polynomial congruence that relates the known S(z) to two unknown polynomials: the error-locator polynomial σ(z)
+and the error-evaluator polynomial Ω(z):
+
+σ(z)S(z) ≡ Ω(z)
+
+(mod z 2ℓ ).
+
+(12)
+
+Here, ℓ = n2 is the maximum number of errors that the code can correct, σ(z) is called the error-locator polynomial
+because its roots identify the error positions, and Ω(z) is called the error-evaluator polynomial and is used to find the
+error magnitudes [6, 24]. A unique solution exists if deg(σ(z)) = |e| ≤ ℓ and deg(Ω(z)) < ℓ.
+This polynomial congruence can be solved using several algorithms, most notably the Berlekamp-Massey algorithm
+[6] or the Extended Euclidean Algorithm (EEA) [7]. To solve it using EEA, we apply the EEA to the two specific
+polynomials A(z) = z 2ℓ and B(z) = S(z). As established in the previous section, the EEA produces a sequence of
+remainders ri (z) and corresponding Bézout coefficients ui (z) and vi (z) such that:
+A(z)ui (z) + B(z)vi (z) = ri (z).
+
+(13)
+
+Taking this identity modulo A(z) = z 2ℓ , the first term vanishes, leaving:
+S(z)vi (z) ≡ ri (z)
+
+(mod z 2ℓ ).
+
+(14)
+
+This directly matches the form of the key equation Eq. (12), with σ(z) ∝ vi (z) and Ω(z) ∝ ri (z). The algorithm is
+halted at the first iteration i where deg(ri (z)) < ℓ, which guarantees that the degree constraints for a valid solution
+are met.
+Our quantum circuits for EEA perform this first step using either the synchronized algorithm of Section II B 2 for
+explicit access to both σ(z) and Ω(z), or the Dialog-based method of Section II B 3 for implicit access to σ(z) and
+explicit access to Ω(z). The efficiency of the subsequent decoding stages depends on which model is used.
+b. Chien Search and Forneys algorithm: Once the key equation has been solved via the EEA, yielding the errorlocator polynomial σ(z) and the error-evaluator polynomial Ω(z), the decoder proceeds in two final stages. First, the
+Chien search [23] finds the error locations by identifying the roots of σ(z). This is achieved by evaluating σ(z) at
+every non-zero element of the field, γj ∈ F∗q . An error is located at position j if σ(γj−1 ) = 0. Second, For each error
+location j found by the Chien search, Forney’s algorithm [24] computes the corresponding error value ej using the
+formula:
+ej = −
+
+Ω(γj−1 )
+σ ′ (γj−1 )
+
+,
+
+(15)
+
+where σ ′ (z) is the formal derivative of σ(z). This requires evaluating both Ω(z) and σ ′ (z) at the point γj−1 , followed
+by a modular division.
+The implementation of these two steps differs significantly between the access models. In the explicit model, the
+EEA provides the coefficients of σ(z) and Ω(z) directly. The Chien search and Forney’s algorithm then proceed by
+evaluating these polynomials (and the easily computed derivative σ ′ (z)) at each point γj−1 using n quantum-classical
+multiplications per evaluation. In contrast, the implicit model provides the Dialog of length n = 2ℓ for σ(z), while still
+providing Ω(z) explicitly as the final remainder. Here, evaluating σ(γj−1 ) and σ ′ (γj−1 ) is achieved by playing back the
+Dialog on an augmented state vector. Since differentiation is a linear operator, we can track the derivative through
+the sequence of linear transformations by applying the chain and product rules. This requires 2n quantum-quantum
+multiplications and n/2 quantum-classical multiplications per evaluation.
+The quantum resource costs for these stages depend heavily on whether the explicit or implicit access model was
+used for the initial EEA step. The trade-off is summarized in Table V. The dominant costs arise from sequences
+of Galois field multiplications, which are categorized as either quantum-quantum (QQ), where both operands are in
+quantum registers, or quantum-classical (QC), where one operand is a known classical value.
+
+15
+TABLE V: Leading-order gate costs for the reversible EEA-based RS decoder, comparing the explicit
+(Section II B 2) and implicit (Section II B 3) access models. Gate Costs are dominated by quantum-quantum (QQ)
+and quantum-classical (QC) multiplications. GF Inverse refers to the number of field inversions. The explicit access
+model also has a much higher constant factor coming from other operations like CSWAPS and CADDS, to manage
+the state of the system as part of the complex synchronization scheme.
+Explicit Access Model
+Decoder Stage
+
+Implicit Access Model
+
+QQ Mults QC Mults GF Inverse QQ Mults QC Mults GF Inverse
+
+Step 1: EEA (Key Equation)
+
+3n2
+
+—
+
+6n
+
+n2
+
+—
+
+n
+
+Steps 2&3: Chien Search & Forney Algorithm
+
+—
+
+mn
+
+m
+
+2mn
+
+mn/2
+
+m
+
+Total (Leading Order)
+
+3n2
+
+mn
+
+m + 6n
+
+2mn + n2
+
+mn/2
+
+m+n
+
+As the table shows, the choice of model creates a clear trade-off. In the typical regime for OPI where n ≪ m, the
+complexity of both models is dominated by the O(mn) terms from the Chien search and Forney’s algorithm. For the
+implicit model, the dominant cost is 2mn quantum-quantum multiplications needed to evaluate σ(z) and its derivative
+via Dialog playback. For the explicit model, the dominant cost is mn quantum-classical multiplications to evaluate
+the three required polynomials.
+For circuits over binary extension fields, a quantum-classical multiplication in GF(2b ) can be implemented very
+efficiently using only Clifford gates (a sequence of CNOTs), whereas a quantum-quantum multiplication requires
+non-Clifford resources (Toffoli gates). Therefore, for the parameter regimes we study, the explicit access approach is
+substantially cheaper, as its dominant cost has a much lower Toffoli complexity. However, this trade-off should be
+carefully re-evaluated for other applications, such as those over prime fields, where quantum-classical multiplication
+is also expensive.
+
+III.
+
+CLASSICAL ATTACKS ON OPI
+
+Suppose we have a max-LINSAT problem over Fq with allowed sets F1 , . . . , Fm of size |Fi | = r. Prange’s algorithm
+[11] can be applied to this problem as follows. First, we subsample any n constraints to enforce via a linear system on
+the n variables. This system can then be solved with Gaussian elimination. Since we have disregarded the remaining
+m − n constraints, we expect that roughly r/q · (m − n) will be satisfied by chance since each constraint is satisfied
+by r of the q. Thus, we get, in expectation, a solution that satisfies n + r/q · (m − n) clauses. Prange’s algorithm can
+be repeated to achieve any desired fraction of satisfied constraints, albeit potentially with an exponential overhead in
+the number of repetitions. This is the most efficient classical attack on OPI that we are aware of. In Section III A,
+we comment on how Prange’s algorithm could be optimized and show how to estimate the runtime required to match
+DQI’s performance on a large supercomputer. Then in Section III B, we explain an improvement to Prange’s algorithm
+over extension fields and the impact on the runtime estimates in Section V.
+
+A.
+
+Optimizing Prange’s Algorithm
+
+We first comment on how Gaussian elimination in Prange’s algorithm [11] can be optimized to avoid an n3 cost per
+attempt. First, we can bring the generator matrix G ∈ Fn×m
+into row echelon form such that the leftmost n columns
+q
+(1) (2)
+(n)
+form the identity matrix. We let e , e , . . . , e ∈ Span(G) denote the rows of this row echelon form. We can then
+represent any codeword c as
+c=
+
+n
+X
+
+ci e(i) .
+
+(16)
+
+i=1
+
+To iterate over the codewords that satisfy the first n clauses, we can view the problem as iterating over the strings
+where the ci ∈ Fi above. Assume each |Fi | has size at least 2. Then we can iterate over strings that satisfy the first
+n clauses using a Gray code that only updates two of the first n coordinates per iteration. Over F2b , this could be
+implemented as two vectorized SIMD operations per update.
+
+16
+The semicircle law of [4] states that DQI will satisfy t clauses in expectation, where
+s
+t/m =
+
+ℓ
+m
+
+
+
+r
+1−
+q
+
+s
+
+
++
+
+ℓ
+1−
+m
+
+ !2
+r
+.
+q
+
+(17)
+
+Suppose we apply the classical attack to find a solution satisfying at least t of the m clauses, where t > n. The
+number of satisfied clauses is distributed binomially, and the probability of sampling such a solution is:
+
+p(t) :=
+
+  s−n 
+m 
+X
+m−n
+r
+s=t
+
+s−n
+
+q
+
+r
+1−
+q
+
+m−s
+.
+
+(18)
+
+To match this with the classical attack will take, in expectation, 1/p(t) trials. We estimate the classical resources
+required for one trial, using the Frontier supercomputer as an example [37]. Frontier contains 37,632 AMD Instinct
+MI250X accelerators (i.e., GPUs). Each MI250x has 220 compute units (CUs) and runs at 1.7 GHz. Each CU has
+4 SIMD lanes. So, we can imagine that with an optimized implementation, Frontier could potentially run this many
+trials of the heuristic in one day:
+24 × 3600 ×
+
+1
+× 37, 632 × 220 × 4 × 1.7 × 109 ≈ 2.43 × 1021
+2
+
+(19)
+
+Note that no networking is required for our classical attacks (i.e., they are embarrassingly parallel), so we could easily
+distribute the workload over the Internet to many independent machines that run at different times, in odd hours,
+etc.
+
+B.
+
+Extended Prange’s Algorithm over Extension Fields
+
+The eXtended Prange’s algorithm (XP) is a folklore algorithm alluded to in [38], although we do not know of a
+reference that fully formalizes it as a cryptanalytic attack. For simplicity, suppose F1 = F2 = . . . = Fm = F . Suppose
+q = pb for prime p. Let
+ϕ :Fpb ↔ Fbp
+ϕ(x) = (tr (ζx) : ζ ∈ B)
+
+(20)
+
+denote the natural bijection from elements in Fpb to vectors in Fbp , where B is any basis for Fpb over Fp and tr(α) =
+Pb−1 qi
+b
+is the field trace (See Ch. 2 of [39]). Let Aff ⊆ 2Fp denote the set of nonempty affine subspaces of Fbp . For
+i=0 α
+each codimension s ∈ {0, 1, . . . , b}, let As ∈ Aff denote the (b − s)-dimensional affine subspace which has the largest
+)|
+intersection |A ∩ ϕ(F )| with the set ϕ(F ), and let P [s] denote its fractional overlap by P [s] := |A∩ϕ(F
+. The general
+|A|
+idea is that if we “pay” s affine constraints over the base field on one of the coordinates i ∈ [m], then we get to flip a
+P [s]-biased coin that determines whether the ith constraint is satisfied. We have a budget of n · b base field constraints
+to spend. We call any budget-respecting strategy which assigns a value of s to each coordinate i an “XP Allocation
+Strategy”. We consider two such strategies below.
+
+1.
+
+Expectation-Optimal XP Allocation Strategies via Linear Programming
+
+We can use a randomized procedure to decide s for each clause. For each clause, this strategy samples s independently according to the discrete probability distribution ps . This distribution is constrained such that, on average,
+we use bn/m Fp -linear constraints, meaning we are exactly within-budget. It can be optimized to get the maximum
+
+17
+expected number of satisfied constraints by solving the following linear program (LP):
+maximize
+
+b
+X
+
+ps P [s]
+
+s=0
+
+subject to
+
+b
+X
+
+ps = 1
+
+s=0
+
+and
+
+b
+X
+
+sps ≤ bn/m
+
+s=0
+
+where ps ∈ [0, 1] ∀s ∈ {0, . . . , b}.
+
+(21)
+
+The optimal value of the above LP gives the optimal expected fraction of satisfied constraints achieved by the XP. We
+recover the truncation heuristic when we replace Aff with the set T := {{e} : e ∈ Fq } ∪ {Fq }. There are exponentially
+2
+many affine subspaces in b, the degree of the field extension (e.g. when p = 2, |Aff| ∼ 7.37 · 2(b+1) /4 ). But for
+9
+p = 2 and b ≤ 10, we have |Aff| < 10 and we can explicitly enumerate these to compute the P [s] table and solve
+eq (21). Moreover, it seems unlikely we would really need to enumerate all the affine subspaces, since most of them will
+have small overlap with the set F . Perhaps, using better heuristics or Fourier-analytic techniques, we could directly
+compute the optimal allocation in time poly(q). The XP can sometimes achieve a significantly higher expected value
+than Prange’s algorithm. For example, over F4 with |F | = 2 and n/m = 1/2, XP has an expected value of 1, whereas
+Prange’s algorithm would give an expected value of 3/4.
+2.
+
+Probability-Optimal XP Allocation Strategies via a Knapsack Solver
+
+If t is larger than the optimal expected fraction of satisfied constraints from eq (21), we may need to run the XP
+many times to obtain one sample that satisfies ≥ t clauses. Rather than maximizing the expectation value, we should
+instead maximize the probability of obtaining a sample that satisfies ≥ t clauses. The optimal-probability allocation
+is the solution to the following problem:
+!
+m
+X
+maximize P
+Xi ≥ t
+i=1
+
+subject to Xi ∼ Ber(P [si ])
+m
+X
+si ≤ B
+i=1
+
+0 ≤ si ≤ b
+
+(22)
+
+This problem is non-convex, and the solution may not be the same as the allocation strategy from eq (21). To obtain
+good approximate solutions to equation (22), we use a dynamic programming algorithm explained in Appendix A.
+3.
+
+Search for good target sets for OPI over binary extension fields
+
+The choice of good target sets seems to be a nontrivial problem. For a fixed set size |F |, we want to make the
+overlaps P [s] as small as possible for each s ∈ {0, . . . , b}. This way, the XP allocation strategies of eq (21) and
+eq (22) will have lower optimal values, giving a larger classical runtime. Identifying the optimal such set F or even
+the best attainable list of overlaps P [s] appears to be an open problem. Some recent insight on a good way to choose
+F came from [40], who performed algebraic cryptanalysis of the binary OPI problem in the case that F is chosen
+as the solution set of a multivariate polynomial equation (i.e., an algebraic variety). They concluded that for their
+application, cubic or higher-degree varieties were required. This is because quadratic varieties contain many dimension
+b/2 affine subspaces. They operated in a high-rate regime (specifically, n/m > 7/8) so that they could obtain an
+exact solution with their quantum algorithm. The problem that then arises is that these affine subspaces are so large
+that the number of linear equations sufficient to enforce them as constraints is small enough that a rate 1/2 code
+would already be able to satisfy every clause using XP. However, in our scenario, we propose to use DQI, which is an
+approximate optimization algorithm. This allows us to keep the rate n/m significantly lower than in [40] (in fact, the
+
+18
+space cost scaling is dominated by n, so the lower the rate of the code, the better). Although we do not obtain exact
+solutions, we obtain better approximate optima than can be obtained in polynomial time by any algorithm known to
+us, which is sufficient to obtain the large speedups here.
+In fact, we find that a particular quadratic variety is an excellent choice to get a quantum advantage. Specifically,
+we chose bent functions from the Maiorana-McFarland family. In more detail, let n = 2k. Let
+(
+)
+k
+X
+n
+Sk = (x1 , ..., xn ) ∈ F2 :
+xi xi+k = 1 mod 2 .
+(23)
+i=1
+
+As we show in Section III B 4, for any affine subspace A ⊂ Fn2 of dimension d = dim A, we have
+
+d
+
+d<k
+2
+
+2d−1 + 2k−2 k ≤ d < 2k − 1
+|A ∩ Sk | ≤
+
+22k−2
+d = 2k − 1
+
+
+ 2k−1
+2
+− 2k−1 d = 2k.
+
+(24)
+
+This can be fed as input to the knapsack solver described in Appendix A.
+4.
+
+Upper bounds on affine intersections of Maiorana-McFarland target sets
+
+We have found a technical proof of the upper bounds in (24), although we believe a simpler proof may be possible.
+All the key concepts involved are present in the proof for affine spaces with k ≤ dim A < 2k − 1. Therefore, we defer
+the proofs of upper bounds for d < k, d = 2k − 1, and d = 2k to Appendix E and focus here on k ≤ d < 2k − 1.
+Pk
+Let k be a positive integer. We use the standard dot product ⟨x, y⟩ := i=1 xi yi ∈ F2 where x, y ∈ Fk2 to define
+
+Rk := (x, y) ∈ Fk2 × Fk2 : ⟨x, y⟩ = 0
+(25)
+
+k
+k
+Sk := (x, y) ∈ F2 × F2 : ⟨x, y⟩ = 1
+(26)
+so that Rk ∪Sk = F2k
+2 and Rk ∩Sk = ∅. We will use ⊔ to make simultaneous assertions about the union and intersection
+of two sets. Namely, we define X ⊔ Y = Z ⇐⇒ (X ∪ Y = Z) ∧ (X ∩ Y = ∅) for any three sets X, Y , and Z. Thus,
+Rk ⊔ Sk = F2k
+2 . In arguments below, we will make frequent use of the implication X ⊔ Y = Z =⇒ |X| + |Y | = |Z|.
+We begin by deriving recursive structure formulas that express the sets A ∩ Rk and A ∩ Sk as the disjoint union ⊔
+of the sets of the form B ∩ Rk−1 and B ∩ Sk−1 for some affine subspaces B ⊂ F2k−2
+. To that end, we use two linear
+2
+2k−2
+2k
+2
+projections π0 : F2k
+→
+F
+and
+π
+:
+F
+→
+F
+defined
+by
+1
+2
+2
+2
+2
+π0 (xayb) = xy,
+
+π1 (xayb) = ab
+
+(27)
+
+where x, y ∈ Fk−1
+and a, b ∈ F2 and where juxtaposition denotes concatenation. For a w ∈ F2k
+2 , we will refer to π0 (w)
+2
+2k−2
+as the root of w and to π1 (w) as the suffix of w. The map (π0 , π1 ) : F2k
+× F22 is invertible. Its inverse is
+2 → F2
+⊗ : F2k−2
+× F22 → F2k
+2 defined as
+2
+xy ⊗ ab = xayb
+
+(28)
+
+where x, y ∈ Fk−1
+and a, b ∈ F2 as before. For X ⊂ F2k−2
+, Y ⊂ F22 , and s ∈ F22 , we will write X ⊗ s = {x ⊗ s | x ∈ X}
+2
+2
+and X ⊗ Y = {x ⊗ y | x ∈ X, y ∈ Y }. Note that |X ⊗ Y | = |X| · |Y |.
+The recursive structure of A ∩ Rk and A ∩ Sk arises from
+⟨x, y⟩ = ⟨π0 (x), π0 (y)⟩ + ⟨π1 (x), π1 (y)⟩
+
+(29)
+
+2k−2
+,
+where we slightly abused notation by using ⟨., .⟩ to refer to the dot product in three different vector spaces, F2k
+2 , F2
+2
+and F2 . We now state and prove the recursive structure formulas.
+
+Lemma III.1 (Recursive Structure Formulas).
+For integers d ≥ k > 1, let A be a d-dimensional affine subspace of F2k
+2 . Then
+(
+G (A′ ∩ Sk−1 ) ⊗ σ if σ = 11
+σ
+A ∩ Rk =
+′
+(A
+σ ∩ Rk−1 ) ⊗ σ if σ ̸= 11
+σ∈F
+(
+G (A′ ∩ Rk−1 ) ⊗ σ if σ = 11
+σ
+A ∩ Sk =
+′
+(A
+if σ ̸= 11
+σ ∩ Sk−1 ) ⊗ σ
+σ∈F
+
+(30)
+(31)
+
+19
+where F = π1 (A) is an affine subspace of F22 and the sets A′σ ⊂ π0 (A) are affine subspaces of F2k−2
+that arise as
+2
+′
+translations of the same linear subspace W ′ ⊂ F2k−2
+with
+dim
+W
+=
+dim
+A
+−
+dim
+F
+.
+2
+2k
+Proof. We can write A = a + V where a ∈ F2k
+2 is a fixed bit string and V is a d-dimensional linear subspace of F2 .
+Let B = {b1 , . . . , bd } be an arbitrary basis of V . Suppose b1 , b2 ∈ B are two distinct bit strings with suffix 01. Then
+b1 + b2 has suffix 00, so {b1 + b2 } ∪ B \ {b2 } is another basis of V with the number of elements with suffix 01 reduced
+by one. By iterating this procedure, we can reduce the number of elements with suffix 01 to at most one.
+Similarly, we can reduce the number of basis elements with suffixes 10 and 11 to at most one. Moreover, if B
+contains three elements with distinct nonzero suffixes, then we can replace one of them with an element with suffix
+00 by adding the other two elements to it. Thus, V has a basis B that takes one of the following three forms
+
+
+B00
+B = B00 ⊔ {b}
+(32)
+
+B ⊔ {b, c}
+00
+
+where B00 consists of bit strings with suffix 00 and b, c are two bit strings with distinct nonzero suffixes.
+Define F := π1 (A) as the set of suffixes of the elements of A = a + V . The projector π1 is a linear map, so F is an
+affine subspace of F22 and therefore it has either one, two or four elements. Indeed,
+B = B00 ⇐⇒ F = {σ}
+B = B00 ⊔ {b} ⇐⇒ F = {σ, τ }
+B = B00 ⊔ {b, c} ⇐⇒ F = {00, 01, 10, 11}
+
+(33)
+(34)
+(35)
+
+where σ = π1 (a) and τ = π1 (a + b).
+For every suffix σ ∈ F , let Aσ := A ∩ π1−1 ({σ}) be the set of elements in A with suffix σ and A′σ := π0 (Aσ ) the
+set of roots of those elements of A. A singleton set is an affine space, the intersection of affine subspaces is an affine
+2k−2
+, respectively. We can
+subspace, and π0 , π1 are linear maps, so Aσ and A′σ are affine subspaces of F2k
+2 and F2
+′
+express A in terms of Aσ for σ ∈ F as
+G
+G
+G
+A=
+Aσ =
+π0 (Aσ ) ⊗ σ =
+A′σ ⊗ σ.
+(36)
+σ∈F
+
+σ∈F
+
+σ∈F
+
+Define W := span(B00 ), so that Aσ = uσ + W where uσ ∈ F2k
+2 is any bit string in A with suffix π1 (uσ ) = σ. Then,
+A′σ = π0 (uσ ) + W ′ where W ′ := π0 (W ). But π0 is a bijection on W , so dim A′σ = dim W ′ = dim W = |B00 |.
+Finally, intersecting both sides of (36) with Rk (respectively, Sk ), we obtain
+(
+G (A′ ∩ Sk−1 ) ⊗ σ if σ = 11
+σ
+A ∩ Rk =
+(37)
+′
+(A
+σ ∩ Rk−1 ) ⊗ σ if σ ̸= 11
+σ∈F
+(
+G (A′ ∩ Rk−1 ) ⊗ σ if σ = 11
+σ
+A ∩ Sk =
+(38)
+′
+if σ ̸= 11
+(A
+σ ∩ Sk−1 ) ⊗ σ
+σ∈F
+where we switch between Rk and Sk when σ = 11 as needed in light of (29).
+Remark III.1. The recursive structure formulas take five forms depending on 0 ≤ dim F ≤ 2 and on whether 11 ∈ F .
+1. If F = {σ} with σ ̸= 11, then
+A ∩ Rk = (A′σ ∩ Rk−1 ) ⊗ σ
+A ∩ Sk = (A′σ ∩ Sk−1 ) ⊗ σ.
+
+(39)
+(40)
+
+A ∩ Rk = (A′11 ∩ Sk−1 ) ⊗ 11
+A ∩ Sk = (A′11 ∩ Rk−1 ) ⊗ 11.
+
+(41)
+(42)
+
+2. If F = {11}, then
+
+3. If F = {σ, τ } with 11 ∈
+/ F and σ ̸= τ , then
+A ∩ Rk = ((A′σ ∩ Rk−1 ) ⊗ σ) ⊔ ((A′τ ∩ Rk−1 ) ⊗ τ )
+A ∩ Sk = ((A′σ ∩ Sk−1 ) ⊗ σ) ⊔ ((A′τ ∩ Sk−1 ) ⊗ τ ) .
+
+(43)
+(44)
+
+20
+4. If F = {σ, 11} with σ ̸= 11, then
+A ∩ Rk = ((A′σ ∩ Rk−1 ) ⊗ σ) ⊔ ((A′11 ∩ Sk−1 ) ⊗ 11)
+A ∩ Sk = ((A′σ ∩ Sk−1 ) ⊗ σ) ⊔ ((A′11 ∩ Rk−1 ) ⊗ 11) .
+
+(45)
+(46)
+
+5. If F = {00, 01, 10, 11}, then
+A ∩ Rk = ((A′11 ∩ Sk−1 ) ⊗ 11) ⊔
+
+G
+
+(A′σ ∩ Rk−1 ) ⊗ σ
+
+(47)
+
+(A′σ ∩ Sk−1 ) ⊗ σ.
+
+(48)
+
+σ∈{00,01,10}
+
+A ∩ Sk = ((A′11 ∩ Rk−1 ) ⊗ 11) ⊔
+
+G
+σ∈{00,01,10}
+
+Lemma III.1 enables inductive proof of the upper bound on |A ∩ Rk | and |A ∩ Sk | for affine spaces with dimension
+dim A = 2k −1, which we defer to Lemma E.3. Below, we prove that |A∩Rk | ≤ 2d−1 +2k−1 and |A∩Sk | ≤ 2d−1 +2k−2
+for affine A with k ≤ dim A < 2k − 1 which requires more sophisticated tools in addition to Lemma III.1. The righthand sides 2d−1 + 2k−1 and 2d−1 + 2k−2 indicate that the cardinality of A ∩ Sk (respectively, A ∩ Rk ) can exceed 12 |A|
+by at most 2k−2 (respectively, 2k−1 ). Thus, |A ∩ Rk | can exceed 12 |A| by twice as much as |A ∩ Sk |, so if a recursive
+structure formula for A ∩ Sk contains both an A ∩ Rk−1 term and an A ∩ Sk−1 term, then a naive inductive argument
+fails. We refer to such formulas as mixed recursive structure formulas. They have either two or four terms
+A ∩ Sk = ((A′σ ∩ Sk−1 ) ⊗ 00) ⊔ ((A′11 ∩ Rk−1 ) ⊗ 11)
+A ∩ Sk = ((A′00 ∩ Sk−1 ) ⊗ 00) ⊔ ((A′01 ∩ Sk−1 ) ⊗ 01) ⊔ ((A′10 ∩ Sk−1 ) ⊗ 10) ⊔ ((A′11 ∩ Rk−1 ) ⊗ 11) .
+
+(49)
+(50)
+
+These recursive structure formulas do not cause issues in the proof of Lemma E.3 where we work around the
+challenge by exploiting the fact that when dim A = 2k − 1 not all affine subspaces on the right hand side are distinct.
+To face a more general situation below, we will exploit hidden affine structures in certain combinations of sets of the
+form A ∩ Sk−1 and A ∩ Rk−1 that arise from the cancellation of quadratic terms in the indicator functions of these
+sets as they are combined together.
+Let W be a linear subspace of F2k
+2 . If a function f from W to the underlying field of scalars F2 is linear, then we will
+2k
+refer to f as a linear functional. Let a ∈ F2k
+2 and let A := a + W be an affine subspace of F2 . If a function g from A
+to the underlying field of scalars F2 can be written as g(a + w) = c + f (w) for some c ∈ F2 and some linear functional
+f , then we will refer to g as an affine functional. The significance of affine functionals to our arguments derives from
+the way they partition their domain. If g is a non-constant affine functional, then f is a non-constant linear functional
+and f −1 (1) is a coset of ker f = f −1 (0). Therefore, |f −1 (0)| = |f −1 (1)|. But then also |g −1 (0)| = |g −1 (1)|. Thus, if
+g : A → F2 is an affine functional, then each g −1 (0) and g −1 (1) is either empty or affine. Moreover, if both g −1 (0)
+and g −1 (1) are non-empty, then dim g −1 (0) = dim g −1 (1) = dim A − 1.
+In order to express the value of the indicator function 1Sk : F2k
+2 → F2 of Sk
+1Sk (x) :=
+
+k
+X
+
+xi xk+i = ⟨πL (x), πR (x)⟩
+
+(51)
+
+i=1
+
+on bit strings in an affine space A := a + W , we introduce the (skew-)symmetric bilinear form ω : F2k
+2 → F2
+ω(x, y) :=
+
+k
+X
+
+(xi yk+i + xk+i yi ) = ⟨πL (x), πR (y)⟩ + ⟨πL (y), πR (x)⟩
+
+(52)
+
+i=1
+k
+where πL , πR : F2k
+2 → F2 are linear projectors defined via
+
+πL (ab) = a,
+
+πR (ab) = b
+
+(53)
+
+for any a, b ∈ Fk2 . Indeed, we can express 1Sk (a + x) for any x ∈ W in terms of ω as
+1Sk (a + x) = ⟨aL + xL , aR + xR ⟩ = 1Sk (a) + ω(a, x) + 1Sk (x)
+
+(54)
+
+where aL := πL (a), aR := πR (a), xL := πL (x), and xR := πR (x). This way of writing 1Sk allows us to construct affine
+subspaces from sets of the form A ∩ Rk and A ∩ Sk by arranging for the cancellation of the quadratic terms 1Sk (x).
+We can use these objects and their properties to prove Lemma III.2 and E.4 that enable us to express the right
+hand side of (49) and (50) in terms of cardinalities of sets involving Sk−1 , but no Rk−1 .
+
+21
+Lemma III.2 (Proxy expression for mixed recursive structure formulas with two terms).
+Let k be a positive integer and a1 , a2 ∈ F2k
+2 . For any two affine spaces A1 := a1 + W and A2 := a2 + W arising as
+translations of the same linear subspace W ⊂ F2k
+2 , there exist two sets B1 and B2 each of which is either empty or
+affine and such that
+|A1 ∩ Rk | + |A2 ∩ Sk | = |B1 | + 2 · |B2 ∩ Sk |
+
+(55)
+
+and |B1 | + |B2 | = |W |.
+Proof. We begin by partitioning W into four disjoint sets
+Wrr := {x ∈ W | (a1 + x ∈ Rk ) ∧ (a2 + x ∈ Rk )}
+Wrs := {x ∈ W | (a1 + x ∈ Rk ) ∧ (a2 + x ∈ Sk )}
+Wsr := {x ∈ W | (a1 + x ∈ Sk ) ∧ (a2 + x ∈ Rk )}
+Wss := {x ∈ W | (a1 + x ∈ Sk ) ∧ (a2 + x ∈ Sk )}
+
+(56)
+(57)
+(58)
+(59)
+
+so that W = Wrr ⊔ Wrs ⊔ Wsr ⊔ Wss . Consider the sets
+W0 := Wrr ⊔ Wss
+
+W1 := Wrs ⊔ Wsr .
+
+(60)
+
+The indicator function of W1 restricted to W can be written as
+1W1 (x) = 1Rk (a1 + x) · 1Sk (a2 + x) + 1Sk (a1 + x) · 1Rk (a2 + x)
+= (1 + 1Sk (a1 + x)) · 1Sk (a2 + x) + 1Sk (a1 + x) · (1 + 1Sk (a2 + x))
+= 1Sk (a1 + x) + 1Sk (a2 + x)
+= ω(a1 + a2 , x) + 1Sk (a1 ) + 1Sk (a2 )
+
+(61)
+(62)
+(63)
+(64)
+
+where we dropped the terms 1Sk (a1 + x) · 1Sk (a2 + x) and 1Sk (x), because F2 has characteristic 2. But ω is bilinear,
+so 1W1 restricted to W is an affine functional on W . Therefore, W1 is either empty or an affine subspace of W .
+Similarly, the indicator function of W0 restricted to W is 1W0 (x) = 1W1 (x) + 1 and hence also an affine functional on
+W . Therefore, W0 is either empty or an affine subspace of W . Moreover, W = W0 ⊔ W1 , so if both W0 and W1 are
+non-empty, then dim W0 = dim W1 = dim W − 1. Translation is bijective, so definitions (56)-(59) imply that
+|A1 ∩ Rk | + |A2 ∩ Sk | = |Wrr | + 2 · |Wrs | + |Wss |.
+
+(65)
+
+Finally, define B1 := a1 + W0 and B2 := a2 + W1 , so that |B1 | + |B2 | = |W0 | + |W1 | = |W | and rewrite (65) as
+|A1 ∩ Rk | + |A2 ∩ Sk | = |B1 | + 2 · |B2 ∩ Sk |
+
+(66)
+
+where we used |B1 | = |Wrr | + |Wss | and |Wrs | = |B2 ∩ Sk |.
+In order to facilitate the use of Lemma III.2 in an inductive proof, we note the following conditional upper bound
+it implies.
+Corollary III.1 (Bound for mixed recursive structure formulas with two terms).
+Let e and k > 1 be positive integers. If |B ∩ Sk−1 | ≤ 2dim B−1 + 2k−3 for every affine subspace B of F2k−2
+with
+2
+dim B ∈ {e − 1, e}, then
+|A1 ∩ Rk−1 | + |A2 ∩ Sk−1 | ≤ 2e + 2k−2
+
+(67)
+
+for every pair of e-dimensional affine subspaces A1 := a1 + W and A2 := a2 + W of F2k−2
+that arise as translations
+2
+2k−2
+of the same linear subspace W of F2
+.
+Proof. By Lemma III.2, there exist two sets B1 and B2 , each of which is either empty or affine and such that
+|A1 ∩ Rk−1 | + |A2 ∩ Sk−1 | = |B1 | + 2 · |B2 ∩ Sk−1 |
+
+(68)
+
+and |B1 | + |B2 | = |W |. If B1 = ∅, then B2 is an affine subspace of F2k−2
+of dimension e. Therefore,
+2
+|A1 ∩ Rk−1 | + |A2 ∩ Sk−1 | ≤ 0 + 2 · (2e−1 + 2k−3 ) = 2e + 2k−2 .
+
+(69)
+
+22
+If B2 = ∅, then B1 is an affine subspace of F2k−2
+of dimension e. Therefore,
+2
+|A1 ∩ Rk−1 | + |A2 ∩ Sk−1 | ≤ 2e + 2 · 0 < 2e + 2k−2 .
+
+(70)
+
+Finally, if neither B1 nor B2 is empty, then both are affine and dim B1 = dim B2 = e − 1. Therefore,
+|A1 ∩ Rk−1 | + |A2 ∩ Sk−1 | ≤ 2e−1 + 2 · (2e−2 + 2k−3 ) = 2e + 2k−2
+
+(71)
+
+completing the proof of the Corollary.
+A similar, although technically more complicated, proof establishes an analogous result for mixed recursive formulas
+with four terms, see Lemma E.4 and Corollary E.2. Equipped with Corollary III.1 above for dealing with two-term
+mixed recursive structure formulas and Corollary E.2 for dealing with four-term mixed recursive structure formulas,
+we are now ready to prove the upper bounds on |A ∩ Rk | and |A ∩ Sk | for affine spaces with k ≤ dim A < 2k − 1.
+Lemma III.3 (Upper bound on |A ∩ Rk | and |A ∩ Sk | when k ≤ dim A < 2k − 1).
+2k
+Let k, d be two positive integers and let A ⊂ F2k
+2 be a d-dimensional affine subspace of F2 . If k ≤ d < 2k − 1, then
+(72)
+
+|A ∩ Rk | ≤ 2d−1 + 2k−1
+d−1
+
+|A ∩ Sk | ≤ 2
+
++2
+
+k−2
+
+(73)
+
+.
+
+Proof. We prove the bounds by induction on k. If k = 1, then there are no affine subspaces of dimension 1 ≤ dim A < 1,
+so the upper bounds are vacuously satisfied. Fix k > 1 and suppose that for any affine subspace B ⊂ F2k−2
+whose
+2
+dimension e := dim B satisfies k − 1 ≤ e < 2k − 3, it is the case that
+(74)
+
+|B ∩ Rk−1 | ≤ 2e−1 + 2k−2
+e−1
+
+|B ∩ Sk−1 | ≤ 2
+
++2
+
+k−3
+
+.
+
+(75)
+
+We will also use (74) and (75) when e = 2k − 3 and e = 2k − 2 which follow from Lemma E.3 and Corollary E.1,
+respectively. We will show that for every affine subspace A ⊂ F2k
+2 of dimension d = dim A with k ≤ d < 2k − 1, we
+have
+(76)
+
+|A ∩ Rk | ≤ 2d−1 + 2k−1
+d−1
+
++2
+
+.
+
+(77)
+
+∧
+∧
+∧
+∧
+
+11 ∈
+/F
+11 ∈ F
+11 ∈
+/F
+11 ∈ F
+
+(78)
+(79)
+(80)
+(81)
+(82)
+
+|A ∩ Sk | ≤ 2
+
+k−2
+
+By Remark III.1, we have five cases to consider
+dim F = 0
+dim F = 0
+dim F = 1
+dim F = 1
+dim F = 2.
+
+In the first case, where F = {σ} with σ ̸= 11, the recursive structure formulas (30) and (31) become
+A ∩ Rk = (A′σ ∩ Rk−1 ) ⊗ σ
+A ∩ Sk = (A′σ ∩ Sk−1 ) ⊗ σ
+
+(83)
+(84)
+
+where the affine subspace A′σ has dimension dim A′σ = d − dim F = d. Using the inductive hypothesis, we obtain
+|A ∩ Rk | = |A′σ ∩ Rk−1 | ≤ 2d−1 + 2k−2 < 2d−1 + 2k−1
+
+(85)
+
+|A ∩ Sk | = |A′σ ∩ Sk−1 | ≤ 2d−1 + 2k−3 < 2d−1 + 2k−2 .
+
+(86)
+
+In the second case, where F = {11}, the recursive structure formulas (30) and (31) become
+A ∩ Rk = (A′11 ∩ Sk−1 ) ⊗ σ
+A ∩ Sk = (A′11 ∩ Rk−1 ) ⊗ σ
+
+(87)
+(88)
+
+23
+where the affine subspace A′11 again has dimension dim A′11 = d − dim F = d. Using the inductive hypothesis, we find
+|A ∩ Rk | = |A′11 ∩ Sk−1 | ≤ 2d−1 + 2k−3 < 2d−1 + 2k−1
+
+(89)
+
+|A ∩ Sk | = |A′11 ∩ Rk−1 | ≤ 2d−1 + 2k−2 = 2d−1 + 2k−2 .
+
+(90)
+
+In the third case, where F = {σ, τ } with σ ̸= 11, τ ̸= 11 and σ ̸= τ , the recursive structure formulas read
+(91)
+(92)
+
+A ∩ Rk = ((A′σ ∩ Rk−1 ) ⊗ σ) ⊔ ((A′τ ∩ Rk−1 ) ⊗ τ )
+A ∩ Sk = ((A′σ ∩ Sk−1 ) ⊗ σ) ⊔ ((A′τ ∩ Sk−1 ) ⊗ τ ).
+Using the inductive hypothesis and dim A′σ = dim A′τ = d − dim F = d − 1, we find
+
+(93)
+
+|A ∩ Rk | ≤ 2 · (2d−2 + 2k−2 ) = 2d−1 + 2k−1
+|A ∩ Sk | ≤ 2 · (2
+
+d−2
+
++2
+
+k−3
+
+d−1
+
+)=2
+
++2
+
+k−2
+
+(94)
+
+.
+
+In the fourth case, where F = {σ, 11} with σ ̸= 11, the recursive structure formulas (30) and (31) become
+A ∩ Rk = ((A′11 ∩ Sk−1 ) ⊗ 11) ⊔ ((A′σ ∩ Rk−1 ) ⊗ σ)
+A ∩ Sk = ((A′11 ∩ Rk−1 ) ⊗ 11) ⊔ ((A′σ ∩ Sk−1 ) ⊗ σ)
+
+(95)
+(96)
+
+where dim A′σ = dim A′11 = d − dim F = d − 1. Consequently,
+(97)
+(98)
+
+|A ∩ Rk | = |A′11 ∩ Sk−1 | + |A′σ ∩ Rk−1 |
+|A ∩ Sk | = |A′11 ∩ Rk−1 | + |A′σ ∩ Sk−1 |.
+We obtain the upper bound on |A ∩ Rk | from the inductive hypothesis
+|A ∩ Rk | ≤ 2d−2 + 2k−3 + 2d−2 + 2k−2 < 2d−1 + 2k−1
+
+(99)
+
+and the upper bound on |A ∩ Sk | using Corollary III.1 with e = d − 1
+|A ∩ Sk | = |A′11 ∩ Rk−1 | + |A′σ ∩ Sk−1 | ≤ 2d−1 + 2k−2
+
+(100)
+
+where the Corollary’s assumption follows from the inductive hypothesis and Lemma E.1.
+Finally, in the fifth case, where F = {00, 01, 10, 11}, the recursive structure formulas (30) and (31) become
+A ∩ Rk = ((A′00 ∩ Rk−1 ) ⊗ 00) ⊔ ((A′01 ∩ Rk−1 ) ⊗ 01) ⊔ ((A′10 ∩ Rk−1 ) ⊗ 10) ⊔ ((A′11 ∩ Sk−1 ) ⊗ 11)
+A ∩ Sk = ((A′00 ∩ Sk−1 ) ⊗ 00) ⊔ ((A′01 ∩ Sk−1 ) ⊗ 01) ⊔ ((A′10 ∩ Sk−1 ) ⊗ 10) ⊔ ((A′11 ∩ Rk−1 ) ⊗ 11) .
+
+(101)
+(102)
+
+are distinct or they are not.
+There are two possibilities. Either all four affine subspaces A′σ of F2k−2
+2
+Suppose first that the affine subspaces A′σ are not all distinct, so that there are A′1 and A′2 such that
+A′1 := A′11 = A′ρ ,
+
+(103)
+
+A′2 := A′σ = A′τ .
+
+In this case, we use the fact that Rk−1 ⊔ Sk−1 = F2k−2
+to write
+2
+(104)
+(105)
+
+|A ∩ Rk | = |A′1 | + 2 · |A′2 ∩ Rk−1 |
+|A ∩ Sk | = |A′1 | + 2 · |A′2 ∩ Sk−1 |
+which, using our inductive hypothesis and dim A′σ = d − dim F = d − 2 for all σ ∈ F22 , implies
+
+(106)
+
+|A ∩ Rk | ≤ 2d−2 + 2 · (2d−3 + 2k−2 ) = 2d−1 + 2k−1
+d−2
+
+|A ∩ Sk | ≤ 2
+
+d−3
+
++ 2 · (2
+
++2
+
+k−3
+
+d−1
+
+)=2
+
++2
+
+k−2
+
+.
+
+(107)
+
+Suppose now that the four affine subspaces A′σ of F2k−2
+are all distinct. By Lemma III.1, the subspaces arise as
+2
+translations of the same linear subspace W ′ ⊂ F2k−2
+of
+dimension
+dim W ′ = d − dim F = d − 2.
+2
+By combining A′00 and A′01 into (d − 1)-dimensional affine space A′00,01 , we can rewrite (101) as
+
+A ∩ Rk = (A′00,01 ∩ Rk−1 ) ⊗ 00 ⊔ ((A′10 ∩ Rk−1 ) ⊗ 10) ⊔ ((A′11 ∩ Sk−1 ) ⊗ 11)
+(108)
+
+24
+which leads to
+(109)
+
+|A ∩ Rk | = |A′00,01 ∩ Rk−1 | + |A′10 ∩ Rk−1 | + |A′11 ∩ Sk−1 |.
+
+If d = k, then |A ∩ Rk | ≤ 2d−1 + 2k−1 = 2d . For affine spaces with d > k, we prove the upper bound on |A ∩ Rk | using
+Corollary III.1 with e = d − 2
+(110)
+
+|A ∩ Rk | ≤ 2d−2 + 2k−2 + 2d−2 + 2k−2 = 2d−1 + 2k−1
+
+where the Corollary’s assumption follows from the inductive hypothesis and Lemma E.1. The upper bound on |A∩Sk |
+follows from Corollary E.2 with e = d − 2
+(111)
+
+|A ∩ Sk | = |A′00 ∩ Sk−1 | + |A′01 ∩ Sk−1 | + |A′10 ∩ Sk−1 | + |A′11 ∩ Rk−1 | ≤ 2d−1 + 2k−2
+where the Corollary’s assumption follows from the inductive hypothesis and Lemma E.1.
+
+Theorem III.4. For any positive integer k and any affine subspace A ⊂ F2k
+2 of dimension d = dim A, we have
+
+
+2d
+d<k
+
+
+2d−1 + 2k−2 k ≤ d < 2k − 1
+|A ∩ Sk | ≤
+(112)
+
+22k−2
+d = 2k − 1
+
+
+ 2k−1
+2
+− 2k−1 d = 2k
+where
+(
+Sk :=
+
+(x1 , ..., x2k ) ∈ F2k
+2 :
+
+k
+X
+
+)
+xi xi+k = 1
+
+(113)
+
+mod 2 .
+
+i=1
+
+Proof. The four upper bounds in (112) follow from Lemma E.1, Lemma III.3, Lemma E.3, and Corollary E.1, respectively.
+
+C.
+
+Asymptotic Classical Hardness of Twisted Bent Target OPI
+
+Definition III.5. Let R, µ ∈ (0, 1) be constants. For each positive integer k, we define the Twisted Bent Target OPI
+(TBT-OPI) problem as follows. let Sk be the set of eq (113). For each of the m = 22k − 1 evaluation points α ∈ F∗22k ,
+let A ∼ GL2k (F2 ) be a random independent invertible matrix and set
+(114)
+
+Fα = ϕ−1 (Aϕ(x)),
+
+where ϕ is the bijection of eq (20). The (R, µ)-TBT-OPI problem is to find a polynomial f (X) of degree at most
+⌈R · m⌉ such that f (α) ∈ Fα for at least ⌊µ · m⌋ distinct α.
+Lemma III.6. The TBT-OPI sets Fα are efficiently constructible per requirement (2) of IV.2.
+Proof. Note that if A = I, then applying a phase to Sk can be achieved with a single layer of transversal CZ gates.
+e
+We can then change the basis to account for A by conjugating this with a circuit of O(k 2 ) = O(1)
+CNOT gates.
+Theorem III.7. There exists a choice of constant R ≈ 1/10 so that, letting µ = µDQI := 12 +
+number of trials of XP required to solve (R, µ)-TBT-OPI (definition III.5) is at least exp(0.02m).
+
+q
+
+R
+2
+
+
+1 − R2 , the
+
+Proof. The number of trials that XP needs to beat DQI is γ1 where γ is the objective function of (A2). This objective
+function is upper bounded through a direct application the Hoeffding inequality [41] by (115):
+!
+Pm
+
+
+m
+X
+(t − E[ i=1 Xi ])2
+P
+Xi ≥ t ≤ exp −2
+(115)
+m
+i=1
+
+25
+q
+Pm
+n
+)m = ( 12 + R)m. Asymptotically limb→∞ t = ( 12 + R2 (1 − R2 )m leading
+In A 1 we prove that E[ i=1 Xi ] < ( 12 + m
+to the asymptotic scaling
+
+s 
+!
+!2 
+
+m
+X
+R
+R
+(116)
+lim P
+Xi ≥ t ≤ exp −2
+1−
+− R m
+b→∞
+2
+2
+i=1
+n
+In the regime where R = m
+≈ 0.10557, we get an exponential lower bound on the number of trials of
+
+#trials ≥ e0.02786m
+
+IV.
+
+(117)
+
+ASYMPTOTICALLY OPTIMAL QUANTUM SPEEDUP
+
+To achieve the speedup of Theorem I.1, we have to use methods for the circuit implementation that are not
+necessarily optimal at the smaller problem sizes we envision for near-term applications. We describe these alternative
+implementations in Section IV A. Then in Section IV B we observe Theorem I.1 as a corollary of this implementation
+(on the quantum side) along with the lower bounds on runtime of XP that was shown in Theorem III.7.
+A.
+
+Asymptotically Optimal Implementation
+
+While Section II focused on optimizing constant factors for finite-size implementations, we now analyze the asymptotic complexity of DQI applied to the OPI problem. We demonstrate that under certain conditions, the DQI
+algorithm can be implemented using a quantum circuit with a number of gates that is nearly linear in the problem
+e
+size m. We use the notation O(m)
+to hide factors polylogarithmic in m.
+We first establish the complexity of the key algebraic subroutines required. These complexities are well-established
+in classical computer algebra and apply over arbitrary finite fields Fq .
+Lemma IV.1 (Fast Algebraic Subroutines). Let m be the problem size parameter. The following tasks can be
+e
+computed reversibly using O(m)
+field operations in Fq :
+1. Multipoint Polynomial Evaluation (MPE): Evaluating a polynomial of degree < m at m points.
+2. Reed-Solomon (RS) Decoding: Decoding an RS code of length m up to half its minimum distance.
+Proof.
+1. Fast algorithms for MPE utilize a divide-and-conquer strategy. The complexity is O(M (m) log m) field operae
+tions, where M (m) is the cost to multiply two degree m polynomials [42, Chapter 10]. Since M (m) = O(m)
+e
+using fast multiplication algorithms [43–45], the total cost is O(m) field operations.
+2. The key equation for RS decoding can be solved using the Fast Extended Euclidean Algorithm (Fast EEA),
+e
+which runs in O(M (m) log m) = O(m)
+field operations [42, Chapter 11]. Subsequent steps (root finding and
+e
+error evaluation) also take O(m) field operations using fast MPE [46].
+These algorithms are algebraic and can be implemented reversibly on a quantum computer.
+We now analyze the overall complexity of DQI. The result depends critically on the efficiency of the objective
+function implementation and the size of the field relative to m.
+Theorem IV.2. Consider the Optimal Polynomial Intersection (OPI) problem over Fq with m constraints and
+n = Rm variables (where R ∈ (0, 1) is constant). The DQI algorithm can be implemented by a quantum circuit using
+e
+O(m)
+elementary quantum gates, provided that:
+e
+1. The field size q satisfies log q = O(polylog(m)) (i.e., the bit length b = O(1)).
+2. The subsets Fi are structured such that an oracle Ui for objective function fi , defined as Ui |x⟩ = fi (x) |x⟩, can
+e
+be implemented by a quantum circuit using O(1)
+gates.
+
+26
+Proof. We analyze the complexity of the DQI algorithm stages (as described in Section II A). The conditions ensure
+e
+e
+that basic arithmetic operations (addition, multiplication) in Fq require O(b)
+= O(1)
+gates. The degree of the
+enhancing polynomial is l = O(n) = O(m).
+• Stage 1: Dicke State Preparation. Standard dense Dicke state preparation requires O(lm) = O(m2 )
+gates [47]. To achieve near linear time, we describe a new Dicke State Preparation method in Appendix B 2,
+which employs a reversible implementation of a Divide and Conquer unranking strategy, accelerated by Binary
+e
+Splitting. As analyzed in the appendix, the total gate complexity for this step is O(m).
+• Stage 2: Syndrome Computation. We analyze the complexity of the sequential approach described in
+Section II A, but using dense Dicke States instead of sparse Dicke States. This stage iterates m times. Below,
+e
+e
+we show that the cost of each iteration is O(1)
+resulting in a total cost of O(m)
+:
+– Constraint Encoding and Error Generation (Apply Gi ): The gate Gi can be implemented using QFTs over
+e
+e
+Fq and one call to the oracle Ui [4, Section 14.4]. The cost of the QFT is O(b)
+= O(1).
+By assumption,
+e
+e
+the cost of Ui is O(1). Thus, the cost of Gi is O(1).
+– Syndrome Update: We update the syndrome register with BiT · ei . This involves one field multiplication
+e
+and addition, costing O(1)
+gates.
+• Stage 3: Reversible Decoding. We reversibly decode the Reed-Solomon code C ⊥ . By Lemma IV.1, this
+e
+e
+e
+requires O(m)
+field operations, resulting in O(m
+· b) = O(m)
+gates.
+e · b) = O(m)
+e
+• Stage 4: Final Transformation (IQFT). Applying the inverse QFT over Fnq . This takes O(n
+gates.
+e
+Total Complexity: Since each stage requires O(m)
+gates, the total gate complexity of the DQI algorithm under
+e
+the stated conditions is O(m).
+The conditions required for Theorem IV.2 are met, for instance, when q is small (e.g., the binary extension fields
+analyzed in this paper, provided b is polylogarithmic in m) and when the OPI instance has some special structure
+that allows for efficient constraint encoding. For example, in the Polynomial Approximation problem, the subsets Fi
+e
+are contiguous intervals [48], allowing Ui to be implemented efficiently via comparators in O(b)
+gates.
+It is important to contrast this with the general OPI case studied in Section 5 of [4], where m ≈ q and the subsets
+Fi are arbitrary.
+Corollary IV.1. Consider the general OPI problem over Fq where m = q − 1 and the subsets Fi are arbitrary (e.g.,
+e 2 ) elementary quantum gates.
+the balanced case where |Fi | ≈ q/2). The DQI algorithm requires O(m
+e
+Proof. In this case, b = O(log m) = O(1).
+However, implementing the oracle Ui or the gate Gi for an arbitrary
+e
+e
+function defined by a subset of size O(q) generally requires O(q)
+= O(m)
+gates (e.g., using QROM or generic state
+e
+e 2 ), dominating the overall
+preparation [27]). The total cost of Stage 2 (Constraint Encoding) becomes m· O(m)
+= O(m
+complexity.
+B.
+
+Asymptotic Optimality
+
+Combining Theorem IV.2 and Theorem III.7 we have Theorem I.1:
+Theorem I.1. There is an NP-search / optimization problem where the runtime of the best-known classical algorithm
+e ) quantum gates.
+for the problem is 2N and which can be solved with a circuit of O(N
+Since any quantum circuit of n gates can be simulated in time O(2n ), our speedup provides the largest separation
+possible between classical and quantum runtimes. This is somewhat extraordinary since OPI is essentially a contrived
+problem and seems (to us) no more “quantum" or “natural" than e.g. factoring or period-finding. We speculate
+informally on the outlook for this situation below.
+• Faster Classical Algorithms for OPI: Although the best attacks we are currently aware of for OPI take
+exponential time in the number of evaluation points, it is certainly possible that better algorithms exist. It is
+interesting to note that none of the algorithms we know about leverage the low-degree algebraic structure and
+instead treat it as an arbitrary max-LINSAT problem.
+
+27
+• Better Shor circuits: Assuming the speedup for OPI stands, we wonder if further ideas along the line of
+thinking of [5, 49] could culminate in an asymptotically-optimal speedup based on Shor’s algorithm.
+• Peeling off log factors: Although we omit the polylogarithmic factors here, there is room to optimize them
+and we wonder whether such effort would reveal a more practically-usable speedup or merely complicate matters
+without much gain at useful problem scales.
+
+V.
+
+RESOURCE ESTIMATES
+A.
+
+Logical Costs
+
+To provide a concrete assessment of the resources required to solve an instance of OPI using DQI, we performed a detailed logical cost analysis of the complete, end-to-end algorithm. We implemented the key subroutines—including the
+RS Decoders using the Synchronized and Dialog based EEA methods (as detailed in Section II B 2 and Section II B 3),
+and the Sparse Dicke State Preparation from Appendix B; as a Bloq in the Qualtran quantum compilation framework
+[19] and used it to analyze the precise qubit and gate costs.
+The results of this analysis are summarized in Table VI for several representative instances of the Optimal Polynomial Intersection (OPI) problem. The table presents the total Toffoli and Clifford gate counts, the number of logical
+qubits required for the reversible decoder, and the estimated classical intractability of each instance. For GF (2b ), since
+multiplication by a constant field element requires only Clifford gates, for small n/m it turns out to be better to spend
+a higher gate cost to run Zalka’s EEA and have explicit access to the Bézout coefficients such that the Chien search
+subroutine that evaluates the Bézout coefficient polynomial σ(x) at m different constants, uses only Clifford gates.
+Using Dialogs, the EEA part is significantly cheaper than Zalka’s EEA, but because we only have implicit access to
+the polynomial σ(x), each evaluation of σ(x) and σ ′ (x) now requires applying the Dialog and uses quantum-quantum
+multiplication [8] of field elements instead of quantum-classical multiplication. For both the approaches, the qubit
+counts scale as 2nb + O(log2 (n))
+These resource estimates become particularly noteworthy when contextualized against other well-studied, classically
+intractable and verifiable optimization problems. Integer factorization using Shor’s algorithm serves as the canonical
+benchmark for large-scale quantum computation. As shown in the state-of-the-art estimates in [20], factoring a 2048bit RSA integer is estimated to require approximately 6.5 × 109 Toffoli gates and 1399 logical qubits, while factoring
+a 1024-bit RSA integer requiers 1.1 × 109 Toffoli gates and 742 logical qubits. In comparison, several of our OPI
+instances that are well into the classically intractable regime (requiring > 1023 trials) and exhibit Toffoli counts that
+are about two to three orders of magnitude smaller, with logical qubit counts that are about two to three times higher.
+(m, n, b, r)
+
+Toffoli
+
+Clifford
+
+Qubits # Prange Trials # XP Trials
+7
+
+2.76 × 10 3.89 × 10
+3.59 × 106 4.91 × 107
+4.52 × 106 6.04 × 107
+5.56 × 106 7.30 × 107
+6.71 × 106 8.68 × 107
+
+1364
+1569
+1769
+1970
+2170
+
+5.49 × 1019
+1.26 × 1022
+4.30 × 1024
+1.07 × 1027
+1.75 × 1029
+
+1.92 × 1015
+4.64 × 1016
+1.22 × 1018
+2.08 × 1019
+2.56 × 1020
+
+(4095, 60, 12, 2016) 4.64 × 106 1.27 × 108
+(4095, 70, 12, 2016) 5.72 × 106 1.52 × 108
+(4095, 80, 12, 2016) 6.92 × 106 1.79 × 108
+(4095, 90, 12, 2016) 8.27 × 106 2.08 × 108
+(4095, 100, 12, 2016) 9.75 × 106 2.41 × 108
+
+1640
+1885
+2125
+2366
+2606
+
+2.02 × 1023
+4.75 × 1026
+9.48 × 1029
+1.41 × 1033
+2.10 × 1036
+
+4.02 × 1020
+1.97 × 1023
+7.99 × 1025
+2.27 × 1028
+5.91 × 1030
+
+(1023, 60, 10, 496)
+(1023, 70, 10, 496)
+(1023, 80, 10, 496)
+(1023, 90, 10, 496)
+(1023, 100, 10, 496)
+
+6
+
+TABLE VI: Resource estimates for solving the Optimal Polynomial Intersection (OPI) problem using Decoded
+Quantum Interferometry (DQI). m is the number of constraints, n is the number of variables, the problem is defined
+over binary extension field Fq where q = 2b , r is the size of the target set Fy , ∀y ∈ F∗q . We also report the expected
+number of classical trials needed to sample a DQI grade solution using Extended Prange’s algorithm [11]. We
+believe problem instances requiring more than 1023 trials can be classically intractable. Here, we use the quadric set
+in eq (23) throughout. We have observed that some increase in the # XP trials is possible by optimizing the choice
+of set. Therefore we expect the classical hardness can be increased, though we likely cannot match # Prange Trials
+even with an optimal choice of set. We do not know the ultimate limits nor do we understand how to choose the set
+in a principled way.
+
+28
+B.
+
+Physical Costs
+
+For estimating physical costs, we assume one large rectangular grid of physical qubits with nearest neighbor connections, a uniform gate error rate of 0.1%, a surface code cycle time of 1 microsecond, and a control system reaction
+time of 10 microseconds. With these assumptions, the imagined physical layout of the algorithm will consist of a
+compute region using hot storage and a memory region using cold storage. The compute region will store logical
+qubits “normally", as distance d surface code patches using 2(d + 1)2 physical qubits. The cold storage memory region
+will store qubits more densely, by using 2D yoked surface codes [50]. Since our Toffoli gate counts are low enough,
+magic state cultivation [51] will suffice to prepare |T ⟩ states with low enough error rates, and thus we will not any
+dedicated space for magic state factories.
+As an example, let us look at compiling the instance (m = 4095, n = 70, b = 12). The dominant subroutines in the
+decomposition of the circuit are primitives to do arithmetic over Galois Field, like quantum-quantum multiplication
+(GF2Mul) and synthesizing a linear reversible circuit (SynthesizeLR) for quantum-classical multiplication and squaring. For these two primitives, we provide hand optimized lattice surgery layouts in Fig. 4 and Fig. 2 with magic state
+cultivation in-place.
+Referring to [20, Figure 6], note that a distance 21 patch is sufficient for normal surface code patches to reach a
+per-patch per-round logical error rate of 10−13 . So our hot patches will use 2 · (21 + 1)2 = 968 physical qubits per
+logical qubit. For the cold storage, again referring to [20, Figure 6], yoking with a 2D parity check code reaches a
+logical error rate of 10−13 when using 350 physical qubits per logical qubit. So cold logical qubits will be roughly triple
+the density of hot logical qubits. For (m = 4095, n = 70, b = 12), the algorithm uses 1885 logical qubits. We propose
+to allocate a 40×48 cold storage region with 1920 logical qubits using 2D Yoked Surface codes. We also propose a thin
+3 × 40 = 120 qubit hot storage region. Our mockup for GF multiplication for b = 12 fits in a 3 × (2.5b + 9) = 3 × 39
+region, including ancilla patches and space needed for cultivation. Thus, our layout uses 120×968+1920×350 ≈ 800k
+physical qubits. A mockup of the high-level spacial layout is shown in Fig. 5.
+Now let’s come to time. In the decomposition of logical circuit for (m = 4095, n = 70, b = 12), there are 58215
+calls to GF2Mul and 687564 calls to SynthesizeLR. We define the Parity Control Toffoli gate as a generalization of
+the Toffoli gate that computes the Boolean AND of the XOR of a subset of controls and updates a subset of targets
+[52, Figure 1]; we employ such gates since they can be implemented efficiently using lattice surgery Fig. 3. Our
+GF2Mul compilation from Fig. 4 requires 1.5d rounds per Parity Control Toffoli gate (PCTOF). For b = 12, using
+optimized GF2 arithmetic circuits from Appendix C, there are 51 PCTOF gates. Therefore, it takes 1.5 · 51 ≈ 77d
+rounds for one quantum-quantum multiplication of field elements. For SynthesizeLR, we present a hand-optimized
+layout in Fig. 2 that takes 10d rounds and 3 × 23 surface code patches for b = 12. Therefore, with d = 21, these
+two combined give us 58215 · 77 · 21 + 687564 · 10 · 21 = 2.4 × 108 . To provide a conservative estimate of the total
+runtime, we multiply this number by a factor of four: doubling it once to account for overhead from other smaller
+operations and routing, and doubling it a second time to account for the time needed to move qubits between cold
+and hot storage. Thus, we estimate a total of 1 × 109 rounds. We need to protect 1920 + 120 = 2040 logical qubits
+for a total of 1 × 109 rounds. With an LER of 10−13 , this gives us a no-logical-error shot rate of plattice surgery =
+9
+12
+(1 − 10−13 )2040·1·10 = (1 − 10−13 )2×10 ≈ 81.5% and a per shot runtime of 16 minutes. To account for error
+due to cultivation, we cultivate |T ⟩ states with a fidelity of 2 × 10−9 . For a total Toffoli count of 5.72 × 106 , this
+6
+gives us a pcultivation = (1 − 2 × 10−9 )4×5.72×10 ≈ 95.5%. Combining the two success probabilities above, we have
+a per-shot success rate of pcultivation × plattice surgery ≈ 77.9%, which means about 4 retries are sufficient for boosting
+the probability of a successful shot close to 1. Therefore, the total runtime would be ≈ 1 hour.
+To summarize, we estimate that solving a classically intractable instance of the OPI problem using DQI requires
+≈ 800k physical qubits and ≈ 1 hour of runtime. This estimate assumes a quantum computer with a surface code
+cycle time of 1 microsecond, a control system reaction time of 10 microseconds, a square grid of qubits with nearest
+neighbor connectivity, and a uniform depolarizing noise model with a noise strength of 1 error per 1000 gates.
+
+29
+
+(a) ZX graph for synthesizing a linear reversible circuit (SynthesizeLR) on 10 qubits using LU-decomposition. Depending on the entries
+of the LU-decomposition of the matrix, only a subset of CNOT gates will be present in the circuit. For the task of estimating the worse
+case spacetime overhead, we assume all possible pairs of CNOTs can be present.
+
+(b) Lattice surgery layouts (front and back view) for synthesizing a linear reversible circuit on 10 qubits, compiled using ZX graph shown
+in Section V B. The layout fits in a 3 × 19 rectangle of surface code patches and requires 8d rounds.
+
+(c) Lattice surgery layouts (front and back view) for synthesizing a linear reversible circuit on 12 qubits, compiled using ZX graph shown
+in Section V B. The layout fits in a 3 × 23 rectangle of surface code patches and requires 10d rounds.
+
+FIG. 2: Spacetime layout for SynthesizeLR - a primitive for synthesizing linear reversible circuits. For GF2
+arithmetic, field operations like multiplication by a constant polynomial and squaring reduce to SynthesizeLR [9].
+
+30
+
+(a) ZX graph for a Parity Control Toffoli gate, which computes the AND of the parity of two sets of control qubits and flips one more
+target qubits. For the specific example, the Parity Control Toffoli flips 4 target qubits (on the right) based on
+(x1 ∨ x2 ∨ x3 ∨ x4 ) ∧ (y1 ∨ y2 ∨ y3 ∨ y4 ). Here is quirk link that shows how a Parity Control Toffoli can be implemented by consuming 4 |T ⟩
+states.
+
+(b) Lattice surgery diagram for compiling two Parity Control Toffoli gates, each acting on two sets of 10-qubit control registers (middle
+and right) and one 10-qubit target register (on the left). Green boxes correspond to Y basis initialization or measurement [53]. Gray boxes
+correspond to the reaction time for decoder to process the measurement results. Pink boxes correspond to space available for magic state
+cultivation [51]. Every |T ⟩ state has 3 × 2 × d3 spacetime available for cultivation. With d = 21, this is enough to cultivate |T ⟩ states with
+a logical error rate of 2 × 10−9 . The space cost is 3 × (2.5b + 9) and amortized time cost per Parity Control Toffoli is 1.5d rounds.
+
+FIG. 3: Lattice surgery compilation for two Parity Control Toffoli gates using magic state cultivation. See [52,
+Figure 1] and Appendix C for more discussion on Parity Control Toffoli gates. Acts as a building block for compiling
+quantum-quantum multiplication (GF2Mul) circuits for GF(2b ).
+
+31
+
+FIG. 4: Lattice Surgery diagram for compiling GF2 Multiplication (GF2Mul(10)) using Karatsuba algorithm by
+stacking the Parity Control Toffoli primitive from Section V B. In Appendix C, we show how the Karatsuba
+algorithm for GF2 multiplication can be viewed entirely as a sequence of Parity Control Toffoli gates. For b = 10,
+the we use the modified Karatsuba quantum circuit [9], which uses exactly 45 (parity) Toffolis.
+
+FIG. 5: Mockup of a physical layout for (m = 4095, n = 70, b = 12, r = 2016) OPI instance requiring 1885 logical
+qubits and 5.72 × 106 Toffoli gates (see Table VI). The blue region stores logical qubits in cold storage, where logical
+qubits are stored as densely as possible but are not operated upon. The orange region stores logical qubits in hot
+storage, where each logical qubit is stored “normally" using a surface code patch taking 2 × (d + 1)2 physical qubits
+and is actively operated upon. For a logical error rate (LER) of 10−13 , a d = 21 surface code with 968 physical
+qubits per logical qubit is used for hot storage and a 2D Yoked Surface Code [50] with 350 physical qubits per
+logical qubit is used for cold storage [20, Figure 6].
+
+32
+VI.
+
+CONCLUSION
+
+This work establishes Decoded Quantum Interferometry (DQI) applied to the Optimal Polynomial Intersection
+(OPI) problem as a landmark candidate for practical quantum advantage. From a complexity-theoretic perspective,
+we have shown that DQI+OPI is the first known proposal for verifiable superpolynomial speedup that achieves
+e ) quantum gates to solve instances with classical hardness O(2N ).
+optimal asymptotic efficiency, requiring only O(N
+This matches the theoretical lower bound and significantly outperforms the asymptotic scaling of Shor’s algorithm
+for cryptography.
+The realization of this speedup relies on the concrete efficiency of the underlying reversible Reed-Solomon (RS)
+decoder. We introduced a suite of novel algorithmic and compilation techniques targeting the Extended Euclidean
+Algorithm (EEA), the critical bottleneck in RS decoding. Our innovations, including the Dialog representation for
+implicit Bézout coefficient access and optimized in-place register sharing architectures, rigorously reduce the space
+complexity to the theoretical minimum of 2nb qubits while substantially lowering gate counts. These techniques
+are broadly applicable and promise significant improvements for other quantum algorithms reliant on the EEA,
+particularly those for Elliptic Curve Cryptography.
+We provided a comprehensive end-to-end compilation and resource analysis for DQI, focusing on OPI over binary
+extension fields GF (2b ). We analyzed the classical hardness against tailored attacks, such as the Extended Prange
+algorithm, and identified resilient instances based on bent functions. Our concrete resource estimates demonstrate
+that DQI can solve instances requiring > 1023 classical trials using approximately 5.72 million Toffoli gates and 1885
+logical qubits. This represents a reduction of three orders of magnitude in the gate count compared to breaking
+RSA-2048. Furthermore, our physical resource analysis, supported by hand-optimized lattice surgery layouts for key
+primitives, estimates that such instances could be solved on a fault-tolerant architecture with 800, 000 physical qubits
+in ≈ 1 hour of runtime.
+While our results position DQI as a compelling pathway for demonstrating quantum advantage in optimization,
+several avenues for future research remain.
+Continued refinement of the classical hardness analysis is crucial. While we have demonstrated resilience against
+the best known classical attacks in the low-rate approximation regime, further investigation into the impact of sophisticated algebraic attacks ([40]) and establishing formal average-case hardness guarantees remain important open
+problems.
+On the quantum side, there are a few routes to improved performance as well. In [54], a few interesting ideas
+were proposed. Among these was the idea to use Guruswami-Sudan and Koetter-Vardy list decoding algorithms for
+RS codes [55, 56]. This would allow us to find solutions that would take exponential time even with DQI and the
+Berlekamp-Massey decoder, with the cost of a higher (still polynomial) quantum circuit complexity. In a concurrent
+work, [15] considers applying DQI to algebraic geometry codes. These codes have some potentially favorable properties
+for verifiable quantum advantage demonstrations. Notably, they can maintain a constant rate and relative distance
+with considerably smaller (and in some cases constant) alphabet sizes than Reed-Solomon codes, which could improve
+the space footprint of the syndrome registers.
+The Dialog representation introduced here opens new theoretical and practical questions regarding linear representations of numbers and polynomials. Key open questions include:
+1. Can the size of the Dialog be reduced from ≈ 2n field elements to ≈ n when one of the inputs to the GCD is
+known classically?
+2. Is there an efficient, in-place algorithm for transforming the Dialog for x into the Dialog for x−1 , or for computing
+the Dialog of x+y from the Dialogs of x and y, without passing through the standard polynomial representation?
+3. Are there more efficient linear representations beyond those based on the GCD algorithm, potentially enabling
+parallelization?
+By bridging complexity theory with concrete algorithmic engineering, this work identifies and enables an asymptotically optimal and practically efficient route toward verifiable quantum advantage.
+Acknowledgments: We thank Mary Wootters for helpful conversations about decoding algorithms. We thank
+Alexandru Gheorghiu for teaching us about bent functions such as in eq (23) at a Simons workshop organized by
+Umesh Vazirani.
+
+33
+
+[1] T. Khattar, N. Shutty, C. Gidney, A. Zalcman, N. Yosri, D. Maslov, R. Babbush, and S. Jordan, Data for "verifiable
+quantum advantage via optimized dqi circuits" (2025).
+[2] S. Bravyi and D. Gosset, Improved classical simulation of quantum circuits dominated by Clifford gates, Physical Review
+Letters 116, 10.1103/physrevlett.116.250501 (2016).
+[3] P. W. Shor, Polynomial-time algorithms for prime factorization and discrete logarithms on a quantum computer, SIAM
+Review 41, 303–332 (1999).
+[4] S. P. Jordan, N. Shutty, M. Wootters, A. Zalcman, A. Schmidhuber, R. King, S. V. Isakov, T. Khattar, and R. Babbush,
+Optimization by decoded quantum interferometry (2025), arXiv:2408.08292 [quant-ph].
+[5] O. Regev, An efficient quantum factoring algorithm, Journal of the ACM 72, 1 (2025).
+[6] E. R. Berlekamp, Algebraic coding theory (revised edition) (World Scientific, 2015).
+[7] Y. Sugiyama, M. Kasahara, S. Hirasawa, and T. Namekawa, A method for solving key equation for decoding goppa codes,
+Information and Control 27, 87 (1975).
+[8] I. van Hoof, Space-efficient quantum multiplication of polynomials for binary finite fields with sub-quadratic toffoli gate
+count (2020), arXiv:1910.02849 [quant-ph].
+[9] D. Maslov, N. Yosri, and D. Gavinsky, Asymptotic yet practical optimization of quantum circuits implementing GF(2m )
+multiplication and division operations, in 7th International Workshop on Quantum Compilation, Helsinki, Finland (2025).
+[10] T. Itoh and S. Tsujii, Structure of parallel multipliers for a class of fields GF(2m ), Information and Computation 83, 21
+(1989).
+[11] E. Prange, The use of information sets in decoding cyclic codes, IRE Transactions on Information Theory 8, 5 (1962).
+[12] P. Kaye and C. Zalka, Optimized quantum implementation of elliptic curve arithmetic over binary fields (2004),
+arXiv:quant-ph/0407095 [quant-ph].
+[13] M. Roetteler, M. Naehrig, K. M. Svore, and K. Lauter, Quantum resource estimates for computing elliptic curve discrete
+logarithms (2017), arXiv:1706.06752 [quant-ph].
+[14] T. Häner, S. Jaques, M. Naehrig, M. Roetteler, and M. Soeken, Improved quantum circuits for elliptic curve discrete
+logarithms (2020), arXiv:2001.09580 [quant-ph].
+[15] A. Gu and S. Jordan, Algebraic geometry codes and decoded quantum interferometry (2025), unpublished manuscript.
+[16] J. Proos and C. Zalka, Shor’s discrete logarithm quantum algorithm for elliptic curves (2004), arXiv:quant-ph/0301141
+[quant-ph].
+[17] D. J. Bernstein and B.-Y. Yang, Fast constant-time GCD computation and modular inversion, Cryptology ePrint Archive,
+Paper 2019/266 (2019).
+[18] G. Banegas, D. J. Bernstein, I. van Hoof, and T. Lange, Concrete quantum cryptanalysis of binary elliptic curves, Cryptology ePrint Archive, Paper 2020/1296 (2020).
+[19] M. P. Harrigan, T. Khattar, C. Yuan, A. Peduri, N. Yosri, F. D. Malone, R. Babbush, and N. C. Rubin, Expressing and
+analyzing quantum algorithms with qualtran (2024), arXiv:2409.04643 [quant-ph].
+[20] C. Gidney, How to factor 2048 bit RSA integers with less than a million noisy qubits (2025), arXiv:2505.15917 [quant-ph].
+[21] J. Stein, Computational problems associated with racah algebra, Journal of Computational Physics 1, 397–405 (1967).
+[22] D. Litinski, How to compute a 256-bit elliptic curve private key with only 50 million toffoli gates (2023), arXiv:2306.08585
+[quant-ph].
+[23] R. Chien, Cyclic decoding procedures for bose- chaudhuri-hocquenghem codes, IEEE Transactions on Information Theory
+10, 357–363 (1964).
+[24] G. Forney, On decoding bch codes, IEEE Transactions on Information Theory 11, 549–557 (1965).
+[25] C. Jones, Low-overhead constructions for the fault-tolerant toffoli gate, Physical Review A 87, 10.1103/physreva.87.022328
+(2013).
+[26] C. Gidney, Halving the cost of quantum addition, Quantum 2, 74 (2018).
+[27] D. Gosset, R. Kothari, and K. Wu, Quantum state preparation with optimal T-count (2024), arXiv:2411.04790 [quant-ph].
+[28] G. H. Low, V. Kliuchnikov, and L. Schaeffer, Trading t gates for dirty qubits in state preparation and unitary synthesis,
+Quantum 8, 1375 (2024).
+[29] D. W. Berry, Y. Tong, T. Khattar, A. White, T. I. Kim, G. H. Low, S. Boixo, Z. Ding, L. Lin, S. Lee, et al., Rapid
+initial-state preparation for the quantum simulation of strongly correlated molecules, PRX Quantum 6, 020327 (2025).
+[30] R. Babbush, C. Gidney, D. W. Berry, N. Wiebe, J. McClean, A. Paler, A. Fowler, and H. Neven, Encoding electronic
+spectra in quantum circuits with linear T complexity, Physical Review X 8, 10.1103/physrevx.8.041015 (2018).
+[31] T. Khattar and C. Gidney, Rise of conditionally clean ancillae for efficient quantum circuit constructions, Quantum 9,
+1752 (2025).
+[32] D. V. Sarwate and Z. Yan, Modified euclidean algorithms for decoding Reed-Solomon codes (2009), arXiv:0906.3778 [cs.IT].
+[33] T. H. Cormen, C. E. Leiserson, R. L. Rivest, and C. Stein, Introduction to algorithms (MIT press, 2022).
+[34] H. Kim and S. Hong, New space-efficient quantum algorithm for binary elliptic curves using the optimized division algorithm
+(2023), arXiv:2303.06570 [quant-ph].
+[35] J. G. Earle, Latched carry save adder circuit for multipliers (1967), uS Patent 3,340,388.
+[36] B. Amento, R. Steinwandt, and M. Roetteler, Efficient quantum circuits for binary elliptic curve arithmetic: reducing
+t-gate complexity (2012), arXiv:1209.6348 [quant-ph].
+[37] O. R. L. C. Facility, The EPYC™ CPU and INSTINCT™ MI250X GPUs in frontier, Frontier Training Workshop (2023),
+
+34
+https://www.olcf.ornl.gov/wp-content/uploads/Public-AMD-Instinct-MI-250X-Frontier-8.23.23.pdf.
+[38] Y. Chen, Q. Liu, and M. Zhandry, Quantum algorithms for variants of average-case lattice problems via filtering, in Annual
+international conference on the theory and applications of cryptographic techniques (Springer, 2022) pp. 372–401.
+[39] G. L. Mullen and D. Panario, Handbook of finite fields, Vol. 17 (CRC press Boca Raton, 2013).
+[40] P. Briaud, I. Dinur, R. Ghosal, A. Jain, P. Lou, and A. Sahai, Quantum advantage via solving multivariate polynomials
+(2025), arXiv:2509.07276 [quant-ph].
+[41] W. Hoeffding, Probability inequalities for sums of bounded random variables, Journal of the American Statistical Association 58, 13 (1963).
+[42] J. Von Zur Gathen and J. Gerhard, Modern computer algebra (Cambridge university press, 2003).
+[43] A. Schönhage and V. Strassen, Schnelle multiplikation großer zahlen, Computing 7, 281–292 (1971).
+[44] D. G. Cantor and E. Kaltofen, On fast multiplication of polynomials over arbitrary algebras, Acta Informatica 28, 693
+(1991).
+[45] D. Harvey, J. van der Hoeven, and G. Lecerf, Faster polynomial multiplication over finite fields (2014), arXiv:1407.3361
+[cs.CC].
+[46] J. Justesen, On the complexity of decoding reed-solomon codes (corresp.), IEEE Transactions on Information Theory 22,
+237 (2006).
+[47] A. Bartschi and S. Eidenbenz, Short-depth circuits for dicke state preparation, in 2022 IEEE International Conference on
+Quantum Computing and Engineering (QCE) (IEEE, 2022) p. 87–96.
+[48] O. Garcia-Morchon, R. Rietman, I. E. Shparlinski, and L. Tolhuizen, Interpolation and approximation of polynomials in
+finite fields over a short interval from noisy values, Experimental mathematics 23, 241 (2014).
+[49] G. D. Kahanamoku-Meyer, S. Ragavan, V. Vaikuntanathan, and K. Van Kirk, The Jacobi factoring circuit: Quantum
+factoring with near-linear gates and sublinear space and depth, in Proceedings of the 57th Annual ACM Symposium on
+Theory of Computing (2025) pp. 1496–1507.
+[50] C. Gidney, M. Newman, P. Brooks, and C. Jones, Yoked surface codes, Nature Communications 16, 4498 (2025).
+[51] C. Gidney, N. Shutty, and C. Jones, Magic state cultivation: growing T states as cheap as CNOT gates (2024),
+arXiv:2409.17595 [quant-ph].
+[52] C. Gidney, A classical-quantum adder with constant workspace and linear gates (2025), arXiv:2507.23079 [quant-ph].
+[53] C. Gidney, Inplace access to the surface code y basis, Quantum 8, 1310 (2024).
+[54] A. Chailloux and J.-P. Tillich, Quantum advantage from soft decoders, in Proceedings of the 57th Annual ACM Symposium
+on Theory of Computing (2025) pp. 738–749.
+[55] V. Guruswami and M. Sudan, Improved decoding of reed-solomon and algebraic-geometric codes, in Proceedings 39th
+Annual Symposium on Foundations of Computer Science (Cat. No. 98CB36280) (IEEE, 1998) pp. 28–37.
+[56] R. Koetter and A. Vardy, Algebraic soft-decision decoding of reed-solomon codes, IEEE Transactions on Information
+Theory 49, 2809 (2003).
+[57] D. E. Knuth, The Art of Computer Programming, Volume 4, Fascicle 3: Generating All Combinations and Partitions
+(Addison-Wesley Professional, 2005).
+[58] D. Maslov and B. Zindorf, Depth optimization of CZ, CNOT, and Clifford circuits, IEEE Transactions on Quantum
+Engineering 3, 1 (2022).
+
+Appendix A: Optimizing the number of trials of Extended Prange
+
+Recall the optimization problem from Section III B
+maximize P
+
+m
+X
+
+!
+Xi ≥ t
+
+i=1
+
+subject to Xi ∼ Ber(P [si ])
+m
+X
+si ≤ B
+i=1
+
+0 ≤ si ≤ b
+P(1|s) ≤ P(1|s + 1)
+
+(A1)
+(A2)
+
+Eq (A2) is hard to solve exactly for large m, b, and B, but using dynamic programming we can compute a tight
+approximation. To compute this approximation we note that eq (A2) is invariant under permutations of si which
+allows us to build the solution in any order we desire.
+Before we describe our approach we note that any constructive that chooses the si values iteratively faces the
+problem of given s1 · · · sk choose the best sk+1 which is a hard question since the sequence of si induce a probability
+distribution and the set of probability distributions is intrinsically an unordered set. However, given our objective we
+can impose a few ordering relations with various degrees of effectiveness.
+
+35
+To solve the problem we employ a knapsack like dynamic programming approach. Dynamic programming is a
+constructive paradigm and since we are building an approximation algorithm the order we choose si affects the
+quality of the result. Eq (A3) shows that as we construct
+P our solution the joint probability distribution induced by
+our choices of si flows in the direction of increasing
+Xi . We also note that the change in the joint distribution
+from P(•|s1 · · · sk ) to P(•|s1 · · · sk sk+1 ) is controlled by P(1|sk+1 ) which from eq (A1) is monotonic, from these two
+observation we find that it is advantageous to choose the si values in descending order s1 ≥ s2 ≥ · · · ≥ sm . The
+advantage of this ordering is two folds, the first is that after the first few choices of si the joint probability distribution
+stabilizes from one choice to another, the second is computational since it reduces the runtime of the algorithm.
+
+P
+
+k+1
+X
+
+!
+Xi ≥ t|s1 · · · sk sk+1
+
+=
+
+i=1
+
+P
+
+k
+X
+
+!
+Xi ≥ t|s1 · · · sk
+
++ P (1|sk+1 ) P
+
+i=1
+
+k
+X
+
+!
+Xi = t − 1|s1 · · · sk
+
+i=1
+
+(A3)
+Our solution has a dynamic programming state of (i, budget, low) which means for the first i variables and budget
+budget ≤ B and ∀j≤i sj ≥ low what is the best joint probability distribution. This state has only two transitions
+(i, budget, low) → (i, budget, low + 1) and (i, budget, low) → (i − 1, budget − low, low). To compare between the up
+to two probability distributions we get from these transitions we used two comparison functions.
+The first comparison function is eq (A5), which is quick and for most test cases we generated was at most 5%
+lower than the optimal result with some outliers with a bigger error. The second is eq (A6) which is slower since
+it involves computing the convolution between the probability distribution induced by our tuple s1 · · · sk and the
+one induced by the sequence computed by eq (A7). The intuition behind F which is computed using the classical
+dynamic programming knapsack algorithm is that we are doing a look ahead trying to estimate the best probability
+distribution given the remaining budget, but for computational reasons instead of solving the original problem we
+solve the related easier problem of maximizing the sum of probabilities, this gives us a better lower bound on the
+best final joint probability distribution starting from the given S. Note that, eq (A5) is a special case of eq (A6)
+since it can be interpreted as the convolution of the current probability distribution with the probability distribution
+P(0) = 1.
+X
+X
+X
+X
+T (S) = (P(
+Xi ≥ t|S), P(
+Xi = t − 1|S), P(
+Xi = t − 2|S), · · · , P(
+Xi = 0|S))
+
+(A4)
+
+S1 ≥ S2 ⇐⇒ T (S1 ) ≥ T (S2 )
+
+(A5)
+
+S1 ≥ S2 ⇐⇒ T (S1 + F (m − k, budget −
+
+(1)
+
+X
+
+si , sk ) ≥ T (S2 + F (m − k, budget −
+
+s∈S1
+(1)
+
+(2)
+
+X
+
+(2)
+
+si ), sk )
+
+(A6)
+
+s∈S2
+
+(2)
+
+S1 + S2 = (s1 , · · · , s(1)
+a ) + (s1 , · · · , sb )
+(1)
+
+(2)
+
+(2)
+
+= (s1 , · · · , s(1)
+a , s1 , · · · , sb )
+
+F (m, budget, low) = argmaxs1 ···sm
+
+m
+X
+
+P [si ]
+
+i=1
+
+subject to
+
+X
+
+si ≤ budget
+
+and si ≥ low
+
+(A7)
+
+We were unable to find a case where the dynamic programming approach with the slow sorting relation eq (A6)
+disagrees with brute force solution. Although such cases theoretically exist we believe the error will be small. The time
+complexity of this solution is O(mbBt) with the fast sorting relation and O(mbBt2 ) with the slow sorting relation.
+
+36
+1.
+
+Upper Bound on the objective function
+
+The objective function of (A2) is upper bounded through a direct application of the Hoeffding Inequality by
+
+P
+
+m
+X
+
+!
+Xi ≥ t
+
+i=1
+
+as
+
+Pm
+
+
+(t − E[ i=1 Xi ])2
+≤ exp −2
+m
+
+This upper bound is minimized by maximizing E[
+
+P [s] =
+
+Pm
+
+i=1 Xi ] =
+
+
+1
+1
+
+ 2 − 2k+1
+
+1
+2
+
+1
+1
+
++ k−s+2
+
+
+2 2
+1
+
+(A8)
+
+Pm
+
+i=1 P [si ]. The function P [s] is derived from (112)
+
+s=0
+s=1
+1<s≤k
+s>k
+
+(A9)
+
+If we let cj be the number of times si = j then maximizing the expectation can be written as
+
+maximize E
+
+"m
+X
+
+#
+Xi =
+
+i=1
+
+subject to
+
+2k
+X
+
+2k
+X
+
+cs P [s]
+
+(A10)
+
+s=0
+
+cs = m
+
+s=0
+2k
+X
+
+cs s ≤ B = bn = bRm
+
+s=0
+
+Since the objective function is the expectation of the sum of m Bernoulli variables, its value is a fraction of
+m = hm, 0 ≤ h ≤ 1 which can be substituted into (115) with h controlling the exponent of (116). We can compute
+this expectation using a integer program or for large instances compute an upper bound by allowing cs to be real
+rather than integer and solving the linear program. For the specific P [s] function in (A9) a simple strategy that uses
+all of the budget to get s = k + 1 also maximizes the objective. This can be seen as follows. After spending s points
+the expectation value is increased by P [s] − P [0]. To maximize our total expectation value we should spend in a way
+that maximizes our gain per unit cost, i.e. (P [s] − P [0])/s. A brief analysis shows that this occurs for s = k + 1, so
+the optimal solution to the LP should greedily allocate as much mass as possible onto pk+1 .
+Using this greedy approach we get an upper bound on the expectation
+
+E
+
+"m
+X
+
+#
+Xi < P [k + 1]ck+1 + P [0]c0
+
+i=1
+
+
+
+
+B
+1
+1
+B
++
+− k+1
+m−
+k+1
+2 2
+k+1
+
+
+B
+1
+B
+<
++
+m−
+k+1 2
+k+1
+m 1 B
+=
++
+2
+2k+1
+m 1B
+<
++
+2
+2k
+m 1 2kRm
++
+=
+2 k
+2
+1
+=
++R m
+2
+=
+
+(A11)
+
+37
+Appendix B: Sparse Dicke State Preparation
+
+The Dicke state |Dkm ⟩ is an equal weight superposition of all m-qubit states with Hamming weight k (i.e. all strings
+of length m with exactly k ones over a binary alphabet). As shown in Section II A, to prepare the syndrome register
+for DQI, we need to prepare the state
+l
+X
+
+wk |Dkm ⟩
+
+k=0
+
+where w0 , w1 , . . . , wl−1 where l = n/2, are classically known coefficients and |Dkm ⟩ is the Dicke state
+|Dkm ⟩ = q
+
+1
+
+X
+
+
+m
+k
+
+|y⟩
+
+|y|=k
+
+
+In the context of DQI, the Dicke state encodes a superposition over all possible m
+k error locations for 0 ≤ k ≤ l
+errors in a codeword of length m. This encoding uses m qubits. However, when m ≫ l = n/2, we can define a sparse
+encoding that captures the same information using l × log2 m qubits, and thus be more space efficient.
+A Sparse Dicke state |SDkm ⟩ can be defined as a uniform superposition over all k − combinations of indices
+[1, 2, . . . , m], stored using k registers each of size b = ⌈log2 (m + 1)⌉, using a total of k · b qubits.
+|SDkm ⟩ = q
+
+1
+
+X
+
+
+m
+k
+
+|c1 ⟩b |c2 ⟩b · · · |ck ⟩b
+
+1≤c1 <c2 <···<ck ≤n
+
+First, we describe a way to prepare the Sparse Dicke states |SDkm ⟩ using the Combinatorial Number System [57].
+Then, we give two different constructions for quantum circuits to unrank combinations, one that minimizes the
+asymptotic complexity and other that minimizes the constant factors.
+
+1.
+
+The unranking strategy
+
+
+The Combinatorial Number System [57] defines an ordering over all m
+k k−combinations such that a combination
+[ck , ck−1 , . . . , c1 ] where n − 1 ≥ ck > ck−1 > · · · > c1 ≥ 0 corresponds to a unique rank 0 ≤ r < m
+k given by the
+bijection
+r=
+
+k  
+X
+cj
+
+j
+
+j=1
+
+Using this bijection, the state preparation strategy involves two steps:
+
+m
+1. Preparea uniform superposition
+of
+all
+ranks
+r
+∈
+{0,
+.
+.
+.
+,
+− 1} using O(k · b) gates [30]. Here we use the fact
+k
+
+m
+m
+k
+that k ≤ m , so log2 k ≤ k log2 m = k · b. The state of the system is given as follows.
+(m
+k )−1
+X
+
+1
+q
+
+m
+k
+
+
+
+|r⟩k·b
+
+r=0
+
+2. Apply a unitary transformation UUnrank that maps the rank r to its corresponding combination C(r):
+1
+q
+
+X
+
+
+m
+k
+
+r
+
+U
+
+|r⟩k·b −−Unrank
+−−−→ q
+
+1
+
+X
+
+
+m
+k
+
+|C(r)⟩k·b = |SDkm ⟩
+
+r
+
+The efficiency of the state preparation is determined by the complexity of UUnrank .
+
+38
+2.
+
+e
+Divide and Conquer Unranking for O(m)
+Dicke State Preparation
+
+We first describe a Divide and Conquer strategy for fast unranking. Given inputs (m, k, r), we split the m elements
+into two halves, M1 and M2 , of sizes m1 = ⌊m/2⌋ and m2 = ⌈m/2⌉, and then calculate:
+1. The number of elements k1 and k2 that the combination C(r) selects from the first (M1 ) and second halves
+(M2 ) respectively, such that k1 + k2 = k.
+2. The residual ranks r1 and r2 , such that Cm,k (r) = Cm1 ,k1 (r1 )∥Cm2 ,k2 (r2 ).
+The unranking problem can then be solved by recursively solving the left and right subproblems for (m1 , k1 , r1 )
+and (m2 , k2 , r2 ). If the work done at one level of recursion is W (m, k), then the overall complexity of UUnrank follows
+the following recurrence relation:
+T (m, k) = T (m/2, k1 ) + T (m/2, k − k1 ) + W (m, k)
+e
+If we can show that W (m, k) = O(m),
+then by Master Theorem (Case 2), the total complexity is T (m, k) =
+e log m), which is O(m).
+e
+O(m
+The number of ways to choose k items such that exactly i items come from M1 is given by the Hypergeometric
+distribution:
+ 
+
+m1
+m2
+H(i) =
+i
+k−i
+To find the correct k1 for rank r, we seek the value such that the prefix sum of H(i) crosses r:
+P S(k1 ) =
+
+kX
+1 −1
+
+H(i) ≤ r < P S(k1 + 1)
+
+i=0
+
+We can find k1 using a binary search in O(log k) steps, provided we can efficiently calculate the prefix sum P S(x).
+Once k1 is found, we calculate the residual ranks r1 and r2 corresponding to the left and right subproblems (via
+division and modulo operations on r − P S(k1 )), and recursively solve them.
+The efficiency of this approach hinges on the fast calculation of the Hypergeometric prefix sum P S(x). The numbers
+involved (ranks and binomial coefficients) have bit length L = O(k log m). A naive summation of O(k) terms is too
+slow. We use a technique called Binary Splitting. This method is effective for evaluating series where the ratio of
+consecutive terms R(i) = H(i + 1)/H(i) is a simple rational function of i:
+R(i) =
+
+(m1 − i)(k − i)
+(i + 1)(m2 − k + i + 1)
+
+The prefix sum can be written as P S(x) = H(0) · (1 + R(0) + R(0)R(1) + . . . ). Binary Splitting recursively computes
+this expression in a balanced tree structure. Crucially, it leverages fast integer multiplication algorithms (e.g., Schöne
+hage–Strassen), which multiply L-bit numbers in time O(L).
+The total time complexity for calculating P S(x) using
+e
+e
+Binary Splitting is thus O(L log k) = O(k log m).
+The divide and conquer algorithm can be implemented as a reversible quantum circuit UUnrank .
+1. Reversible Fast Arithmetic: We require efficient reversible quantum circuits for fast integer multiplication
+e
+and division that maintain the O(L)
+complexity for arithmetic over L bit integers.
+2. Reversible Binary Splitting (UBS ): The Binary Splitting procedure is implemented reversibly using the fast
+e log m).
+arithmetic circuits. The gate complexity of UBS is O(k
+3. Reversible Search: The binary search for k1 is implemented using the reversible Bit-wise Quantum Search
+strategy. This requires O(log k) coherent calls to UBS .
+The work done at one level of the recursion, W (m, k), is dominated by the reversible search:
+e log m) = O(m)
+e
+W (m, k) = O(log k) · Cost(UBS ) = O(k
+
+39
+3.
+
+Iterative Unranking for low constant factor Dicke State Preparation
+
+The divide and conquer strategy described has optimal asymptotic complexity but would not be ideal for a constant
+factor analysis. Here, we describe a simple greedy
+corresponding
+ algorithm to find the k−combinationk−1
+
+ to rank r with
+small constant factors: take ck maximal with ckk ≤ r, then take ck−1 maximal with ck−1
+≤ r − ckk , and so on. We
+can translate this greedy algorithm into a reversible quantum circuit to prepare Sparse Dicke states using 2 · k · b + b
+qubits and O(m.k + k 2 b2 ) Toffoli gates as follows:
+1. The unitary UUnrank (n, k) can be defined as a product of k unitaries, each of which iteratively finds the jth
+coefficient cj in the sequence C(r) as follows:
+UUnrank (m, k) = Usearch (m, 1) · Usearch (m, 2) . . . Usearch (m, k − 1) · Usearch (m, k)
+Here Usearch (m, j) can be defined as:
+ 
+cj
+Usearch (m, j) |r⟩j log2 m |0⟩log2 m → |r −
+⟩
+|cj ⟩log m
+2
+j (j−1) log m
+2
+
+2. The unitary Usearch (m, j) can be implemented using a bitwise binary search strategy, where we determine the
+largest cj such that cjj ≤ r, iterating over log2 m bits of cj from most significant bit to least significant bit,
+i
+and for each log2 m ≥ i ≥ 0, set cj = cj + 2i if cj +2
+≤ r. A reversible quantum circuit would therefore require
+j
+i
+log2 (m) calls to a sparse QROM, the ith of which loads 2i binomial coefficients of the form cj +2
+. The total
+j
+Toffoli cost of the sparse QROMs across all iterations is therefore k.m. Once the Binomial coefficients are loaded
+using the QROM, we also need a k. log2 m comparator for each of the log2 m bits of cj . The total Toffoli cost
+of the comparators across all iterations is therefore O((k log2 m)2 ).
+Appendix C: Improved arithmetic circuits for binary extension fields
+
+m Toffoli CNOT PCTOF CNOT
+10
+39
+738
+39
+0
+11
+47
+1278
+46
+0
+12
+51
+1506
+51
+0
+
+TABLE VII: Resource counts for GF(2m ) multiplication for m = 10, 11, 12, expressed as gate counts over two
+libraries, {Toffoli, CNOT} and {Parity Control Toffoli, CNOT}.
+1.
+
+Parity Control Toffoli P CT OF and Parity CNOT P CN OT
+
+The parity control Toffoli PCTOF is equivalent to a multi-target Toffoli gate with controls being the parity of a
+subset of qubits. The PCNOT gate is a CNOT gate that computes the XOR of its controls and is equivalent to a
+series of CNOTs with the same target. The main advantages of the PCNOT gate is that in the presence of enough
+ancillae, it can be performed in a single cycle using lattice surgery independent of the number of controls.
+When the two control sets of a PCTOF are disjoint, as is the case of GF(2m ) multiplication, the two control parities
+can be computed in a single cycle. Fig. 6 shows the first PCTOF of Fig. 7 expanded in terms of PCNOT and Toffoli
+and in terms of CNOT and Toffoli gates.
+2.
+
+GF(2m ) arithmetic circuits
+
+Our implementation of the DQI algorithm relies on arithmetic circuits over GF field sizes of 210 through 212 . The
+bottleneck is GF multiplication.
+To implement the respective multiplication (and division) circuits, we rely on [9]. This synthesis algorithm develops
+a modification of Karatsuba multiplication over a carefully selected irreducible polynomial, along with local optimizations using templates, allowing for a reduction in both Toffoli and CNOT gate counts compared to the state-of-the-art
+
+40
+
+FIG. 6: PCTOF in terms of a Toffoli and PCNOTs and then expanded in terms of a Toffoli and CNOTs. Note that
+we omitted the ancilla cleanup part.
+straight Karatsuba multiplication [8]. We tune the implementation [9] to focus on optimizing an ∞-to-1 weighted
+sum of Toffoli and CNOT gate counts to utilize the PCTOF gates better. To get constructions made of the PCTOF
+and CNOT gates, we start from the Toffoli and CNOT circuits from [9] and commute the CNOT gates to the left
+while updating the sets of the PCTOF gates, resulting in circuits that start with three disjoint CNOT stages acting
+on the two input registers and the resulting register followed by a circuit made of the PCTOF gates. The first two
+CNOT circuits are equivalent to the identity since we do not modify the input registers and the CNOT circuit acting
+on the target can be ignored since the target is always initialized in the zero state. The resulting optimized circuits
+are summarized in Table VII. Fig. 7 shows the GF (23 ) multiplication circuit with irreducible polynomial x3 + x + 1
+in terms of PCTOF gates and explicit circuit files are available as a part of the Zenodo upload of this paper.
+In addition, we developed a circuit optimization method applicable to the kinds of circuits with PCTOF gates
+considered. The optimization algorithm relies on two observations: first, any two PCTOF gates commute, and
+second, each PCTOF gate computes a Boolean polynomial of degree 2 and then EXORs it onto a separate output
+register. This means that a single PCTOF gate can be thought of as a vector in the m2 -dimensional Boolean space,
+where each coordinate corresponds to a Boolean product of some two variables, and circuits with k PCTOF gates (with
+targets on the bottom register such as in our case of GF multiplication circuits) can be thought of as k × m2 matrices.
+This means that the matrix rank determines the minimal number of PCTOF gates necessary, in a given set that
+implements the desired functionality. We implemented this optimization algorithm and found a small optimization
+compared to what is directly offered by [9] (compare Toffoli count to the PCTOF count in Table VII). We suspect
+that the improvement is small due to the large number of optimizations that already went into [9].
+3.
+
+Measurement-based Uncomputation for GF2 Multiplication.
+
+The GF(2m ) multiplication operation is an out-of-place operation that applies the transformation |x⟩ |y⟩ |0⟩ →
+|x⟩ |y⟩ |xy⟩. The uncomputation of this operation can be done using only measurements and CZ gates.
+The uncomputation starts by measuring the target register in the X basis. This is equivalent to applying the H ⊗m
+to the target register and then measuring in the computational basis. The H ⊗m operations transform the state to
+P
+P2m −1  P
+H ⊗m
+|x⟩ |y⟩ |xy⟩ =
+ai,j |i⟩ |j⟩ |ij⟩ −−−→ √21m c=0
+(−1)h(c,ij) |i⟩ |j⟩ |c⟩ where h(a, b) is the Hamming weight of
+a ⊕ b. After the measurement,
+we end up with a classical bitstring c and phase flips on some of the coefficients of the
+P
+input superposition (−1)h(c,ij) ai,j |i⟩ |j⟩.
+While it seems that we need to know the product to correct the phase, the linearity of h and symmetry of CZ allow us
+to correct the phase with only CZs. For example if ct =1 then we need to apply CZ(xi , yj ) for all (i, j) pairs such that
+xi+j mod p(x) has xt where p(x) is the irreducible polynomial. This leads to the requirement to implement a certain
+CZ gate circuit. Note that any such circuit can be implemented in depth ⌊m/2 + 0.4993· log2 (m) + 3.0191· log(m) −
+10.9139⌋, using no more than m2 /4 + O(m log2 (m)) Clifford gates [58] or O(m2 / log(m)) gates asymptotically.
+Our implementation of measurement-based uncomputation of GF2 multiplication is available in Qualtran [19] as
+GF2MulMBUC and Fig. 8 shows the uncomputation of GF2 multiplication for m=3 and irreducible polynomial x3 +x+1.
+
+41
+
+FIG. 7: GF (23 ) multiplication with irreducible polynomial x3 + x + 1 in terms of PCTOF gates.
+
+FIG. 8: Construction of measurement based uncomputation of GF2 multiplication for irreducible polynomial
+x3 + x + 1. Note that the measurement is in the X basis.
+
+Appendix D: Bounding the number of iterations for Synchronized Reversible Polynomial EEA
+
+We analyze the worst-case number of iterations required for the synchronized, reversible implementation of the
+Polynomial Extended Euclidean Algorithm (PEEA) presented in Section II B 2. This implementation utilizes shared
+registers and a 4-stage synchronized architecture designed to allow computation branches in a superposition to proceed
+efficiently at their own pace.
+Let the input polynomials be A and B over a finite field Fq , with n = deg(A) and deg(B) < n.
+Definition D.1 (Iteration Dynamics). For iteration i (which computes quotient Qi , remainder Ri , and cofactor Ui ):
+• di = deg(Qi ). We define d0 = 0. Since deg(B) < deg(A), di ≥ 1 for i ≥ 1.
+• si = deg(Ri−1 ) − deg(Ri ): The degree reduction of the remainder. si ≥ 1.
+Pk
+Pk
+Let k be the total number of iterations. Let Dk = i=1 di and Sk = i=1 si .
+
+42
+Lemma D.2 (PEEA Constraints). The variables are constrained by k ≤ Dk and k ≤ Sk . For Full PEEA (coprime
+inputs, unequal degrees), Dk = n and Sk = n.
+We analyze the time complexity Ti of iteration i based on the 5 steps described in Fig. 9.
+Lemma D.3 (Cost Per Iteration). The number of cycles Ti required for iteration i in the optimized implementation
+is Ti = 2di + si + di−1 + 2.
+Proof. We analyze the time required for each stage in the 4-stage cycle, corresponding to Steps 1-4 in Figure 1:
+1. Stage 1 (Step-1, Poly Long Division): Time taken is the length of Qi (number of terms), which is di + 1.
+2. Stage 2 (Step-2, Remainder Normalization): Time taken is the total degree reduction si .
+3. Stage 3 (Step-3, Bézout Cofactor Alignment): Time taken is the degree growth from the prior iteration, di−1 .
+4. Stage 4 (Step-4, Bézout Cofactor Update): Time taken is the length of Qi , which is di + 1. The register swap
+(Step-5) occurs concurrently during the final cycle of this stage, incurring no extra time.
+Summing the costs for iteration i:
+Ti = (di + 1) + si + di−1 + (di + 1)
+= 2di + si + di−1 + 2.
+
+Lemma D.4 (Total Cost Function). The total number of cycles T required to complete k iterations is T = 3Dk +
+Sk − dk + 2k.
+Proof. The total time is the sum of Ti from i = 1 to k.
+T =
+
+k
+X
+
+Ti =
+
+i=1
+
+=2
+
+k
+X
+i=1
+
+We evaluate the third term:
+
+k
+X
+
+(2di + si + di−1 + 2)
+
+i=1
+
+di +
+
+k
+X
+i=1
+
+si +
+
+k
+X
+
+di−1 + 2k.
+
+i=1
+
+Pk
+
+i=1 di−1 = d0 + d1 + · · · + dk−1 . Since d0 = 0, this equals Dk − dk .
+
+T = 2Dk + Sk + (Dk − dk ) + 2k = 3Dk + Sk − dk + 2k.
+
+1.
+
+Worst-Case Analysis: Full PEEA (GCD)
+
+We analyze the maximum cycles required for the Full PEEA, assuming worst-case coprime inputs with degrees
+(n, n − 1).
+Theorem D.5 (Cycle Bound for Full PEEA). The maximum number of cycles required for the optimized synchronized
+Full PEEA on inputs of unequal degrees (max degree n) is Tmax = 6n − 1.
+Proof. We maximize the cost function T = 3Dk + Sk − dk + 2k. We use the constraints for Full PEEA (Lemma D.2):
+Dk = n and Sk = n.
+Substituting these values:
+T = 3n + n − dk + 2k = 4n − dk + 2k.
+To maximize T , we maximize the number of iterations k and minimize the final quotient degree dk . The constraints
+are k ≤ n and dk ≥ 1. We set kmax = n and dk,min = 1.
+Tmax = 4n − 1 + 2n = 6n − 1.
+This worst case is achieved by the generalized Fibonacci sequence where di = 1 and si = 1 for all i = 1 . . . n.
+
+43
+2.
+
+Worst-Case Analysis: Half PEEA (Reed-Solomon Decoding)
+
+The Half-PEEA stops when Dk > n/2.
+Theorem D.6 (Cycle Bound for Half PEEA). The maximum number of cycles required for the optimized synchronized Half-PEEA is Tmax = 6⌊n/2⌋ + 5.
+Proof. We maximize the cost function T = 3Dk + Sk − dk + 2k. The maximum degree reduction required is Dk,max =
+⌊n/2⌋ + 1.
+To maximize T , we seek the slowest convergence scenario. This occurs when di = 1 and si = 1 for all i. In this
+scenario:
+• Dk = Dk,max .
+• k = Dk,max (since di = 1).
+• Sk = Dk,max (since si = 1).
+• dk = 1.
+Substituting these into the cost function:
+Tmax = 3Dk,max + Dk,max − 1 + 2Dk,max
+= 6Dk,max − 1
+= 6(⌊n/2⌋ + 1) − 1
+= 6⌊n/2⌋ + 5.
+
+Appendix E: Deferred proofs of upper bounds on affine intersections of Maiorana-McFarland target sets
+
+Here, we state and prove a few lemmas that are omitted from Section III B 4. Together the proofs here and in
+Section III B 4 establish the upper bounds on |A ∩ Sk | given in (24).
+Lemma E.1 (Upper bound on |A ∩ Rk | and |A ∩ Sk | when dim A < k).
+Let k be a positive integer, d a non-negative integer and A a d-dimensional affine subspace of F2k
+2 . Then
+|A ∩ Rk | ≤ 2d ,
+
+|A ∩ Sk | ≤ 2d .
+
+(E1)
+
+Proof. |A ∩ Rk | ≤ |A| = 2d and |A ∩ Sk | ≤ |A| = 2d .
+Lemma E.2 (Size of Rk and Sk ).
+|Rk | = 22k−1 + 2k−1 ,
+
+(E2)
+
+2k−1
+
+.
+
+(E3)
+
+{x} × {x}⊥
+
+(E4)
+
+|Sk | = 2
+
+k−1
+
+−2
+
+Proof. We can write
+Rk =
+
+G
+x∈Fk
+2
+
+where {x}⊥ ⊂ Fk2 is the set of k-bit strings orthogonal to x ∈ Fk2 under the standard dot product ⟨., .⟩. But
+(
+2k
+if x = 0 ∈ Fk2
+⊥
+|{x} | =
+2k−1 otherwise
+so |Rk | = 22k−1 + 2k−1 and |Sk | = 22k−1 − 2k−1 .
+
+(E5)
+
+44
+Corollary E.1 (Upper bound on |A ∩ Rk | and |A ∩ Sk | when dim A = 2k).
+2k
+Let k be a positive integer and A = F2k
+2 the 2k-dimensional affine subspace of F2 . Then
+(E6)
+
+|A ∩ Rk | = 22k−1 + 2k−1 ,
+2k−1
+
+k−1
+
+|A ∩ Sk | = 2
+
+−2
+
+(E7)
+
+.
+
+Proof. Immediate consequence of Lemma E.2.
+Lemma E.3 (Upper bound on |A ∩ Rk | and |A ∩ Sk | when dim A = 2k − 1).
+2k
+Let k be a positive integer and let A ⊂ F2k
+2 be a (2k − 1)-dimensional affine subspace of F2 . Then
+(E8)
+
+|A ∩ Rk | ≤ 22k−2 + 2k−1
+|A ∩ Sk | ≤ 2
+
+2k−2
+
+(E9)
+
+.
+
+Proof. If k = 1, then |A| = 2 and |S1 | = 1, so |A ∩ R1 | ≤ 2 and |A ∩ S1 | ≤ 1. Assume k > 1. The affine space A
+contains 22k−1 bit strings, but there are only 22k−2 bit strings of each possible suffix. Therefore, F has at least two
+elements. Thus, by Remark III.1 we have three cases to consider
+dim F = 1 ∧
+dim F = 1 ∧
+dim F = 2.
+
+(E10)
+(E11)
+(E12)
+
+11 ∈
+/F
+11 ∈ F
+
+We prove the first two cases directly and the third one by induction.
+If dim F = 1, then Lemma III.1 implies that dim W ′ = 2k − 2 and therefore
+A = F2k−2
+⊗ F.
+2
+
+(E13)
+
+A ∩ Rk = Rk−1 ⊗ F
+A ∩ Sk = Sk−1 ⊗ F
+
+(E14)
+(E15)
+
+If 11 ∈
+/ F , then
+
+and using Lemma E.2
+|A ∩ Rk | = |F | · |Rk−1 | = 2 · (22k−3 + 2k−2 ) = 22k−2 + 2k−1
+|A ∩ Sk | = |F | · |Sk−1 | = 2 · (2
+
+2k−3
+
+k−2
+
+−2
+
+)<2
+
+2k−2
+
+.
+
+(E16)
+(E17)
+
+If F = {σ, 11} with σ ̸= 11, then
+A ∩ Rk = (Rk−1 ⊗ σ) ⊔ (Sk−1 ⊗ 11)
+A ∩ Sk = (Sk−1 ⊗ σ) ⊔ (Rk−1 ⊗ 11)
+
+(E18)
+(E19)
+
+|A ∩ Rk | = |F2k−2
+| < 22k−2 + 2k−1
+2
+
+(E20)
+
+|A ∩ Sk | = |F2k−2
+| = 22k−2 .
+2
+
+(E21)
+
+and using Rk−1 ⊔ Sk−1 = F2k−2
+, we find
+2
+
+We now prove the case dim F = 2 by induction. We established the base case at the opening of the proof. Assume
+now that
+|A ∩ Rk−1 | ≤ 22k−4 + 2k−2
+|A ∩ Sk−1 | ≤ 2
+
+2k−4
+
+.
+
+(E22)
+(E23)
+
+By Lemma III.1, the four affine subspaces A′σ of F2k−2
+with σ ∈ F in (30) and (31) arise as translations of the same
+2
+linear subspace W ′ of dimension 2k − 3, so at most two of them are distinct
+A′1 := A′11 = A′ρ ,
+
+A′2 := A′σ = A′τ .
+
+(E24)
+
+45
+The equation Rk−1 ⊔ Sk−1 = F2k−2
+implies then that
+2
+|A ∩ Rk | = |A′1 | + 2 · |A′2 ∩ Rk−1 |
+|A ∩ Sk | = |A′1 | + 2 · |A′2 ∩ Sk−1 |
+
+(E25)
+(E26)
+
+and using our inductive hypothesis, we obtain
+|A ∩ Rk | ≤ 22k−3 + 2 · (22k−4 + 2k−2 ) = 22k−2 + 2k−1
+2k−3
+
+|A ∩ Sk | ≤ 2
+
+2k−4
+
++2·2
+
+2k−2
+
+=2
+
+(E27)
+(E28)
+
+completing the proof of the Lemma.
+Lemma E.4 (Proxy expression for mixed recursive structure formulas with four terms).
+Let k be a positive integer and a, b, c ∈ F2k
+2 . For any four disjoint affine subspaces of the form
+A00 = a + W
+A01 = a + b + W
+A10 = a + c + W
+A11 = a + b + c + W
+
+(E29)
+(E30)
+(E31)
+(E32)
+
+arising as translations of the same linear subspace W ⊂ F2k
+2 , there exist two disjoint sets B1 and B2 each of which is
+either empty or affine and such that
+|A00 ∩ Sk | + |A01 ∩ Sk | + |A10 ∩ Sk | + |A11 ∩ Rk | = |B1 | + 2 · |B2 ∩ Sk |
+
+(E33)
+
+and |B1 | + |B2 | = 2 · |W |.
+Proof. First note that for any x ∈ W
+1Sk (a + x) = 1Sk (a) + ω(a, x) + 1Sk (x)
+1Sk (a + b + x) = 1Sk (a) + 1Sk (b) + ω(a, b) + ω(a, x) + ω(b, x) + 1Sk (x)
+1Sk (a + c + x) = 1Sk (a) + 1Sk (c) + ω(a, c) + ω(a, x) + ω(c, x) + 1Sk (x)
+1Sk (a + b + c + x) = 1Sk (a) + 1Sk (b) + 1Sk (c) + ω(a, b) + ω(b, c) + ω(c, a)
++ ω(a, x) + ω(b, x) + ω(c, x) + 1Sk (x)
+
+(E34)
+(E35)
+(E36)
+
+1Sk (a + x) + 1Sk (a + b + x) + 1Sk (a + c + x) + 1Sk (a + b + c + x) = ω(b, c).
+
+(E38)
+
+(E37)
+
+which means that
+
+Thus, for any fixed a, b, c ∈ F2k
+2 , we can infer 1Sk (a + b + c + x) from 1Sk (a + x), 1Sk (a + b + x), and 1Sk (a + c + x).
+Indeed, if ω(b, c) = 0, then for every x ∈ W we have the following eight equivalences
+(a + x ∈ Rk ) ∧ (a + b + x ∈ Rk ) ∧ (a + c + x ∈ Rk ) ⇐⇒ a + b + c + x ∈ Rk
+(a + x ∈ Rk ) ∧ (a + b + x ∈ Rk ) ∧ (a + c + x ∈ Sk ) ⇐⇒ a + b + c + x ∈ Sk
+(a + x ∈ Rk ) ∧ (a + b + x ∈ Sk ) ∧ (a + c + x ∈ Rk ) ⇐⇒ a + b + c + x ∈ Sk
+(a + x ∈ Rk ) ∧ (a + b + x ∈ Sk ) ∧ (a + c + x ∈ Sk ) ⇐⇒ a + b + c + x ∈ Rk
+...
+(a + x ∈ Sk ) ∧ (a + b + x ∈ Sk ) ∧ (a + c + x ∈ Sk ) ⇐⇒ a + b + c + x ∈ Sk .
+
+(E39)
+(E40)
+(E41)
+(E42)
+(E43)
+
+If on the other hand ω(b, c) = 1, then for every x ∈ W we have the eight equivalences
+(a + x ∈ Rk ) ∧ (a + b + x ∈ Rk ) ∧ (a + c + x ∈ Rk ) ⇐⇒ a + b + c + x ∈ Sk
+(a + x ∈ Rk ) ∧ (a + b + x ∈ Rk ) ∧ (a + c + x ∈ Sk ) ⇐⇒ a + b + c + x ∈ Rk
+(a + x ∈ Rk ) ∧ (a + b + x ∈ Sk ) ∧ (a + c + x ∈ Rk ) ⇐⇒ a + b + c + x ∈ Rk
+(a + x ∈ Rk ) ∧ (a + b + x ∈ Sk ) ∧ (a + c + x ∈ Sk ) ⇐⇒ a + b + c + x ∈ Sk
+...
+(a + x ∈ Sk ) ∧ (a + b + x ∈ Sk ) ∧ (a + c + x ∈ Sk ) ⇐⇒ a + b + c + x ∈ Rk .
+
+(E44)
+(E45)
+(E46)
+(E47)
+(E48)
+
+46
+In either case, W can be partitioned into eight disjoint sets
+Wrrr := {w ∈ W | (a + w ∈ Rk ) ∧ (a + b + w ∈ Rk ) ∧ (a + c + w ∈ Rk )}
+Wrrs := {w ∈ W | (a + w ∈ Rk ) ∧ (a + b + w ∈ Rk ) ∧ (a + c + w ∈ Sk )}
+Wrsr := {w ∈ W | (a + w ∈ Rk ) ∧ (a + b + w ∈ Sk ) ∧ (a + c + w ∈ Rk )}
+Wrss := {w ∈ W | (a + w ∈ Rk ) ∧ (a + b + w ∈ Sk ) ∧ (a + c + w ∈ Sk )}
+...
+Wsss := {w ∈ W | (a + w ∈ Sk ) ∧ (a + b + w ∈ Sk ) ∧ (a + c + w ∈ Sk )}
+
+(E49)
+(E50)
+(E51)
+(E52)
+(E53)
+
+so that W = Wrrr ⊔ Wrrs ⊔ . . . ⊔ Wsss . Consider the following disjoint unions of these sets
+Wxxy := Wrrr ⊔ Wrrs ⊔ Wssr ⊔ Wsss
+Wxxy := Wrsr ⊔ Wrss ⊔ Wsrr ⊔ Wsrs
+Wxyy := Wrrr ⊔ Wrss ⊔ Wsrr ⊔ Wsss
+Wxyy := Wrrs ⊔ Wrsr ⊔ Wsrs ⊔ Wssr .
+
+(E54)
+(E55)
+(E56)
+(E57)
+
+The indicator function of Wxxy restricted to W is
+1Wxxy (x) = 1Rk (a + x) · 1Sk (a + b + x) · 1Rk (a + c + x) + 1Rk (a + x) · 1Sk (a + b + x) · 1Sk (a + c + x)
+
+(E58)
+
++ 1Sk (a + x) · 1Rk (a + b + x) · 1Rk (a + c + x) + 1Sk (a + x) · 1Rk (a + b + x) · 1Sk (a + c + x)
+= 1Rk (a + x) · 1Sk (a + b + x) + 1Sk (a + x) · 1Rk (a + b + x)
+= (1 + 1Sk (a + x)) · 1Sk (a + b + x) + 1Sk (a + x) · (1 + 1Sk (a + b + x))
+= 1Sk (a + x) + 1Sk (a + b + x)
+= 1Sk (b) + ω(a, b) + ω(b, x)
+
+(E59)
+(E60)
+(E61)
+(E62)
+(E63)
+
+which is an affine functional on W . Therefore, Wxxy is empty or an affine subspace of W . So is Wxxy whose indicator
+function restricted to W is 1Wxxy (x) = 1Wxxy (x) + 1. Moreover, (E54) and (E55) imply that Wxxy ⊔ Wxxy = W .
+Similarly, the indicator function of Wxyy restricted to W is 1Wxyy (x) = 1Sk (b)+1Sk (c)+ω(a, b+c)+ω(b+c, x) which
+is also an affine functional on W . Therefore, Wxyy is empty or an affine subspace of W . So is Wxyy whose indicator
+function restricted to W is 1Wxyy (x) = 1Wxyy (x) + 1. Moreover, (E56) and (E57) imply that Wxyy ⊔ Wxyy = W .
+We can write
+|A00 ∩ Sk | = |Wsrr | + |Wsrs | + |Wssr | + |Wsss |
+|A01 ∩ Sk | = |Wrsr | + |Wrss | + |Wssr | + |Wsss |
+|A10 ∩ Sk | = |Wrrs | + |Wrss | + |Wsrs | + |Wsss |
+
+(E64)
+(E65)
+(E66)
+
+|A00 ∩ Sk | + |A01 ∩ Sk | + |A10 ∩ Sk |
+= |Wrrs | + |Wrsr | + 2 · |Wrss | + |Wsrr | + 2 · |Wsrs | + 2 · |Wssr | + 3 · |Wsss |
+
+(E67)
+
+irrespective of ω(b, c), so that
+
+also irrespective of ω(b, c). The analogous expression for |A11 ∩ Rk | depends on the value of ω(b, c). We consider both
+cases constructing a pair of suitable affine spaces B1 and B2 for each one in turn.
+First, if ω(b, c) = 0, then
+|A11 ∩ Rk | = |Wrrr | + |Wrss | + |Wsrs | + |Wssr |
+
+(E68)
+
+|A00 ∩ Sk | + |A01 ∩ Sk | + |A10 ∩ Sk | + |A11 ∩ Rk |
+= |Wrrr | + |Wrrs | + |Wrsr | + 3 · |Wrss | + |Wsrr | + 3 · |Wsrs | + 3 · |Wssr | + 3 · |Wsss |
+= |W | + 2 · (|Wrss | + |Wsrs | + |Wssr | + |Wsss |) .
+
+(E69)
+(E70)
+(E71)
+
+B1 := (a + b + Wxxy ) ⊔ (a + c + Wxxy )
+B2 := (a + b + Wxxy ) ⊔ (a + c + Wxxy )
+
+(E72)
+(E73)
+
+and adding (E67) yields
+
+Define
+
+47
+so that B1 ⊔ B2 is an affine space of dimension dim W + 1 and
+|B1 | = |W |
+|B2 ∩ Sk | = |Wrss | + |Wsrs | + |Wssr | + |Wsss |
+
+(E74)
+(E75)
+
+|A00 ∩ Sk | + |A01 ∩ Sk | + |A10 ∩ Sk | + |A11 ∩ Rk | = |B1 | + 2 · |B2 ∩ Sk |.
+
+(E76)
+
+and hence
+Now, if ω(b, c) = 1, then
+|A11 ∩ Rk | = |Wrrs | + |Wrsr | + |Wsrr | + |Wsss |
+
+(E77)
+
+|A00 ∩ Sk | + |A01 ∩ Sk | + |A10 ∩ Sk | + |A11 ∩ Rk |
+= 2 · |Wrrs | + 2 · |Wrsr | + 2 · |Wrss | + 2 · |Wsrr | + 2 · |Wsrs | + 2 · |Wssr | + 4 · |Wsss |.
+
+(E78)
+
+B1 := (a + Wxyy ) ⊔ (a + b + Wxyy )
+B2 := (a + Wxyy ) ⊔ (a + b + Wxyy )
+
+(E79)
+(E80)
+
+and adding (E67) yields
+
+Redefine
+
+so that B1 ⊔ B2 is again an affine space of dimension dim W + 1 and
+|B1 | = 2 · |Wrrs | + 2 · |Wrsr | + 2 · |Wsrs | + 2 · |Wssr |
+|B2 ∩ Sk | = |Wrss | + |Wsrr | + 2 · |Wsss |
+
+(E81)
+(E82)
+
+|A00 ∩ Sk | + |A01 ∩ Sk | + |A10 ∩ Sk | + |A11 ∩ Rk | = |B1 | + 2 · |B2 ∩ Sk |
+
+(E83)
+
+and hence
+completing the proof of the Lemma.
+We note the following conditional upper bound which is implied by Lemma E.4 and which will facilitate its use in
+an inductive proof.
+Corollary E.2 (Bound for mixed recursive structure formulas with four terms).
+Let e and k > 1 be positive integers. If |B ∩ Sk−1 | ≤ 2dim B−1 + 2k−3 for every affine subspace B of F2k−2
+with
+2
+dim B ∈ {e, e + 1}, then
+|A00 ∩ Sk−1 | + |A01 ∩ Sk−1 | + |A10 ∩ Sk−1 | + |A11 ∩ Rk−1 | ≤ 2e+1 + 2k−2
+
+(E84)
+
+for any four disjoint affine subspaces of the form
+A00 = a + W
+A01 = a + b + W
+A10 = a + c + W
+A11 = a + b + c + W
+
+(E85)
+(E86)
+(E87)
+(E88)
+
+arising as translations of the same e-dimensional linear subspace W ⊂ F2k−2
+with a, b, c ∈ F2k−2
+.
+2
+2
+Proof. By Lemma E.4, there exist two sets B1 and B2 each of which is either empty or affine and such that
+|A00 ∩ Sk−1 | + |A01 ∩ Sk−1 | + |A10 ∩ Sk−1 | + |A11 ∩ Rk−1 | = |B1 | + 2 · |B2 ∩ Sk−1 |
+
+(E89)
+
+and such that |B1 | + |B2 | = 2 · |W |. Thus, if B1 = ∅, then B2 is an affine subspace of F2k−2
+of dimension e + 1 and
+2
+using the assumption in the Corollary, we obtain
+|A00 ∩ Sk−1 | + |A01 ∩ Sk−1 | + |A10 ∩ Sk−1 | + |A11 ∩ Rk−1 | ≤ 0 + 2 · (2e + 2k−3 ) = 2e+1 + 2k−2 .
+
+(E90)
+
+If B2 = ∅, then B1 is an affine subspace of F2k−2
+of dimension e + 1. Therefore,
+2
+|A00 ∩ Sk−1 | + |A01 ∩ Sk−1 | + |A10 ∩ Sk−1 | + |A11 ∩ Rk−1 | ≤ 2e+1 + 2 · 0 < 2e+1 + 2k−2 .
+
+(E91)
+
+Finally, if neither B1 nor B2 is empty, then both are affine and dim B1 = dim B2 = e. Therefore,
+|A00 ∩ Sk−1 | + |A01 ∩ Sk−1 | + |A10 ∩ Sk−1 | + |A11 ∩ Rk−1 | ≤ 2e + 2 · (2e−1 + 2k−3 ) = 2e+1 + 2k−2
+completing the proof of the Corollary.
+
+(E92)
+
+48
+Appendix F: Reference Python Implementation
+1.
+
+Reed Solomon Decoding using Synchronized EEA for Explicit Bézout coefficients
+
+Fig. 9 gives our optimized implementation of Zalka’s synchronized reversible EEA [12]. Fig. 10 uses this as a
+subroutine and shows how to implement the Chien Search [23] and Forney’s algorithm [24] steps for syndrome decoding
+of Reed Solomon codes, given the shared in-place register representation of the error locator polynomial σ(z) and
+error evaluator polynomial Ω(z).
+2.
+
+Reed Solomon Decoding using Dialog based EEA for Implicit Bézout Coefficients
+
+Fig. 11 gives our optimized implementation of constructing a Dialog based on the Bernstein-Yang GCD algorithm
+[17] using a shared register representation to save space. We also show how once can consume the Dialog to perform
+modular multiplication or modular division. Fig. 12 uses uses the Dialog based EEA for syndrome decoding of Reed
+Solomon codes, and shows how one can evaluate the error locator polynomial σ(z) and it’s derivative σ ′ (z), given
+access to the Dialog of σ(z).
+
+49
+
+import numpy as np
+from galois import Poly
+def p o l y _ e e a _ z a l k a _ g c d _ i m p l ( A : Poly , B : Poly , stop , n_steps : float = 5.0) -> tuple [ np . ndarray , int , int ]:
+gf , m = A . field , B . degree + 3
+a_array , b_array = gf . Zeros ( m ) , gf . Zeros ( m )
+a_array [0] , a_array [ m - A . degree - 1 :] , b_array [ m - B . degree - 1 :] = 1 , A . coeffs [:: -1] , B . coeffs [:: -1]
+n_A , n_B , n_a , n_b , n_q = A . degree + 1 , B . degree + 1 , 1 , 0 , 0
+flag , counter , halting_counter = 1 , 0 , 0
+def swap_a_and_b ():
+nonlocal n_A , n_B , flag , n_a , n_b , a_array , b_array , halting_counter , counter
+if counter == 3 and flag and halting_counter == 0:
+n_A , n_B = n_B , n_A
+n_a , n_b = n_b , n_a
+a_array , b_array = b_array , a_array
+def update_flag ():
+nonlocal flag
+if counter == 0 and halting_counter == 0:
+flag ^= ( n_q == 0) and ( n_A < n_B )
+flag ^= n_A == n_B
+elif counter == 1 and halting_counter == 0:
+flag ^= n_A == n_B
+flag ^= n_B == 1 or b_array [ -2] != 0
+elif counter == 2 and halting_counter == 0:
+flag ^= b_array [0] != 0 or n_b == 0
+flag ^= n_a == n_b + 1
+elif counter == 3 and halting_counter == 0:
+flag ^= n_a == n_b
+flag ^= n_q == 1
+else :
+assert False
+def m u l t i p l y _ a n d _ a d d _ o r _ s u b ():
+nonlocal b_array
+q_i = 0
+if counter == 0 and halting_counter == 0:
+q_i ^= ( a_array [ -1] ** -1) * b_array [ -1]
+for i in range ( m - 1 , -1 , -1):
+swap_if = i == n_a + n_q and counter == 0 and halting_counter == 0
+swap_if |= ( i + 1) == n_a + n_q and counter == 3 and halting_counter == 0
+if swap_if :
+q_i , a_array [ i ] = a_array [ i ] , q_i
+q_i_times_a_i = q_i * a_array [ i ]
+add_if = ( counter == 3) and i < n_a
+sub_if = ( counter == 0) and i >= m - n_A
+if add_if :
+b_array [ i ] += q_i_times_a_i
+if sub_if :
+b_array [ i ] -= q_i_times_a_i
+if counter == 3 and halting_counter == 0:
+q_i ^= b_array [0] * ( a_array [0] ** -1)
+assert q_i == 0
+def s h i f t _ b _ a r r a y_ r i g h t ():
+nonlocal b_array
+for i in range ( m - 1 , -1 , -1):
+do_shift = False
+if counter == 0:
+do_shift = ( i >= m - n_B + 1) and not flag
+if counter == 1:
+do_shift = i >= m - n_B + 1
+if counter == 2:
+do_shift = 0 < i <= n_b
+if counter == 3:
+do_shift = (0 < i < m - n_B ) and not flag
+if do_shift and halting_counter == 0:
+b_array [ i - 1] , b_array [ i ] = b_array [ i ] , b_array [ i - 1]
+def update_metadata ():
+nonlocal n_A , n_B , n_q , flag , n_a , n_b
+if counter == 0 and halting_counter ==
+n_q += 1
+if not flag :
+n_B -= 1
+if counter == 1 and halting_counter ==
+n_B -= 1
+if counter == 2 and halting_counter ==
+n_b += 1
+if counter == 3 and halting_counter ==
+if not flag :
+n_b += 1
+n_q -= 1
+
+0:
+
+0:
+0:
+0:
+
+def check_stop ():
+nonlocal halting_counter
+if counter == 3 and flag and stop ( n_A , n_B , n_a , n_b ):
+halting_counter += 1
+for it in range ( int ( np . ceil ( n_steps * m ))):
+update_flag ()
+m u l t i p l y _ a n d _ a d d _ o r _ s u b ()
+s h i f t _ b _a r r a y _ r i g h t ()
+update_metadata ()
+swap_a_and_b ()
+check_stop ()
+# Advance counter .
+counter = ( counter + flag ) % 4
+return b_array , n_b , n_B
+
+FIG. 9: Our optimized implementation of Zalka’s EEA for explicit access to Bézout coefficients.
+
+50
+
+import numpy as np
+from galois import Poly
+from p ol y _e e a_ z a l k a _ g c d import p o l y _ e e a _ z a l k a _ g c d _ i m p l
+def r s _ s y n d r o m e _ d e c o d e r _ e e a _ z a l k a ( s : np . ndarray ) -> np . ndarray :
+gf , n = type ( s [0]) , len ( s )
+def _stop_rs ( n_A : int , n_B : int , _ : int , __ : int ):
+return n_A == 0 or n_B < n // 2
+A = Poly ( s [:: -1] , field = gf )
+B = Poly . Degrees ( coeffs =[1] , degrees =[ n ] , field = gf )
+b_array , n_b , n_B = p o l y _ e e a _ z a l k a _ g c d _ i m p l (A , B , stop = _stop_rs , n_steps =3.75)
+assert n_B <= n // 2 and n_b <= n // 2
+def poly_eval ( c ):
+omega_x_val , sigma_x_val , s i g m a _ x _ p r i m e _ v a l = gf (0) , gf (0) , gf (0)
+m = len ( b_array )
+for i in range ( m - 1 , m // 2 , -1):
+c_i = c ** ( i )
+omega_x_val += b_array [ i ] * c_i
+for i in range ( m // 2 , -1 , -1):
+c_i = c ** ( - i )
+sigma_x_val += b_array [ i ] * c_i
+if i & 1:
+s i g m a _ x _ p r i m e _ v a l += b_array [ i ] * c_i
+return omega_x_val , sigma_x_val , s i g m a _ x _ p r i m e _ v a l
+block_length = gf . order - 1
+gammas = gf ([ gf . p r i m i t i v e _ e l e m e n t ** i for i in range ( block_length )])
+errors = gf . Zeros ( block_length )
+for i in range ( block_length ):
+omega_x_eval , sigma_x_eval , s i g m a _ x _ p r i m e _ e v a l = poly_eval ( gammas [ i ])
+if sigma_x_eval == 0:
+j = block_length - i if i else i
+c = gammas [ i ]
+const_to_mul = c ** -( len ( b_array ) - 1 + n_b - n_B - 1)
+errors [ j ] = const_to_mul * omega_x_eval / s i g m a _ x _ p r i m e _ e v a l
+return errors
+
+FIG. 10: RS Decoding using our optimized implementation of Zalka’s EEA [12, 16] presented in Fig. 9
+
+51
+
+from galois import Poly , GF , gcd
+def _get_delta ( delta : int , text : list [ GF ]):
+for c in text :
+is_swap = delta > 0 and c != 0
+if is_swap :
+delta = - delta
+delta = 1 + delta
+return delta
+def m u l t i p l y _ p o l y _ w i t h _ d i v s t e p _ d i a l o g (
+a : Poly , dialog : list [ GF ] , delta_init : int , mod : Poly = None
+) -> tuple [ Poly , Poly ]:
+f , g , x = a , Poly . Zero ( a . field ) , Poly . Identity ( a . field )
+for i , c in [* enumerate ( dialog )][:: -1]:
+is_swap = _get_delta ( delta_init , dialog [: i ]) > 0 and c != 0
+g = ( g * x ) % mod if mod else g * x
+if c != 0:
+g = ( g + c * f ) % mod if mod else g + c * f
+if is_swap :
+f, g = g, f
+return f , g
+def m o d _ d i v i d e _ p o l y _ w i t h _ d i v s t e p _ d i a l o g (
+a : Poly , dialog : list [ GF ] , delta_init : int , mod : Poly
+) -> tuple [ Poly , Poly ]:
+f , g , x = Poly . Zero ( a . field ) , a , Poly . Identity ( a . field )
+gf = GF ( a . field . characteristic , len ( dialog ) // 2 - 1 , i r r e d u c i b l e _ p o l y = mod )
+x_inv = ( x ** ( gf . order - 2)) % mod
+assert ( x * x_inv ) % mod == Poly . One ( a . field )
+for i , c in enumerate ( dialog ):
+is_swap = _get_delta ( delta_init , dialog [: i ]) > 0 and c != 0
+if is_swap :
+f, g = g, f
+if c != 0:
+g = ( g - c * f ) % mod
+g = ( g * x_inv ) % mod
+return f , g
+def c o n s t r u c t _ d i a l o g _ p o l y _ d i v s t e p _ i n p l a c e ( f : Poly , g : Poly ) -> tuple [ Poly , list [ GF ]]:
+gf , n , x = f . field , 1 + max ( f . degree , g . degree ) , Poly . Identity ( f . field )
+# In general , we need upto 3 n space to store upto n coefficients of the gcd .
+# If we know that gcd (f , g ) = 1 , the length of poly will reduce to 2 n + 3.
+_gcd_degree = gcd (f , g ). degree
+poly = [ gf (0) for _ in range (2 * n + 3 + _gcd_degree )]
+poly [: f . degree + 1] = f . coefficients ( order = " asc " )
+poly [ - g . degree - 1 :] = g . coefficients ( order = " desc " )
+delta = f . degree - g . degree
+dialog = []
+assert poly [0] != 0
+for _ in range (2 * n ):
+is_swap = delta > 0 and poly [ -1] != 0
+if is_swap :
+delta , poly = - delta , poly [:: -1]
+coeff = poly [ -1] // poly [0]
+dialog . append ( coeff )
+delta = 1 + delta
+# Perform g = ( g - f * coeff ) // x
+for j in range ( len ( poly ) // 2 - 1 , -1 , -1):
+if j < len ( poly ) // 2 + delta // 2:
+poly [ - j - 1] -= poly [ j ] * coeff
+assert poly . pop () == 0
+return Poly ( poly [: 1 + ( delta - 1) // 2][:: -1] , field = f . field ) , dialog
+
+FIG. 11: In Place Dialog construction using register sharing and it’s use to perform modular division and modular
+multiplication.
+
+52
+
+import numpy as np
+def construct_ d i a l o g ( s : np . ndarray , n_iters : int ) -> tuple [ np . ndarray , list , int ]:
+gf , n = type ( s [0]) , len ( s )
+poly = [ gf (0) for _ in range (2 * n + 3)]
+poly [0] , poly [ - n :] = gf (1) , s
+delta = 0
+dialog = []
+for _ in range ( n_iters ):
+# 1. Compute the dialog
+is_swap = delta >= 0 and poly [ -1] != 0
+if is_swap :
+delta , poly = ~ delta , poly [:: -1]
+delta = 1 + delta
+coeff = poly [ -1] // poly [0]
+dialog . append (( coeff , is_swap ))
+# 2. Perform omega_x -= coeff * u_x in shared register repr esenta tion .
+for j in range ( len ( poly ) // 2 - 1 , -1 , -1):
+if j < len ( poly ) // 2 + delta // 2:
+poly [ - j - 1] -= poly [ j ] * coeff
+assert poly . pop () == 0
+assert len ( poly ) == 2 * n + 3 - n_iters
+return poly , dialog , delta
+def r s _ s y n d r o m e _ d e c o d e r _ e e a _ d i a l o g _ i n p l a c e ( s : np . ndarray ) -> np . ndarray :
+gf , n = type ( s [0]) , len ( s )
+# Compute the dialog repre sentat ion using Bernstein - Yang style GCD iterations .
+# Shared register stores ( u_x , omega_x ) such that :
+# u_x_ {0} , u_x_ {1} , ... , u_x_ { n } , 0 , 0 , omega_ { n - 1} , omega_ { n - 2} , ... , omega_0
+poly , dialog , delta = c o n s t r u c t _ d i a l o g (s , n - 1)
+def omega_eval ( c ):
+# Evaluate omega using shared register r eprese ntatio n . n_omega = n //2 - delta // 2
+res = gf (0)
+cpow = 1
+for j in range ( n // 2):
+if j < n // 2 - delta // 2:
+res += poly [ - j - 1] * cpow
+cpow = cpow * c
+return res
+def s i g m a _ a n d _ s i g m a _ p r i m e _ e v a l ( c ):
+# Use the dialog repre sentat ion to evaluate sigma and sigma_prime directly .
+eval_w_x , eval_sigma_x = gf (0) , gf (1)
+eval_w_x_prime , e v a l _ s i g m a _ x _ p r i m e = gf (0) , gf (0)
+for coeff , is_swap in dialog :
+if is_swap :
+eval_w_x , eval_sigma_x = eval_sigma_x , eval_w_x
+eval_w_x_prime , e v a l _ s i g m a _ x _ p r i m e = eval_sigma_x_prime , eval _w_x_p rime
+e v a l _ w _ x _ p r i m e _ t i m e s _ c o e f f = e val_w_ x_prim e * coeff
+e v a l _ s i g m a _ x _ p r i m e -= e v a l _ w _ x _ p r i m e _ t i m e s _ c o e f f
+eval_sigma_x_prime = eval_sigma_x_prime * c
+e v a l _ s i g m a _ x _ p r i m e += eval_sigma_x
+e v a l _ w _ x _ t i m e s _ c o e f f = eval_w_x * coeff
+e v a l _ s i g m a _ x _ p r i m e -= e v a l _ w _ x _ t i m e s _ c o e f f
+eval_sigma_x -= e v a l _ w _ x _ t i m e s _ c o e f f
+eval_sigma_x = eval_sigma_x * c
+ct = n // 2 + delta // 2
+eval_sigma_x = eval_sigma_x // c
+e va l _s i g m a _ x _ p r i m e -= ct * eval_sigma_x
+return eval_sigma_x , e v a l _ s i g m a _ x _ p r i m e
+block_length = gf . order - 1
+gammas = gf ([ gf . p r i m i t i v e _ e l e m e n t ** i for i in range ( block_length )])
+errors = gf . Zeros ( block_length )
+for i in range ( block_length ):
+sigma_x_eval , s i g m a _ x _ p r i m e _ e v a l = s i g m a _ a n d _ s i g m a _ p r i m e _ e v a l ( gammas [ i ])
+if sigma_x_eval == 0:
+j = block_length - i if i else i
+const_to_mul = gammas [ j ] * ( gammas [ i ] ** n )
+errors [ j ] = const_to_mul * omega_eval ( gammas [ j ]) * s i g m a _ x _ p r i m e _ e v a l ** -1
+return errors
+
+FIG. 12: Optimized implementation of EEA based syndrome decoder for RS codes using register sharing to
+efficiently compute the Dialog representation and use it to implicitly evaluate Bézout coefficient corresponding to
+polynomial σ(z) and σ ′ (z).
+
+
