@@ -19,6 +19,9 @@ export parity_observable_tensor, observable_tensor
 # Raw transfer oracles
 include("transfer_oracles.jl")
 
+# XOR-convolution / Walsh-Hadamard utilities
+include("wht.jl")
+
 # Tier 2 Basso finite-D helpers
 include("basso_finite_d.jl")
 
