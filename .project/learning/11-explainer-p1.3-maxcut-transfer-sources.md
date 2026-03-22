@@ -104,6 +104,30 @@ This is exactly why the branch documentation now separates:
 - the trusted exact light-cone reference path, and
 - the still-open derivation of the effective branch-transfer object.
 
+### 5. What the current scalar does and does not match
+
+The current Julia port reproduces the **upstream compact MaxCut scalar** exactly,
+but that scalar is not the same as this branch's exact finite-`D` cut fraction.
+
+For concrete small-tree checks:
+
+| Case | Exact finite-`D` `qaoa_expectation` | `maxcut_transfer_objective` |
+|------|-------------------------------------|------------------------------|
+| `D=3, p=1, γ=0.31, β=0.17` | `0.5869839712` | `0.1804390243` |
+| `D=3, p=1, γ*=atan(1/√2), β*=π/8` | `0.6924500897` | `0.2315645509` |
+| `D=3, p=2, γ=(0.21,0.64), β=(0.17,0.39)` | `0.6885673165` | `0.2262887034` |
+
+These values rule out the naive interpretations:
+
+- transfer objective = cut fraction,
+- transfer objective = cut excess over `1/2`,
+- transfer objective = a trivial rescaling like `/2` or `/√(2D)` of the exact
+  finite-`D` edge value.
+
+The safe reading is the one already suggested by the Basso explainer: this is a
+**large-girth / large-`D` normalized objective** of the compact recursion, not a
+finite-`D` observable identity for the exact tree evaluator.
+
 ---
 
 ## What This Means for P1.3

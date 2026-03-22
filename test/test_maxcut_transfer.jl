@@ -12,7 +12,7 @@ using Test
         @test matrix[2, 2] ≈ 1.0 + 0.0im atol = 1e-12
         @test matrix[2, 3] ≈ 0.9427546655283464 + 0.27517414736381im atol = 1e-12
         @test QaoaXorsat.maxcut_transfer_objective(3, angles) ≈
-            0.18043902430464884 atol = 1e-12
+              0.18043902430464884 atol = 1e-12
     end
 
     @testset "p=2 regression" begin
@@ -26,7 +26,7 @@ using Test
         @test matrix[3, 3] ≈ 1.0 + 0.0im atol = 1e-12
         @test matrix[4, 5] ≈ 0.9427546655283464 + 0.3053333590958912im atol = 1e-12
         @test QaoaXorsat.maxcut_transfer_objective(3, angles) ≈
-            0.22628870336650803 atol = 1e-12
+              0.22628870336650803 atol = 1e-12
     end
 
     @testset "corner symmetry" begin
@@ -35,10 +35,10 @@ using Test
         p = depth(angles)
         last_index = 2p + 1
 
-        for row in 1:(p + 1), column in row:(p + 1)
+        for row in 1:(p+1), column in row:(p+1)
             @test matrix[column, row] ≈ matrix[row, column] atol = 1e-12
-            @test matrix[row, last_index - column + 1] ≈ matrix[row, column] atol = 1e-12
-            @test matrix[column, last_index - row + 1] ≈ conj(matrix[row, column]) atol = 1e-12
+            @test matrix[row, last_index-column+1] ≈ matrix[row, column] atol = 1e-12
+            @test matrix[column, last_index-row+1] ≈ conj(matrix[row, column]) atol = 1e-12
         end
     end
 end

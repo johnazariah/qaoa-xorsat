@@ -183,6 +183,23 @@ transfer matrix.
 
 This follows the upstream recursion exactly and is currently used as an
 experimental bridge toward a future exact transfer-tensor implementation.
+
+Important: this scalar is **not** the same object as the branch's exact
+finite-`D` edge satisfaction `qaoa_expectation(TreeParams(2, degree, p), angles;
+clause_sign = -1)`.
+
+For example, at `D = 3`:
+
+- `p = 1`, `(γ, β) = (0.31, 0.17)` gives
+    `maxcut_transfer_objective = 0.1804390243` while
+    `qaoa_expectation = 0.5869839712`
+- `p = 2`, `(γ, β) = ([0.21, 0.64], [0.17, 0.39])` gives
+    `maxcut_transfer_objective = 0.2262887034` while
+    `qaoa_expectation = 0.6885673165`
+
+The transfer objective should therefore be interpreted as the upstream
+large-girth / large-`D` normalized scalar, not as a drop-in finite-`D` cut
+fraction.
 """
 function maxcut_transfer_objective(
     degree::Int,
