@@ -1,5 +1,47 @@
 # Project Journal
 
+## Entry 14 — Experimental MaxCut Transfer-Matrix Port (22 March 2026)
+
+### What was done
+
+Added `src/maxcut_transfer.jl`, an internal Julia port of the compact MaxCut
+transfer-matrix builder used in the public
+`benjaminvillalonga/large-girth-maxcut-qaoa` implementation.
+
+### Code changes
+
+1. Added `src/maxcut_transfer.jl` with:
+    - `MaxCutTransferParams`
+    - the compact `(2p + 1) × (2p + 1)` matrix builder
+    - the broadcast-corner symmetry fill
+    - the upstream-style scalar transfer objective
+
+2. Updated `src/QaoaXorsat.jl` to include the new internal module file.
+
+3. Added `test/test_maxcut_transfer.jl` with regression coverage for:
+    - `p=1` matrix entries and scalar objective
+    - `p=2` matrix entries and scalar objective
+    - matrix corner-symmetry identities
+
+4. Updated `test/runtests.jl` to include the new transfer regression file.
+
+### Important clarification
+
+This does **not** replace the exact finite-tree evaluator in `src/qaoa.jl`.
+
+The compact MaxCut transfer recursion is an upstream implementation reference
+and an experiment in Julia, but its scalar objective is not yet identified with
+this branch's finite-`D` root-clause expectation. Keeping those paths separate is
+intentional.
+
+### Impact on project
+
+- The repository now contains a native Julia copy of the upstream compact MaxCut
+   recursion structure.
+- Future work can compare that compact recursion against the exact local-tree
+   reference without repeatedly mining the external C++ source.
+- Total tests increased from 269 to 300 while keeping the worktree green.
+
 ## Entry 13 — P1.3 Transfer-Source Documentation (22 March 2026)
 
 ### What was done
