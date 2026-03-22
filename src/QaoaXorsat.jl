@@ -16,6 +16,9 @@ export hyperindex_bit, hyperindex_parity
 export leaf_tensor, mixer_tensor, problem_tensor
 export parity_observable_tensor, observable_tensor
 
+# Raw transfer oracles
+include("transfer_oracles.jl")
+
 # Experimental MaxCut transfer recursion
 include("maxcut_transfer.jl")
 

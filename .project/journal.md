@@ -1,5 +1,50 @@
 # Project Journal
 
+## Entry 15 — Raw Multilinear Constraint Transfer Oracle (22 March 2026)
+
+### What was done
+
+Added `src/transfer_oracles.jl` with a small exact helper,
+`contract_constraint_message`, that contracts one raw problem tensor against the
+`k - 1` child branch messages of a constraint and returns the parent-facing
+message.
+
+### Why this matters
+
+This is the smallest exact finite-`D` transfer object that directly addresses
+the P1.3 blocker.
+
+The branch already knew mathematically that non-root constraint updates are
+multilinear rather than entrywise powers, but that fact was only documented.
+The new helper makes it executable and testable.
+
+### Code changes
+
+1. Added `src/transfer_oracles.jl` with:
+   - a flattened hyperindex helper matching the existing raw tensor layout
+   - `contract_constraint_message(child_messages, γ, slice, p; clause_sign=1)`
+
+2. Updated `src/QaoaXorsat.jl` to include the new internal source file.
+
+3. Added `test/test_transfer_oracles.jl` covering:
+   - `k=2` reduction to matrix-vector contraction
+   - multilinearity at `k=3`
+   - zero-angle factorisation
+
+4. Updated `test/runtests.jl` to include the new test file.
+
+### Result
+
+The worktree stays green with 303/303 tests passing.
+
+### Impact on project
+
+- Future exact-transfer derivation work can now compare proposed compressed
+  updates against a concrete raw oracle instead of only against prose.
+- The next natural validation step is the smallest nontrivial finite-`D` case,
+  `(k=3, D=2, p=1)`, using the exact evaluator in `src/qaoa.jl` as the outer
+  correctness anchor.
+
 ## Entry 14 — Experimental MaxCut Transfer-Matrix Port (22 March 2026)
 
 ### What was done
