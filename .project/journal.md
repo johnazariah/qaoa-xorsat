@@ -1,5 +1,64 @@
 # Project Journal
 
+## Entry 12 — P1.3 Exact Light-Cone Reference Evaluator (22 March 2026)
+
+### What was done
+
+Stabilised the `feature/p1.3-contraction` branch around a correctness-first
+implementation of P1.3 instead of continuing to chase the original draft's
+incorrect contraction rule.
+
+### Code changes already present on this branch
+
+1. Added `src/qaoa.jl` with:
+   - explicit light-cone construction for `(k, D, p)`
+   - exact QAOA state preparation on that finite tree
+   - `parity_expectation`
+   - `qaoa_expectation`
+   - a hard guard against oversized exact trees
+
+2. Added `test/test_qaoa.jl` covering:
+   - zero-angle baseline at `(k=3, D=4, p=1)`
+   - the exact MaxCut `p=1` parity formula
+   - the exact MaxCut `p=1` optimum
+   - a `p=2` exact-statevector comparison
+   - the guard behaviour on oversized trees
+
+### Documentation corrections completed now
+
+1. Added `.project/implementation-notes/P1.3.md` explaining why this branch
+   implements an exact reference evaluator rather than the intended `O(4^p)`
+   transfer recursion.
+
+2. Updated `.project/learning/05-tensor-derivation.md` with a concrete
+   "Contraction Ordering" section:
+   - physical round `1` is outermost
+   - physical round `p` is innermost
+   - slice index satisfies `slice = p - round + 1`
+   - concrete example given at `(k=2, D=3, p=2)`
+
+3. Revised `.project/specs/P1.3-contraction.md` so it no longer claims the
+   incorrect non-root constraint update `branch .^ (k-1)`.
+
+### Important result
+
+The main blocker is now sharply identified.
+
+- At variable nodes, identical child branches contribute via entrywise power.
+- At constraint nodes, child contributions are multilinear in the `k-1` child
+  messages and cannot in general be replaced by entrywise power.
+
+That is why the branch stops at a guarded exact evaluator instead of claiming a
+fast but unjustified `O(4^p)` implementation.
+
+### Impact on project
+
+- We now have a trusted reference oracle for all small-tree cases.
+- Any future transfer recursion must reproduce these results before it is used
+  for `(k=3, D=4)` at larger depth.
+- P1.3 is therefore complete as a **reference implementation and validation
+  layer**, while the optimised branch-transfer derivation remains future work.
+
 ## Entry 11 — P1.2 Tensor Network Primitives (21 March 2026)
 
 ### What was done

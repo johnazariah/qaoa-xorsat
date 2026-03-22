@@ -129,6 +129,38 @@ additional constraint shells and a boundary variable shell. For MaxCut
 `(k=2, D=3, p=1)` that means **6 qubits and 5 edges**, not the smaller
 three-node draft tree.
 
+### Contraction Ordering
+
+The indexing used in the code is now fixed:
+
+- root-to-leaf **slice** index `s = 1, ..., p`
+- physical QAOA **round** index `r = 1, ..., p`
+- mapping `s = p - r + 1`
+
+So:
+
+- physical round `1` is the **outermost** slice
+- physical round `p` is the **innermost** slice next to the observable
+
+For the concrete example `(k=2, D=3, p=2)`:
+
+- round `1` lives on slice `2` (closest to the `|+⟩` boundary)
+- round `2` lives on slice `1` (closest to the root observable)
+
+The exact reference evaluator in `src/qaoa.jl` applies the physical circuit in
+that forward order:
+
+1. problem layer with `γ₁`, then mixer layer with `β₁`
+2. problem layer with `γ₂`, then mixer layer with `β₂`
+3. measure the root observable
+
+This agrees with the adopted hyperindex convention from the P1.2 raw tensors:
+the innermost root slice is `(ket₁, bra₁)`, while the outermost slice is
+`(ket_p, bra_p)`.
+
+What is still **not** derived is the effective branch-transfer object that lets
+one contract those raw tensors in `O(4^p)` while preserving this ordering.
+
 The raw P1.2 tensors are still useful **local oracles**, but they are not yet a
 complete derivation of the intended O(4^p) branch-transfer recursion. Two facts
 are now fixed:
@@ -166,3 +198,5 @@ At `γ = β = 0`:
 The root observable then averages uniformly over the computational-basis
 configurations on the root slice, so the expectation value reduces to the random
 baseline `1/2`, as required by Spec P1.3.
+
+The exact evaluator now checks this explicitly for `(k=3, D=4, p=1)`.
