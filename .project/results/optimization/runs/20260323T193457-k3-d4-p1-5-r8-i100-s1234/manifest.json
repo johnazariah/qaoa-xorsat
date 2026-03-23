@@ -1,0 +1,21 @@
+{
+  "run_id": "20260323T193457-k3-d4-p1-5-r8-i100-s1234",
+  "run_kind": "experiment",
+  "runner_label": "unknown",
+  "timestamp_utc": "2026-03-23T19:34:57",
+  "git_commit": "f8c3382ff89c3aff73fd4da99de2f3bab28a7d28",
+  "git_branch": "feature/phase4-optimization",
+  "git_dirty": true,
+  "reliability_artifacts_dir": "",
+  "reliability_artifacts": [],
+  "k": 3,
+  "D": 4,
+  "p_min": 1,
+  "p_max": 5,
+  "clause_sign": 1,
+  "restarts": 8,
+  "maxiters": 100,
+  "seed": 1234,
+  "preserve": true,
+  "result_count": 5
+}

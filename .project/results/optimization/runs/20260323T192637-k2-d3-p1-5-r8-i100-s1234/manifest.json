@@ -1,0 +1,21 @@
+{
+  "run_id": "20260323T192637-k2-d3-p1-5-r8-i100-s1234",
+  "run_kind": "experiment",
+  "runner_label": "devbox",
+  "timestamp_utc": "2026-03-23T19:26:37",
+  "git_commit": "f8c3382ff89c3aff73fd4da99de2f3bab28a7d28",
+  "git_branch": "feature/phase4-optimization",
+  "git_dirty": true,
+  "reliability_artifacts_dir": "results/20260323-192507-f8c3382-maxcut-k2-D3-p1-5.machine",
+  "reliability_artifacts": ["command.txt", "machine-state-before.json", "stderr.txt", "stdout.txt"],
+  "k": 2,
+  "D": 3,
+  "p_min": 1,
+  "p_max": 5,
+  "clause_sign": -1,
+  "restarts": 8,
+  "maxiters": 100,
+  "seed": 1234,
+  "preserve": true,
+  "result_count": 5
+}

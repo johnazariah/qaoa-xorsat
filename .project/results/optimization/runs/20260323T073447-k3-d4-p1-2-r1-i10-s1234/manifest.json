@@ -1,0 +1,17 @@
+{
+  "run_id": "20260323T073447-k3-d4-p1-2-r1-i10-s1234",
+  "timestamp_utc": "2026-03-23T07:34:47",
+  "git_commit": "f8c3382ff89c3aff73fd4da99de2f3bab28a7d28",
+  "git_branch": "feature/phase4-optimization",
+  "git_dirty": true,
+  "k": 3,
+  "D": 4,
+  "p_min": 1,
+  "p_max": 2,
+  "clause_sign": 1,
+  "restarts": 1,
+  "maxiters": 10,
+  "seed": 1234,
+  "preserve": true,
+  "result_count": 2
+}
