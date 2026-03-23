@@ -29,6 +29,12 @@ export basso_parity_expectation, basso_expectation
 # Experimental MaxCut transfer recursion
 include("maxcut_transfer.jl")
 
+# Optimisation helpers
+include("optimization.jl")
+export AngleOptimizationResult
+export canonicalize_angles, random_angles, extend_angles
+export optimize_angles, optimize_depth_sequence
+
 # QAOA evaluation
 include("qaoa.jl")
 export parity_expectation, qaoa_expectation
