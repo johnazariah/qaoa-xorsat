@@ -30,3 +30,6 @@ Thumbs.db
 
 # Jupyter
 .ipynb_checkpoints/
+
+# Generated local machine-state capture artefacts
+/results/

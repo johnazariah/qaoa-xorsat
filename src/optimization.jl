@@ -4,6 +4,8 @@ using Random
 struct AngleOptimizationResult
     angles::QAOAAngles
     value::Float64
+    wall_time_seconds::Float64
+    best_start_wall_time_seconds::Float64
     evaluations::Int
     starts::Int
     iterations::Int
@@ -129,10 +131,13 @@ function optimize_angles(
     best_value = -Inf
     best_iterations = 0
     best_converged = false
+    best_start_wall_time_seconds = 0.0
     total_evaluations = 0
+    optimization_started_at = time_ns()
 
     for guess in guesses
         local_evaluations = Ref(0)
+        started_at = time_ns()
 
         function objective(values)
             local_evaluations[] += 1
@@ -148,7 +153,7 @@ function optimize_angles(
         )
 
         total_evaluations += local_evaluations[]
-
+        elapsed_seconds = (time_ns() - started_at) / 1.0e9
         candidate_angles = angles_from_vector(Optim.minimizer(result), params.p) |> canonicalize_angles
         candidate_value = qaoa_expectation(params, candidate_angles; clause_sign)
 
@@ -157,12 +162,16 @@ function optimize_angles(
             best_value = candidate_value
             best_iterations = Optim.iterations(result)
             best_converged = Optim.converged(result)
+            best_start_wall_time_seconds = elapsed_seconds
         end
     end
 
+    wall_time_seconds = (time_ns() - optimization_started_at) / 1.0e9
     AngleOptimizationResult(
         best_angles,
         best_value,
+        wall_time_seconds,
+        best_start_wall_time_seconds,
         total_evaluations,
         length(guesses),
         best_iterations,

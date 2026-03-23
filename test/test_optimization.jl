@@ -48,6 +48,9 @@ using Test
         @test depth(result.angles) == 1
         @test result.starts == 1
         @test result.evaluations ≥ 1
+        @test result.wall_time_seconds ≥ 0.0
+        @test result.best_start_wall_time_seconds ≥ 0.0
+        @test result.best_start_wall_time_seconds ≤ result.wall_time_seconds
     end
 
     @testset "optimize_depth_sequence warm starts" begin
@@ -65,5 +68,8 @@ using Test
         @test depth(results[1].angles) == 1
         @test depth(results[2].angles) == 2
         @test all(result -> isfinite(result.value), results)
+        @test all(result -> result.wall_time_seconds ≥ 0.0, results)
+        @test all(result -> result.best_start_wall_time_seconds ≥ 0.0, results)
+        @test all(result -> result.best_start_wall_time_seconds ≤ result.wall_time_seconds, results)
     end
 end
