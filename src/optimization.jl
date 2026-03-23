@@ -1,6 +1,25 @@
 using Optim
 using Random
 
+struct AngleOptimizationStartSpec
+    kind::Symbol
+    angles::QAOAAngles
+end
+
+struct AngleOptimizationStartResult
+    kind::Symbol
+    value::Float64
+    wall_time_seconds::Float64
+    evaluations::Int
+    iterations::Int
+    converged::Bool
+end
+
+struct DepthOptimizationBudget
+    restarts::Int
+    maxiters::Int
+end
+
 struct AngleOptimizationResult
     angles::QAOAAngles
     value::Float64
@@ -10,6 +29,11 @@ struct AngleOptimizationResult
     starts::Int
     iterations::Int
     converged::Bool
+    restarts::Int
+    maxiters::Int
+    retry_count::Int
+    best_start_kind::Symbol
+    start_results::Vector{AngleOptimizationStartResult}
 end
 
 default_clause_sign(k::Int) = k == 2 ? -1 : 1
@@ -82,22 +106,77 @@ end
 function build_initial_guesses(
     p::Int,
     initial_guesses::AbstractVector{<:QAOAAngles},
+    initial_guess_kind::Symbol,
     restarts::Int,
     rng,
-)::Vector{QAOAAngles}
+)::Vector{AngleOptimizationStartSpec}
     restarts ≥ 0 || throw(ArgumentError("restarts must be ≥ 0, got $restarts"))
     all(depth(guess) == p for guess in initial_guesses) || throw(ArgumentError(
         "all initial guesses must have depth $p",
     ))
 
-    guesses = canonicalize_angles.(collect(initial_guesses))
-    isempty(guesses) && push!(guesses, random_angles(p; rng))
+    guesses = AngleOptimizationStartSpec[
+        AngleOptimizationStartSpec(initial_guess_kind, canonicalize_angles(guess))
+        for guess in initial_guesses
+    ]
+    isempty(guesses) && push!(guesses, AngleOptimizationStartSpec(:random, random_angles(p; rng)))
 
     for _ in 1:restarts
-        push!(guesses, random_angles(p; rng))
+        push!(guesses, AngleOptimizationStartSpec(:random, random_angles(p; rng)))
     end
 
     guesses
+end
+
+function depth_optimization_budget(
+    p::Int,
+    restarts::Int,
+    maxiters::Int,
+)::DepthOptimizationBudget
+    validate_depth(p)
+    restarts ≥ 0 || throw(ArgumentError("restarts must be ≥ 0, got $restarts"))
+    maxiters ≥ 1 || throw(ArgumentError("maxiters must be ≥ 1, got $maxiters"))
+
+    if p ≤ 3
+        return DepthOptimizationBudget(restarts, maxiters)
+    elseif p == 4
+        return DepthOptimizationBudget(min(restarts, 4), 2 * maxiters)
+    else
+        return DepthOptimizationBudget(min(restarts, 2), 4 * maxiters)
+    end
+end
+
+retry_optimization_budget(maxiters::Int) = maxiters ≥ 1 ? 2 * maxiters : throw(ArgumentError(
+    "maxiters must be ≥ 1, got $maxiters",
+))
+
+function merge_optimization_results(
+    primary::AngleOptimizationResult,
+    secondary::AngleOptimizationResult,
+)::AngleOptimizationResult
+    best = if secondary.value > primary.value
+        secondary
+    elseif secondary.value ≈ primary.value && secondary.converged && !primary.converged
+        secondary
+    else
+        primary
+    end
+
+    AngleOptimizationResult(
+        best.angles,
+        best.value,
+        primary.wall_time_seconds + secondary.wall_time_seconds,
+        best.best_start_wall_time_seconds,
+        primary.evaluations + secondary.evaluations,
+        primary.starts + secondary.starts,
+        best.iterations,
+        best.converged,
+        primary.restarts + secondary.restarts,
+        max(primary.maxiters, secondary.maxiters),
+        primary.retry_count + secondary.retry_count + 1,
+        best.best_start_kind,
+        vcat(primary.start_results, secondary.start_results),
+    )
 end
 
 """
@@ -120,19 +199,22 @@ function optimize_angles(
     restarts::Int=8,
     maxiters::Int=200,
     initial_guesses::AbstractVector{<:QAOAAngles}=QAOAAngles[],
+    initial_guess_kind::Symbol=:seeded,
     rng=Random.default_rng(),
 )::AngleOptimizationResult
     validate_clause_sign(clause_sign)
     maxiters ≥ 1 || throw(ArgumentError("maxiters must be ≥ 1, got $maxiters"))
 
-    guesses = build_initial_guesses(params.p, initial_guesses, restarts, rng)
+    guesses = build_initial_guesses(params.p, initial_guesses, initial_guess_kind, restarts, rng)
 
-    best_angles = first(guesses)
+    best_angles = first(guesses).angles
     best_value = -Inf
     best_iterations = 0
     best_converged = false
     best_start_wall_time_seconds = 0.0
+    best_start_kind = first(guesses).kind
     total_evaluations = 0
+    start_results = AngleOptimizationStartResult[]
     optimization_started_at = time_ns()
 
     for guess in guesses
@@ -141,13 +223,13 @@ function optimize_angles(
 
         function objective(values)
             local_evaluations[] += 1
-            candidate = angles_from_vector(values, params.p) |> canonicalize_angles
+            candidate = angles_from_vector(values, params.p)
             -qaoa_expectation(params, candidate; clause_sign)
         end
 
         result = Optim.optimize(
             objective,
-            angle_vector(guess),
+            angle_vector(guess.angles),
             Optim.LBFGS(),
             Optim.Options(iterations=maxiters, show_trace=false),
         )
@@ -156,6 +238,14 @@ function optimize_angles(
         elapsed_seconds = (time_ns() - started_at) / 1.0e9
         candidate_angles = angles_from_vector(Optim.minimizer(result), params.p) |> canonicalize_angles
         candidate_value = qaoa_expectation(params, candidate_angles; clause_sign)
+        push!(start_results, AngleOptimizationStartResult(
+            guess.kind,
+            candidate_value,
+            elapsed_seconds,
+            local_evaluations[],
+            Optim.iterations(result),
+            Optim.converged(result),
+        ))
 
         if candidate_value > best_value
             best_angles = candidate_angles
@@ -163,6 +253,7 @@ function optimize_angles(
             best_iterations = Optim.iterations(result)
             best_converged = Optim.converged(result)
             best_start_wall_time_seconds = elapsed_seconds
+            best_start_kind = guess.kind
         end
     end
 
@@ -176,6 +267,11 @@ function optimize_angles(
         length(guesses),
         best_iterations,
         best_converged,
+        restarts,
+        maxiters,
+        0,
+        best_start_kind,
+        start_results,
     )
 end
 
@@ -212,15 +308,31 @@ function optimize_depth_sequence(
     warm_start = nothing
 
     for p in validated_p_values
+        budget = depth_optimization_budget(p, restarts, maxiters)
         initial_guesses = isnothing(warm_start) ? QAOAAngles[] : [extend_angles(warm_start, p)]
         result = optimize_angles(
             TreeParams(k, D, p);
             clause_sign,
-            restarts,
-            maxiters,
+            restarts=budget.restarts,
+            maxiters=budget.maxiters,
             initial_guesses,
+            initial_guess_kind=:warm,
             rng,
         )
+
+        if !isnothing(warm_start) && !result.converged
+            retry_result = optimize_angles(
+                TreeParams(k, D, p);
+                clause_sign,
+                restarts=0,
+                maxiters=retry_optimization_budget(budget.maxiters),
+                initial_guesses=[result.angles],
+                initial_guess_kind=:retry,
+                rng,
+            )
+            result = merge_optimization_results(result, retry_result)
+        end
+
         push!(results, result)
         warm_start = result.angles
     end

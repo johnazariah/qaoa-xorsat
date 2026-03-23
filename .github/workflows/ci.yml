@@ -7,23 +7,121 @@ on:
     branches: [main]
 
 jobs:
-  test:
-    name: Julia Tests
+  # ── Layer 0: Package health ────────────────────────────────────────────────
+  setup:
+    name: "Setup & Instantiate"
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        julia-version: ['1']
     steps:
       - uses: actions/checkout@v4
-
       - uses: julia-actions/setup-julia@v2
-        with:
-          version: ${{ matrix.julia-version }}
-
+        with: { version: '1' }
       - uses: julia-actions/cache@v2
+      - run: julia --project=. -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'
 
-      - name: Instantiate
-        run: julia --project=. -e 'using Pkg; Pkg.instantiate()'
+  # ── Layer 1: Tree & tensor primitives ──────────────────────────────────────
+  primitives:
+    name: "Layer 1 — Tree counting & tensor primitives"
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with: { version: '1' }
+      - uses: julia-actions/cache@v2
+      - run: julia --project=. -e 'using Pkg; Pkg.instantiate()'
+      - name: Tree counting (TreeParams, node counts, monotonicity)
+        run: |
+          julia --project=. -e '
+            using Test, QaoaXorsat
+            @testset verbose=true "Tree" begin include("test/test_tree.jl") end
+          '
+      - name: Tensor primitives (hyperindex, leaf, mixer, problem, observable)
+        run: |
+          julia --project=. -e '
+            using Test, QaoaXorsat
+            @testset verbose=true "Tensors" begin include("test/test_tensors.jl") end
+          '
 
-      - name: Run tests
-        run: julia --project=. -e 'using Pkg; Pkg.test()'
+  # ── Layer 2: Brute-force oracle & golden values ────────────────────────────
+  oracle:
+    name: "Layer 2 — Brute-force oracle & known results"
+    needs: primitives
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with: { version: '1' }
+      - uses: julia-actions/cache@v2
+      - run: julia --project=. -e 'using Pkg; Pkg.instantiate()'
+      - name: "QAOA evaluation (zero-angle baseline, MaxCut p=1 formula, p=1 optimum 0.6924, p=2 cross-check, k=3 reference)"
+        run: |
+          julia --project=. -e '
+            using Test, QaoaXorsat
+            @testset verbose=true "QAOA oracle" begin include("test/test_qaoa.jl") end
+          '
+
+  # ── Layer 3: Basso finite-D iteration ──────────────────────────────────────
+  basso:
+    name: "Layer 3 — Basso finite-D (exact at any D)"
+    needs: oracle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with: { version: '1' }
+      - uses: julia-actions/cache@v2
+      - run: julia --project=. -e 'using Pkg; Pkg.instantiate()'
+      - name: Basso helpers (gamma vector, f-function, iteration)
+        run: |
+          julia --project=. -e '
+            using Test, QaoaXorsat
+            @testset verbose=true "Basso" begin include("test/test_basso_finite_d.jl") end
+          '
+      - name: Transfer oracles
+        run: |
+          julia --project=. -e '
+            using Test, QaoaXorsat
+            @testset verbose=true "Transfer" begin include("test/test_transfer_oracles.jl") end
+          '
+      - name: MaxCut transfer matrix
+        run: |
+          julia --project=. -e '
+            using Test, QaoaXorsat
+            @testset verbose=true "MaxCut transfer" begin include("test/test_maxcut_transfer.jl") end
+          '
+
+  # ── Layer 4: WHT factorisation ─────────────────────────────────────────────
+  wht:
+    name: "Layer 4 — WHT constraint fold (naive vs fast, p=1,2,3)"
+    needs: basso
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with: { version: '1' }
+      - uses: julia-actions/cache@v2
+      - run: julia --project=. -e 'using Pkg; Pkg.instantiate()'
+      - name: "WHT factorisation verification (machine-precision agreement at p=1,2,3)"
+        run: |
+          julia --project=. -e '
+            using Test, QaoaXorsat
+            @testset verbose=true "WHT" begin include("test/test_wht_factorisation.jl") end
+          '
+
+  # ── Layer 5: Optimisation infrastructure ───────────────────────────────────
+  optimization:
+    name: "Layer 5 — Angle optimisation"
+    needs: wht
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with: { version: '1' }
+      - uses: julia-actions/cache@v2
+      - run: julia --project=. -e 'using Pkg; Pkg.instantiate()'
+      - name: Optimisation helpers (random_angles, warm-start, L-BFGS wrapper)
+        run: |
+          julia --project=. -e '
+            using Test, QaoaXorsat
+            @testset verbose=true "Optimization" begin include("test/test_optimization.jl") end
+          '

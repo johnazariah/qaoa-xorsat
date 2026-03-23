@@ -5,6 +5,18 @@
 **Status**: All passing
 **Coverage**: 100% line coverage on `src/`
 
+Operational policy for how verification, experimentation, benchmarking, and
+result preservation should be run now lives in `.project/protocols/testing-benchmarking-policy.md`.
+
+For a formal overview of how those pieces fit together, see
+`.project/protocols/testing-protocol.md`.
+
+For the formal experiment and benchmark methodology, see
+`.project/protocols/experimentation-benchmarking-protocol.md`.
+
+For the formal reproduction methodology, see
+`.project/protocols/reproduction-protocol.md`.
+
 ---
 
 ## Summary by Component

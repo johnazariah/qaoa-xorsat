@@ -30,6 +30,20 @@ using Test
         @test extended.β == [0.1, 0.3, 0.3, 0.3]
     end
 
+    @testset "depth_optimization_budget" begin
+        budget_p3 = QaoaXorsat.depth_optimization_budget(3, 8, 200)
+        budget_p4 = QaoaXorsat.depth_optimization_budget(4, 8, 200)
+        budget_p5 = QaoaXorsat.depth_optimization_budget(5, 8, 200)
+
+        @test budget_p3.restarts == 8
+        @test budget_p3.maxiters == 200
+        @test budget_p4.restarts == 4
+        @test budget_p4.maxiters == 400
+        @test budget_p5.restarts == 2
+        @test budget_p5.maxiters == 800
+        @test QaoaXorsat.retry_optimization_budget(200) == 400
+    end
+
     @testset "optimize_angles MaxCut p=1" begin
         params = TreeParams(2, 3, 1)
         optimum = 0.5 + sqrt(3) / 9
@@ -51,6 +65,44 @@ using Test
         @test result.wall_time_seconds ≥ 0.0
         @test result.best_start_wall_time_seconds ≥ 0.0
         @test result.best_start_wall_time_seconds ≤ result.wall_time_seconds
+        @test result.restarts == 0
+        @test result.maxiters == 100
+        @test result.retry_count == 0
+        @test result.best_start_kind == :seeded
+        @test length(result.start_results) == 1
+    end
+
+    @testset "optimize_angles start telemetry" begin
+        result = optimize_angles(
+            TreeParams(2, 3, 1);
+            clause_sign=-1,
+            restarts=1,
+            maxiters=5,
+            initial_guesses=[QAOAAngles([0.7], [0.3])],
+            rng=MersenneTwister(19),
+        )
+
+        @test result.starts == 2
+        @test result.restarts == 1
+        @test result.maxiters == 5
+        @test length(result.start_results) == 2
+        @test [start.kind for start in result.start_results] == [:seeded, :random]
+        @test all(start -> start.evaluations ≥ 1, result.start_results)
+        @test all(start -> start.wall_time_seconds ≥ 0.0, result.start_results)
+    end
+
+    @testset "optimize_angles canonicalizes stored result angles" begin
+        result = optimize_angles(
+            TreeParams(2, 3, 1);
+            clause_sign=-1,
+            restarts=0,
+            maxiters=5,
+            initial_guesses=[QAOAAngles([-0.7], [π + 0.3])],
+            rng=MersenneTwister(23),
+        )
+
+        @test all(0.0 ≤ γ < 2π for γ in result.angles.γ)
+        @test all(0.0 ≤ β < π for β in result.angles.β)
     end
 
     @testset "optimize_depth_sequence warm starts" begin
@@ -71,5 +123,10 @@ using Test
         @test all(result -> result.wall_time_seconds ≥ 0.0, results)
         @test all(result -> result.best_start_wall_time_seconds ≥ 0.0, results)
         @test all(result -> result.best_start_wall_time_seconds ≤ result.wall_time_seconds, results)
+        @test results[1].best_start_kind in (:random, :seeded)
+        @test results[2].best_start_kind in (:warm, :random, :retry)
+        @test results[2].restarts == 0
+        @test results[2].maxiters in (5, 10)
+        @test all(result -> !isempty(result.start_results), results)
     end
 end

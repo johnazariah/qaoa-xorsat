@@ -1,5 +1,77 @@
 # Project Journal
 
+## Entry 17 — P1.4 Optimisation, Archive Preservation, and PR #4 Merge (23 March 2026)
+
+### What was done
+
+Completed the first operational Phase 4 optimisation layer, merged it to
+`main` via PR `#4`, and then consolidated the surrounding protocol and archive
+documentation.
+
+### P1.4 code and workflow changes
+
+1. Added the Phase 4 angle-optimisation scaffolding on the optimisation branch:
+   - multistart L-BFGS angle search
+   - warm-start extension between successive depths
+   - canonical angle handling and result packaging
+
+2. Extended the optimiser to collect per-start telemetry and depth-aware budget
+   selection:
+   - recorded per-start runtime, evaluation counts, iterations, convergence,
+     and start kind
+   - introduced heuristic per-depth restart / iteration budgets
+   - added a retry pass for non-converged warm-started depths
+
+3. Extended the optimisation result archive and CLI output:
+   - persistent per-run manifests and result tables under the canonical
+     optimisation archive
+   - aggregate index support for the richer schema
+   - new preserved fields including `retry_count` and `best_start_kind`
+
+4. Added verification for the new optimisation machinery:
+   - budgeting behaviour
+   - start telemetry
+   - retry-aware sequencing
+   - archive schema compatibility
+
+### PR and branch integration
+
+1. Cleaned the Phase 4 worktree without losing concurrent useful work.
+2. Committed the archive-preservation and timing-metadata changes as:
+   - `eaae086 feat: preserve optimization archives and timing metadata`
+3. Opened PR `#4` from `feature/phase4-optimization`.
+4. Reviewed and merged PR `#4` into `main`.
+5. Landed the merge on `main` as:
+   - `b74226c Merge pull request #4 from johnazariah/feature/phase4-optimization`
+6. Deleted the feature worktree and cleaned up the feature branch after merge.
+
+### Validation
+
+- The full Julia test suite was re-run successfully after the optimisation
+  changes and again after the merge to `main`.
+- The merged branch preserved the optimisation archive workflow and timing
+  metadata without regressing the existing exact-evaluator stack.
+
+### Documentation changes around the merge
+
+The optimisation merge also triggered a broader documentation cleanup:
+
+1. formal testing, experimentation/benchmarking, reproduction, and optimisation
+   data protocols were written and moved under `.project/protocols/`
+2. the testing register and related operational notes were updated to point at
+   the new canonical protocol locations
+3. Mermaid-backed diagrams for the protocol documents were validated against
+   their current document-backed previews
+
+### Impact on project
+
+- Phase 4 is no longer just a placeholder in the plan; the repository now has a
+  working optimisation layer with provenance-rich result preservation.
+- `main` now contains the end-to-end path needed to compute and archive QAOA
+  performance curves for `(k, D, p)` sweeps.
+- The surrounding methods and operational documentation are now structured well
+  enough to support both internal experimentation and paper-facing reporting.
+
 ## Entry 16 — Smallest Exact Finite-D XORSAT Target (22 March 2026)
 
 ### What was done

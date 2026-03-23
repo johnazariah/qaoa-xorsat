@@ -72,17 +72,20 @@
 
 ## Phase 2 — Literature Deep Dive & Existing Code
 
-- [ ] Read the full PDF of arXiv:2110.14206 carefully, especially:
-  - Section on generalisation to Max-q-XORSAT
-  - Their iterative formula and its derivation
-  - Their code (check if a GitHub repo exists)
-- [ ] Read arXiv:2503.12789 for the direct tree-enumeration method details.
-- [ ] Read arXiv:1411.4028 Sections 3-5 for the original direct calculation on 3-regular MaxCut.
-- [ ] Search for existing open-source QAOA tree-evaluation code:
-  - QAOAKit (https://github.com/QAOAKit)
-  - Basso et al. code
-  - Farhi/Villalonga code
-  - Any Julia/Python/C++ implementations
+- [x] Read the full PDF of arXiv:2110.14206 carefully, especially:
+  - Section on generalisation to Max-q-XORSAT → implemented as Tier 2 evaluator
+  - Their iterative formula and its derivation → Eq. 8.7 implemented in `src/basso_finite_d.jl`
+  - Their code → `github.com/benjaminvillalonga/large-girth-maxcut-qaoa` identified; MaxCut transfer ported to `src/maxcut_transfer.jl`
+- [x] Read arXiv:2503.12789 for the direct tree-enumeration method details.
+  - Identified that the O(4^p) trick does not extend to k>2 (constraint node multilinearity)
+  - Led to the WHT factorisation discovery (`learning/15-wht-factorisation-discovery.md`)
+- [x] Read arXiv:1411.4028 Sections 3-5 for the original direct calculation on 3-regular MaxCut.
+  - p=1 analytical formula validated in `test/test_qaoa.jl`
+  - Optimal angles (γ*=atan(1/√2), β*=π/8) confirmed to machine precision
+- [x] Search for existing open-source QAOA tree-evaluation code:
+  - Basso/Villalonga: `large-girth-maxcut-qaoa` (Python/C++) — MaxCut only, ported
+  - QAOAKit: checked, not relevant (gate-level simulation, not tree contraction)
+  - No existing Julia or k>2 implementations found — our code is novel
 
 ## Phase 3 — Implementation
 
@@ -102,16 +105,17 @@
   - MaxCut `p=1` optimum and `p=2` exact-statevector comparisons are covered in `test/test_qaoa.jl`.
   - Small exact finite-D overlap checks for `k=3` are covered in `test/test_qaoa.jl` and `test/test_basso_finite_d.jl`.
 - [ ] Optimise:
-  - Exploit symmetries of the tree to reduce state-space dimension
-  - Memory-efficient representation (the tree state lives in a 2^(#leaves) Hilbert space)
+  - [x] Exploit symmetries of the tree to reduce state-space dimension
+  - [x] Memory-efficient representation (the tree state lives in a 2^(#leaves) Hilbert space)
   - Parallelise over angles during optimisation
 
 ## Phase 4 — Computation & Optimisation
 
 - [ ] For (k=3, D=4), compute optimal QAOA performance at each depth p=1,2,3,…,p_max
-  - Optimise over 2p angles (γ₁,…,γₚ, β₁,…,βₚ)
-  - Use gradient-based optimisation (L-BFGS or similar) with multiple random restarts
-  - Record optimal angles and achieved fraction
+  - [x] Optimise over 2p angles (γ₁,…,γₚ, β₁,…,βₚ)
+  - [x] Use gradient-based optimisation (L-BFGS or similar) with multiple random restarts
+  - [x] Record optimal angles and achieved fraction
+  - Initial exploratory and reproduction-grade runs now exist for early depths, but the full p=1..p_max sweep remains incomplete.
 - [ ] Determine p_max achievable on available hardware:
   - Estimate memory and time vs. p for (k=3, D=4)
   - The tree at depth p has O((D-1)^p · (k-1)^p) = O(3^p · 2^p) = O(6^p) leaves → Hilbert space ~2^(6^p) — this is **extremely** expensive
@@ -123,7 +127,8 @@
 
 ## Phase 5 — Comparison with DQI
 
-- [ ] Obtain Stephen's DQI numbers for (k=3, D=4)
+- [x] Obtain Stephen's DQI numbers for (k=3, D=4)
+  - Data recorded in `learning/04-our-problem.md`: DQI+BP=0.87065, Prange=0.875, Regev+FGUM=0.89187, SA=0.9366
 - [ ] Produce comparison table/plot: fraction satisfied vs. p for QAOA alongside DQI bound
 - [ ] Analyse: at what p (if any) does QAOA surpass DQI?
 

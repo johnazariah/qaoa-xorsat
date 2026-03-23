@@ -83,6 +83,8 @@ It stores one row per `(run_id, p)` with the columns:
 - `starts`
 - `iterations`
 - `converged`
+- `retry_count`
+- `best_start_kind`
 - `gamma`
 - `beta`
 
@@ -105,6 +107,8 @@ For optimisation-quality charts:
 
 - compare `value` against `evaluations`, `starts`, and `iterations`
 - separate `converged=true` from capped runs
+- use `retry_count` to identify depths that needed an extra warm-seed pass
+- use `best_start_kind` to distinguish warm-start wins from random-start wins
 
 ## Interpretation Rule
 
