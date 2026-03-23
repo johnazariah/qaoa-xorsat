@@ -1,2 +1,0 @@
-run_id,run_kind,runner_label,timestamp_utc,git_commit,git_branch,git_dirty,k,D,p,clause_sign,restarts,maxiters,seed,value,wall_time_seconds,best_start_wall_time_seconds,evaluations,starts,iterations,converged,gamma,beta
-20260323T081203-k3-d4-p1-1-r0-i1-s1234,benchmark,testbed-48gb,2026-03-23T08:12:03,f8c3382ff89c3aff73fd4da99de2f3bab28a7d28,feature/phase4-optimization,true,3,4,1,1,0,1,1234,0.582424094192,0.584810,0.584804,16,1,1,false,3.3714197951420513,0.38633432046477134

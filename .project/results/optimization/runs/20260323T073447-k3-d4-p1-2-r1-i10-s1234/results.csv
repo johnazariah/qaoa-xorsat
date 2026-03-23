@@ -1,3 +1,0 @@
-run_id,timestamp_utc,git_commit,git_branch,git_dirty,k,D,p,clause_sign,restarts,maxiters,seed,value,wall_time_seconds,best_start_wall_time_seconds,evaluations,starts,iterations,converged,gamma,beta
-20260323T073447-k3-d4-p1-2-r1-i10-s1234,2026-03-23T07:34:47,f8c3382ff89c3aff73fd4da99de2f3bab28a7d28,feature/phase4-optimization,true,3,4,1,1,1,10,1234,0.676056660061,0.584840,0.584689,157,2,7,true,3.6916431696544545,0.28737134807810527
-20260323T073447-k3-d4-p1-2-r1-i10-s1234,2026-03-23T07:34:47,f8c3382ff89c3aff73fd4da99de2f3bab28a7d28,feature/phase4-optimization,true,3,4,2,1,1,10,1234,0.739122784672,0.004394,0.001934,515,2,10,true,3.5640534755645064;3.86278593339622,0.36359242181315904;0.2114573995376759
