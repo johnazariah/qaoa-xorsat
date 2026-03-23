@@ -56,13 +56,16 @@
 
 ## Phase 1 — Mathematical Foundation
 
-- [ ] Derive the QAOA expectation value formula for a single k-XORSAT constraint on a D-regular k-uniform hypergraph, at depth p, via the light-cone / local-tree method.
+- [x] Derive the QAOA expectation value formula for a single k-XORSAT constraint on a D-regular k-uniform hypergraph, at depth p, via the light-cone / local-tree method.
   - For MaxCut (k=2), the light cone at depth p is a tree of depth p rooted at the edge. Each vertex at the boundary is in the uniform superposition state.
   - For k-XORSAT, the light cone is a tree of depth p rooted at a **hyperedge** connecting k variable nodes, each of which has D-1 other neighbouring hyperedges, each of which connects to k-1 other variable nodes, etc., out to depth p.
   - The tree structure alternates: hyperedge → variable → hyperedge → variable → …
   - At depth p the tree has a computable (but exponentially growing) number of leaves.
-- [ ] Characterise the tree structure precisely for (k=3, D=4) and determine tree sizes for p=1,2,…,12+.
-- [ ] Write down the QAOA unitary decomposition on the tree and the resulting expectation value as a function of (γ₁,…,γₚ, β₁,…,βₚ).
+  - Landed as the exact Tier 1 light-cone reference in `src/qaoa.jl` and the exact Tier 2 finite-D branch-transfer evaluator in `src/basso_finite_d.jl`.
+- [x] Characterise the tree structure precisely for (k=3, D=4) and determine tree sizes for p=1,2,…,12+.
+  - `src/tree.jl` now exposes `TreeParams`, shell counts, total node counts, and leaf counts for arbitrary `(k, D, p)`.
+- [x] Write down the QAOA unitary decomposition on the tree and the resulting expectation value as a function of (γ₁,…,γₚ, β₁,…,βₚ).
+  - The physical round convention, raw tensor decomposition, and exact finite-D root observable are now encoded across `src/tensors.jl`, `src/qaoa.jl`, and `src/basso_finite_d.jl`.
 - [x] Implement the raw tensor-network primitives for the light-cone sandwich (Spec P1.2):
   - `src/tensors.jl` now defines `QAOAAngles`, hyperindex utilities, and raw leaf/mixer/problem/observable tensors
   - `learning/05-tensor-derivation.md` records the hyperindex convention and contraction-ordering notes needed for P1.3
@@ -83,18 +86,21 @@
 
 ## Phase 3 — Implementation
 
-- [ ] Choose language/stack. Candidates:
+- [x] Choose language/stack. Candidates:
   - **Julia** — good numerics, easy parallelism, fast prototyping
   - **Python + NumPy/JAX** — JAX for auto-diff of angles + GPU, but may be slow for tree enumeration
   - **C++/Rust** — for maximum performance on the exponential tree computation
   - **Hybrid** — Julia or Python driver with C/Rust core for the inner loop
-- [ ] Implement the core computation:
+- [x] Implement the core computation:
   1. Build the (k,D,p) tree structure (factor graph: variable nodes ↔ hyperedge nodes)
   2. Compute QAOA state on this tree for given (γ,β) angles
   3. Evaluate expected fraction of satisfied constraints for the root hyperedge
-- [ ] Validate against known results:
+  - The repo now has both a guarded exact light-cone reference path and an exact finite-D Tier 2 evaluator wired through the public API.
+- [x] Validate against known results:
   - k=2 (MaxCut) on 3-regular: p=1 should give ≥0.6924 (Farhi et al. 2014)
   - Compare with Basso et al. iterative formula at large D (should nearly agree)
+  - MaxCut `p=1` optimum and `p=2` exact-statevector comparisons are covered in `test/test_qaoa.jl`.
+  - Small exact finite-D overlap checks for `k=3` are covered in `test/test_qaoa.jl` and `test/test_basso_finite_d.jl`.
 - [ ] Optimise:
   - Exploit symmetries of the tree to reduce state-space dimension
   - Memory-efficient representation (the tree state lives in a 2^(#leaves) Hilbert space)
@@ -149,13 +155,13 @@ For k=3, D=4: branching = 3×2 = 6. Leaves at depth p ≈ 3·6^p.
 | 1 | ~21 | 2²¹ ≈ 2M | trivial |
 | 2 | ~129 | 2¹²⁹ | intractable naively |
 
-**Key insight**: We do NOT need to store the full state vector. The QAOA unitaries are products of diagonal (problem) and transversal (mixer) gates. On a tree, the computation can be done via a **contraction from leaves to root**, analogous to belief propagation. This is the approach used in the referenced papers and is the key to making this tractable.
+**Key insight**: We do NOT need to store the full state vector once we leave the guarded reference regime. The QAOA unitaries are products of diagonal (problem) and transversal (mixer) gates, and the exact finite-D production path now contracts from leaves to root via branch tensors and Walsh-Hadamard/XOR-convolution structure.
 
-The cost is then determined by the bond dimension at each cut of the tree, which for a path from root to leaf of length p is 2^(width at that cut). With careful scheduling, this can be done in time/space polynomial in 2^p times lower-order factors — matching the O(p² · 4^p) scaling quoted by Basso et al.
+The current exact evaluator keeps the Tier 1 statevector path only as a small-tree oracle and uses the Tier 2 finite-D transfer contraction for real work. The working target complexity is `O(p² · 4^p)` overall for fixed `(k, D)` rather than naive explicit-tree evolution.
 
 ## Open Questions
 
-1. Does the Basso et al. iterative formula extend straightforwardly to exact (finite-D) computation, or is the large-D limit baked in?
-2. What is the precise tensor-network contraction cost for the direct method at (k=3, D=4)?
-3. Are there existing implementations we can build on, or do we need to write from scratch?
+1. The exact finite-D recurrence is now implemented; the remaining question is empirical throughput and optimisation cost at `(k=3, D=4)` for increasing `p`.
+2. What `p_max` is practical on available hardware once full angle optimisation and multiple restarts are included?
+3. Are there existing optimisation / scheduling implementations we can build on, or do we need to write that layer from scratch?
 4. What p values does Stephen need for a meaningful DQI comparison?
