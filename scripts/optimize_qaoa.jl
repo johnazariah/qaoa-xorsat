@@ -112,6 +112,14 @@ function write_results_csv(file_path, rows)
     end
 end
 
+function append_results_csv_row(file_path, row)
+    file_exists = isfile(file_path)
+    open(file_path, file_exists ? "a" : "w") do io
+        file_exists || println(io, result_csv_header())
+        println(io, row)
+    end
+end
+
 function manifest_string_field(file_path, field_name; default="")
     if !isfile(file_path)
         return default
@@ -222,7 +230,60 @@ function write_manifest_json(file_path; run_id, run_kind_value, runner_label_val
     end
 end
 
-function preserve_run(results, k, D, p_min, p_max, clause_sign, restarts, maxiters, seed, preserve)
+mutable struct RunPreservationContext
+    run_dir::String
+    run_id::String
+    run_kind_value::String
+    runner_label_value::String
+    reliability_dir::String
+    reliability_files::Vector{String}
+    timestamp_utc::String
+    git_commit::String
+    git_branch::String
+    git_dirty::Bool
+    base_dir::String
+    runs_dir::String
+    results_path::String
+    manifest_path::String
+    index_path::String
+    k::Int
+    D::Int
+    p_min::Int
+    p_max::Int
+    clause_sign::Int
+    restarts::Int
+    maxiters::Int
+    seed::Int
+    preserve::Bool
+    result_count::Int
+end
+
+function write_manifest!(context::RunPreservationContext)
+    write_manifest_json(
+        context.manifest_path;
+        run_id=context.run_id,
+        run_kind_value=context.run_kind_value,
+        runner_label_value=context.runner_label_value,
+        reliability_dir=context.reliability_dir,
+        reliability_files=context.reliability_files,
+        timestamp_utc=context.timestamp_utc,
+        git_commit=context.git_commit,
+        git_branch=context.git_branch,
+        git_dirty=context.git_dirty,
+        k=context.k,
+        D=context.D,
+        p_min=context.p_min,
+        p_max=context.p_max,
+        clause_sign=context.clause_sign,
+        restarts=context.restarts,
+        maxiters=context.maxiters,
+        seed=context.seed,
+        preserve=context.preserve,
+        result_count=context.result_count,
+    )
+end
+
+function initialize_run_preservation(k, D, p_min, p_max, clause_sign, restarts, maxiters, seed, preserve)
     timestamp = Dates.now(Dates.UTC)
     timestamp_utc = Dates.format(timestamp, dateformat"yyyy-mm-ddTHH:MM:SS")
     run_stamp = Dates.format(timestamp, dateformat"yyyymmddTHHMMSS")
@@ -237,15 +298,16 @@ function preserve_run(results, k, D, p_min, p_max, clause_sign, restarts, maxite
     base_dir = ensure_directory(joinpath(@__DIR__, "..", ".project", "results", "optimization"))
     runs_dir = ensure_directory(joinpath(base_dir, "runs"))
     run_dir = ensure_directory(joinpath(runs_dir, run_id))
+    results_path = joinpath(run_dir, "results.csv")
+    manifest_path = joinpath(run_dir, "manifest.json")
+    index_path = joinpath(base_dir, "index.csv")
 
-    rows = [
-        result_csv_row(run_id, run_kind_value, runner_label_value, timestamp_utc, git_commit, git_branch, git_dirty, k, D, clause_sign, restarts, maxiters, seed, result)
-        for result in results
-    ]
+    open(results_path, "w") do io
+        println(io, result_csv_header())
+    end
 
-    write_results_csv(joinpath(run_dir, "results.csv"), rows)
-    write_manifest_json(
-        joinpath(run_dir, "manifest.json");
+    context = RunPreservationContext(
+        run_dir,
         run_id,
         run_kind_value,
         runner_label_value,
@@ -255,6 +317,11 @@ function preserve_run(results, k, D, p_min, p_max, clause_sign, restarts, maxite
         git_commit,
         git_branch,
         git_dirty,
+        base_dir,
+        runs_dir,
+        results_path,
+        manifest_path,
+        index_path,
         k,
         D,
         p_min,
@@ -264,11 +331,41 @@ function preserve_run(results, k, D, p_min, p_max, clause_sign, restarts, maxite
         maxiters,
         seed,
         preserve,
-        result_count=length(results),
+        0,
     )
-    append_results_index(joinpath(base_dir, "index.csv"), runs_dir, rows)
+    write_manifest!(context)
 
-    run_dir, run_id
+    context
+end
+
+function append_preserved_result!(context::RunPreservationContext, result)
+    row = result_csv_row(
+        context.run_id,
+        context.run_kind_value,
+        context.runner_label_value,
+        context.timestamp_utc,
+        context.git_commit,
+        context.git_branch,
+        context.git_dirty,
+        context.k,
+        context.D,
+        context.clause_sign,
+        context.restarts,
+        context.maxiters,
+        context.seed,
+        result,
+    )
+    append_results_csv_row(context.results_path, row)
+    append_results_index(context.index_path, context.runs_dir, [row])
+    context.result_count += 1
+    write_manifest!(context)
+end
+
+function preserve_run(results, k, D, p_min, p_max, clause_sign, restarts, maxiters, seed, preserve)
+    context = initialize_run_preservation(k, D, p_min, p_max, clause_sign, restarts, maxiters, seed, preserve)
+    foreach(result -> append_preserved_result!(context, result), results)
+
+    context.run_dir, context.run_id
 end
 
 length(ARGS) ≥ 4 || (usage(); exit(1))
@@ -286,18 +383,19 @@ p_max ≥ p_min || error("P_MAX must be ≥ P_MIN")
 
 rng = MersenneTwister(seed)
 clause_sign = k == 2 ? -1 : 1
-results = optimize_depth_sequence(k, D, collect(p_min:p_max); clause_sign, restarts, maxiters, rng)
+println("p,value,wall_time_seconds,best_start_wall_time_seconds,evaluations,starts,iterations,converged,retry_count,best_start_kind,gamma,beta")
+flush(stdout)
 
+preservation_context = preserve ? initialize_run_preservation(k, D, p_min, p_max, clause_sign, restarts, maxiters, seed, preserve) : nothing
 if preserve
-    run_dir, run_id = preserve_run(results, k, D, p_min, p_max, clause_sign, restarts, maxiters, seed, preserve)
-    println(stderr, "preserved run_id=$(run_id)")
-    println(stderr, "preserved directory=$(run_dir)")
+    println(stderr, "preserved run_id=$(preservation_context.run_id)")
+    println(stderr, "preserved directory=$(preservation_context.run_dir)")
 else
     println(stderr, "preservation disabled")
 end
+flush(stderr)
 
-println("p,value,wall_time_seconds,best_start_wall_time_seconds,evaluations,starts,iterations,converged,retry_count,best_start_kind,gamma,beta")
-for result in results
+function emit_result(result)
     @printf(
         "%d,%.12f,%.6f,%.6f,%d,%d,%d,%s,%d,%s,%s,%s\n",
         depth(result.angles),
@@ -313,4 +411,20 @@ for result in results
         join(string.(result.angles.γ), ';'),
         join(string.(result.angles.β), ';'),
     )
+    flush(stdout)
+
+    if !isnothing(preservation_context)
+        append_preserved_result!(preservation_context, result)
+    end
 end
+
+results = optimize_depth_sequence(
+    k,
+    D,
+    collect(p_min:p_max);
+    clause_sign,
+    restarts,
+    maxiters,
+    rng,
+    on_result=emit_result,
+)

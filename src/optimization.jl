@@ -231,7 +231,7 @@ function optimize_angles(
             objective,
             angle_vector(guess.angles),
             Optim.LBFGS(),
-            Optim.Options(iterations=maxiters, show_trace=false),
+            Optim.Options(iterations=maxiters, g_abstol=1.0e-6, show_trace=false),
         )
 
         total_evaluations += local_evaluations[]
@@ -300,6 +300,7 @@ function optimize_depth_sequence(
     restarts::Int=8,
     maxiters::Int=200,
     rng=Random.default_rng(),
+    on_result=nothing,
 )::Vector{AngleOptimizationResult}
     validate_clause_sign(clause_sign)
     validated_p_values = validate_depth_sequence(collect(Int, p_values))
@@ -334,6 +335,7 @@ function optimize_depth_sequence(
         end
 
         push!(results, result)
+        isnothing(on_result) || on_result(result)
         warm_start = result.angles
     end
 

@@ -1,5 +1,69 @@
 # Project Journal
 
+## Entry 18 — Clean Phase 4 p=1..5 XORSAT Sweep After Convergence Tolerance Fix (23 March 2026)
+
+### What was done
+
+Confirmed that the immediate convergence issue at `(k=3, D=4, p=5)` was caused
+by an over-strict gradient stopping rule for finite-difference L-BFGS, then
+relaxed the optimiser tolerance and reran the early-depth sweep.
+
+### Optimiser change
+
+1. Removed objective-side canonicalization from the optimisation loop so the
+   search no longer crosses unnecessary periodic discontinuities.
+2. Relaxed the active `Optim.jl` gradient convergence threshold from the
+   default `g_abstol = 1e-8` to `g_abstol = 1e-6`.
+
+The practical interpretation is that L-BFGS is no longer being asked to drive a
+finite-difference gradient estimate below its numerical noise floor.
+
+### Validation status
+
+- The optimisation tests remained green.
+- The full Julia suite remained green at `653/653`.
+
+### Experimental results
+
+Reproduced the MaxCut validation sweep `(k=2, D=3, p=1..5)` and matched Farhi
+2025 Table 1 to at least three decimal places.
+
+Then ran the target XORSAT sweep `(k=3, D=4, p=1..5)` and obtained:
+
+| p | c̃(p) | SA target | Gap | Converged | Iterations | Wall time |
+|---|-------|-----------|-----|-----------|------------|-----------|
+| 1 | 0.6761 | 0.9366 | 0.2606 | true | 5 | 0.6 s |
+| 2 | 0.7391 | 0.9366 | 0.1975 | true | 16 | 0.07 s |
+| 3 | 0.7771 | 0.9366 | 0.1595 | true | 10 | 0.5 s |
+| 4 | 0.8022 | 0.9366 | 0.1344 | true | 13 | 2.9 s |
+| 5 | 0.8205 | 0.9366 | 0.1161 | true | 17 | 15.3 s |
+
+### Reliability notes
+
+- No machine-state warnings were reported on the clean `p=1..5` runs.
+- No retries were needed in the converged `p=1..5` XORSAT run after the
+  tolerance adjustment.
+
+### Interpretation
+
+1. The XORSAT curve is strictly increasing through `p=5`.
+2. The marginal improvement per depth is shrinking:
+   - `p=1→2`: `+0.0630`
+   - `p=2→3`: `+0.0380`
+   - `p=3→4`: `+0.0251`
+   - `p=4→5`: `+0.0183`
+3. The currently observed trend suggests a flattening curve rather than a rapid
+   approach to the simulated-annealing value `0.9366`.
+
+### Impact on project
+
+- The early Phase 4 optimisation path is now behaving reliably through `p=5`.
+- The code is producing stable, monotone XORSAT results on the target problem
+  without machine-health warnings.
+- The next technical question is no longer whether `p=5` converges, but how far
+  the curve can be pushed cleanly beyond `p=5` and whether the plateau remains
+  well below the SA target.
+
 ## Entry 17 — P1.4 Optimisation, Archive Preservation, and PR #4 Merge (23 March 2026)
 
 ### What was done

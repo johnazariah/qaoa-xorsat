@@ -115,7 +115,7 @@
   - [x] Optimise over 2p angles (γ₁,…,γₚ, β₁,…,βₚ)
   - [x] Use gradient-based optimisation (L-BFGS or similar) with multiple random restarts
   - [x] Record optimal angles and achieved fraction
-  - Initial exploratory and reproduction-grade runs now exist for early depths, but the full p=1..p_max sweep remains incomplete.
+  - Clean exploratory and reproduction-grade runs now exist through `p=5`, with the XORSAT sweep converging cleanly after the `g_abstol` adjustment, but the full `p=1..p_max` program remains incomplete.
 - [ ] Determine p_max achievable on available hardware:
   - Estimate memory and time vs. p for (k=3, D=4)
   - The tree at depth p has O((D-1)^p · (k-1)^p) = O(3^p · 2^p) = O(6^p) leaves → Hilbert space ~2^(6^p) — this is **extremely** expensive

@@ -106,6 +106,7 @@ using Test
     end
 
     @testset "optimize_depth_sequence warm starts" begin
+        callback_results = QaoaXorsat.AngleOptimizationResult[]
         results = optimize_depth_sequence(
             2,
             3,
@@ -114,9 +115,12 @@ using Test
             restarts=0,
             maxiters=5,
             rng=MersenneTwister(11),
+            on_result=result -> push!(callback_results, result),
         )
 
         @test length(results) == 2
+        @test length(callback_results) == 2
+        @test depth.(getfield.(callback_results, :angles)) == [1, 2]
         @test depth(results[1].angles) == 1
         @test depth(results[2].angles) == 2
         @test all(result -> isfinite(result.value), results)
