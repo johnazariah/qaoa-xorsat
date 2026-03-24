@@ -11,9 +11,9 @@ For depth `p`, this returns a length-`2p` vector
 These `2p` entries live on the transitions between the `2p + 1` bits of the
 branch bitstring used by the recurrence.
 """
-function build_gamma_vector(angles::QAOAAngles)::Vector{Float64}
+function build_gamma_vector(angles::QAOAAngles{T}) where T
     p = depth(angles)
-    gamma_vector = zeros(Float64, 2p)
+    gamma_vector = zeros(T, 2p)
 
     for round in 1:p
         mirror = 2p - round + 1
@@ -34,9 +34,9 @@ function basso_phase_bit_positions(p::Int)::Vector{Int}
     [collect(1:p); collect((p+2):(2p+1))]
 end
 
-function build_gamma_full_vector(angles::QAOAAngles)::Vector{Float64}
+function build_gamma_full_vector(angles::QAOAAngles{T}) where T
     p = depth(angles)
-    gamma_full = zeros(Float64, basso_bit_count(p))
+    gamma_full = zeros(T, basso_bit_count(p))
     gamma_vector = build_gamma_vector(angles)
 
     for (gamma_index, bit_index) in pairs(basso_phase_bit_positions(p))
@@ -75,18 +75,19 @@ function decode_bits(configuration::Integer, bit_count::Int)::Vector{Int}
     bits
 end
 
-function basso_trig_table(angles::QAOAAngles)::Matrix{ComplexF64}
+function basso_trig_table(angles::QAOAAngles{T}) where T
     p = depth(angles)
-    trigs = zeros(ComplexF64, 2, 2p)
+    CT = Complex{T}
+    trigs = zeros(CT, 2, 2p)
 
     for round in 1:p
         mirror = 2p - round + 1
         β = angles.β[round]
 
         trigs[1, round] = cos(β)
-        trigs[2, round] = ComplexF64(0.0, sin(β))
+        trigs[2, round] = complex(zero(T), sin(β))
         trigs[1, mirror] = cos(-β)
-        trigs[2, mirror] = ComplexF64(0.0, sin(-β))
+        trigs[2, mirror] = complex(zero(T), sin(-β))
     end
 
     trigs
@@ -103,13 +104,13 @@ For each of the `2p` transitions between adjacent bits, the factor contributes
 using the mirrored angle convention of the recurrence. A global `1/2` factor is
 included, matching the upstream MaxCut implementation.
 """
-function f_function(angles::QAOAAngles, configuration::Integer)::ComplexF64
+function f_function(angles::QAOAAngles{T}, configuration::Integer) where T
     p = depth(angles)
     bit_count = basso_bit_count(p)
     bits = decode_bits(configuration, bit_count)
     trigs = basso_trig_table(angles)
 
-    weight = ComplexF64(0.5)
+    weight = complex(one(T) / 2)
     for index in 1:(bit_count-1)
         bit_difference = xor(bits[index], bits[index+1])
         weight *= trigs[bit_difference+1, index]
@@ -135,7 +136,7 @@ function basso_phase_argument(
     gamma_vector::AbstractVector{<:Real},
     parent_bits::AbstractVector{<:Integer},
     child_bits::Vararg{AbstractVector{<:Integer}},
-)::Float64
+)
     bit_count = length(gamma_vector) + 1
     length(parent_bits) == bit_count || throw(ArgumentError(
         "parent bit count $(length(parent_bits)) does not match gamma length $(length(gamma_vector))",
@@ -147,7 +148,7 @@ function basso_phase_argument(
         ))
     end
 
-    phase = 0.0
+    phase = zero(eltype(gamma_vector))
     for (gamma_index, bit_index) in pairs(basso_phase_bit_positions(length(gamma_vector) ÷ 2))
         parity = z_eigenvalue(Int(parent_bits[bit_index]))
         for bits in child_bits
@@ -162,21 +163,21 @@ end
 function _basso_child_sum(
     parent_bits::Vector{Int},
     all_bits::Vector{Vector{Int}},
-    child_weights::Vector{ComplexF64},
-    gamma_vector::Vector{Float64},
-    phase_scale::Float64,
+    child_weights::AbstractVector{<:Complex},
+    gamma_vector::AbstractVector{<:Real},
+    phase_scale,
     child_arity::Int,
-)::ComplexF64
+)
     selections = Int[]
 
-    function recurse(weight_product::ComplexF64, remaining::Int)::ComplexF64
+    function recurse(weight_product, remaining::Int)
         if iszero(remaining)
             selected_bits = map(index -> all_bits[index], selections)
             θ = phase_scale * basso_phase_argument(gamma_vector, parent_bits, selected_bits...)
             return cos(θ) * weight_product
         end
 
-        total = 0.0 + 0.0im
+        total = zero(eltype(child_weights))
         for child_index in eachindex(all_bits)
             push!(selections, child_index)
             total += recurse(weight_product * child_weights[child_index], remaining - 1)
@@ -186,7 +187,7 @@ function _basso_child_sum(
         total
     end
 
-    recurse(1.0 + 0.0im, child_arity)
+    recurse(one(eltype(child_weights)), child_arity)
 end
 
 function configuration_spins(configuration::Integer, bit_count::Int)::Vector{Int}
@@ -238,16 +239,15 @@ vector, this lift reproduces `f(a)` exactly.
 """
 function lift_hyperindex_message_to_branch_basis(
     message::AbstractVector{<:Number},
-    angles::QAOAAngles,
-)::Vector{ComplexF64}
+    angles::QAOAAngles{T},
+) where T
     dimension = hyperindex_dimension(depth(angles))
     length(message) == dimension || throw(ArgumentError(
         "message length $(length(message)) does not match hyperindex dimension $(dimension)",
     ))
 
     scale = float(one(Int) << depth(angles))
-    ComplexF64[
-        scale * ComplexF64(message[basso_configuration_to_hyperindex(configuration, depth(angles))+1]) *
+    [scale * complex(T(message[basso_configuration_to_hyperindex(configuration, depth(angles))+1])) *
         f_function(angles, configuration)
         for configuration in 0:basso_configuration_count(depth(angles))-1
     ]
@@ -257,7 +257,7 @@ function contract_hyperindex_messages_to_branch_basis(
     child_messages::AbstractVector{<:AbstractVector},
     angles::QAOAAngles,
     branch_degree::Int,
-)::Vector{ComplexF64}
+)
     !isempty(child_messages) || throw(ArgumentError("need at least one child message"))
 
     lifted = [lift_hyperindex_message_to_branch_basis(message, angles) for message in child_messages]
@@ -267,17 +267,16 @@ function contract_hyperindex_messages_to_branch_basis(
 end
 
 function basso_constraint_kernel(
-    angles::QAOAAngles,
+    angles::QAOAAngles{T},
     branch_degree::Int,
-)::Vector{ComplexF64}
+) where T
     branch_degree ≥ 1 || throw(ArgumentError("branch_degree must be ≥ 1, got $branch_degree"))
 
     bit_count = basso_bit_count(depth(angles))
     configuration_count = basso_configuration_count(depth(angles))
     gamma_full = build_gamma_full_vector(angles)
 
-    ComplexF64[
-        cos(0.5 * sum(gamma_full .* configuration_spins(configuration, bit_count)))
+    [complex(cos(one(T) / 2 * sum(gamma_full .* configuration_spins(configuration, bit_count))))
         for configuration in 0:configuration_count-1
     ]
 end
@@ -286,30 +285,30 @@ function basso_constraint_fold(
     child_message::AbstractVector{<:Number},
     kernel::AbstractVector{<:Number},
     child_arity::Int,
-)::Vector{ComplexF64}
+)
     child_arity ≥ 1 || throw(ArgumentError("child_arity must be ≥ 1, got $child_arity"))
     length(child_message) == length(kernel) || throw(ArgumentError(
         "child_message and kernel must have equal length",
     ))
 
-    child_hat = wht(ComplexF64.(child_message))
-    kernel_hat = wht(ComplexF64.(kernel))
+    child_hat = wht(complex.(child_message))
+    kernel_hat = wht(complex.(kernel))
     iwht(kernel_hat .* (child_hat .^ child_arity))
 end
 
 function basso_constraint_fold_messages(
     child_messages::AbstractVector{<:AbstractVector},
     kernel::AbstractVector{<:Number},
-)::Vector{ComplexF64}
+)
     !isempty(child_messages) || throw(ArgumentError("need at least one child message"))
     all(length(message) == length(kernel) for message in child_messages) || throw(ArgumentError(
         "all child messages must have length $(length(kernel))",
     ))
 
-    kernel_hat = wht(ComplexF64.(kernel))
-    child_hat_product = ones(ComplexF64, length(kernel))
+    kernel_hat = wht(complex.(kernel))
+    child_hat_product = ones(eltype(kernel_hat), length(kernel))
     for message in child_messages
-        child_hat_product .*= wht(ComplexF64.(message))
+        child_hat_product .*= wht(complex.(message))
     end
 
     iwht(kernel_hat .* child_hat_product)
@@ -322,36 +321,34 @@ end
 
 function basso_root_message(
     params::TreeParams,
-    angles::QAOAAngles,
+    angles::QAOAAngles{T},
     branch_tensor::AbstractVector{<:Number},
-)::Vector{ComplexF64}
+) where T
     configuration_count = basso_configuration_count(params.p)
     length(branch_tensor) == configuration_count || throw(ArgumentError(
         "branch tensor length $(length(branch_tensor)) does not match configuration count $(configuration_count)",
     ))
 
-    ComplexF64[
-        basso_root_parity(configuration, params.p) *
+    [basso_root_parity(configuration, params.p) *
         f_function(angles, configuration) *
-        ComplexF64(branch_tensor[configuration+1])
+        complex(branch_tensor[configuration+1])
         for configuration in 0:configuration_count-1
     ]
 end
 
-function basso_root_parity_kernel(p::Int)::Vector{ComplexF64}
+function basso_root_parity_kernel(p::Int)
     configuration_count = basso_configuration_count(p)
 
-    ComplexF64[
-        basso_root_parity(configuration, p)
+    [basso_root_parity(configuration, p)
         for configuration in 0:configuration_count-1
     ]
 end
 
 function basso_root_problem_kernel(
-    angles::QAOAAngles,
+    angles::QAOAAngles{T},
     branch_degree::Int;
     clause_sign::Int=1,
-)::Vector{ComplexF64}
+) where T
     validate_clause_sign(clause_sign)
     branch_degree ≥ 1 || throw(ArgumentError("branch_degree must be ≥ 1, got $branch_degree"))
 
@@ -359,8 +356,7 @@ function basso_root_problem_kernel(
     configuration_count = basso_configuration_count(depth(angles))
     bit_count = basso_bit_count(depth(angles))
 
-    ComplexF64[
-        im * sin(0.5 * clause_sign * sum(gamma_full .* configuration_spins(configuration, bit_count)))
+    [complex(zero(T), sin(one(T) / 2 * clause_sign * sum(gamma_full .* configuration_spins(configuration, bit_count))))
         for configuration in 0:configuration_count-1
     ]
 end
@@ -370,7 +366,7 @@ function basso_root_kernel(
     branch_degree::Int,
     p::Int=depth(angles);
     clause_sign::Int=1,
-)::Vector{ComplexF64}
+)
     p == depth(angles) || throw(ArgumentError("p must match angle depth $(depth(angles)), got $p"))
 
     basso_root_problem_kernel(
@@ -384,13 +380,13 @@ function basso_root_fold(
     root_message::AbstractVector{<:Number},
     kernel::AbstractVector{<:Number},
     arity::Int,
-)::ComplexF64
+)
     arity ≥ 1 || throw(ArgumentError("arity must be ≥ 1, got $arity"))
     length(root_message) == length(kernel) || throw(ArgumentError(
         "root_message and kernel must have equal length",
     ))
 
-    sum(ComplexF64.(kernel) .* xor_convolution_power(ComplexF64.(root_message), arity))
+    sum(complex.(kernel) .* xor_convolution_power(complex.(root_message), arity))
 end
 
 function basso_root_parity_sum(
@@ -398,7 +394,7 @@ function basso_root_parity_sum(
     angles::QAOAAngles,
     branch_tensor::AbstractVector{<:Number};
     clause_sign::Int=1,
-)::ComplexF64
+)
     root_message = basso_root_message(params, angles, branch_tensor)
     root_kernel = basso_root_kernel(
         angles,
@@ -420,7 +416,7 @@ function basso_parity_expectation(
     params::TreeParams,
     angles::QAOAAngles;
     clause_sign::Int=1,
-)::Float64
+)
     depth(angles) == params.p || throw(ArgumentError("angle depth must match tree depth"))
     validate_clause_sign(clause_sign)
 
@@ -441,9 +437,9 @@ function basso_expectation(
     params::TreeParams,
     angles::QAOAAngles;
     clause_sign::Int=1,
-)::Float64
+)
     parity = basso_parity_expectation(params, angles; clause_sign)
-    0.5 * (1 + clause_sign * parity)
+    (1 + clause_sign * parity) / 2
 end
 
 """
@@ -456,9 +452,9 @@ The returned vector has one entry for each `(2p + 1)`-bit branch configuration.
 """
 function basso_branch_tensor_step(
     params::TreeParams,
-    angles::QAOAAngles,
+    angles::QAOAAngles{T},
     previous::AbstractVector{<:Number},
-)::Vector{ComplexF64}
+) where T
     depth(angles) == params.p || throw(ArgumentError("angle depth must match tree depth"))
 
     p = params.p
@@ -469,8 +465,7 @@ function basso_branch_tensor_step(
 
     child_arity = params.k - 1
     branch_degree = basso_branching_degree(params)
-    child_weights = ComplexF64[
-        f_function(angles, configuration) * ComplexF64(previous[configuration+1])
+    child_weights = [f_function(angles, configuration) * complex(previous[configuration+1])
         for configuration in 0:configuration_count-1
     ]
     kernel = basso_constraint_kernel(angles, branch_degree)
@@ -495,13 +490,13 @@ raw parent-facing hyperindex-space transfer message.
 """
 function basso_branch_tensor(
     params::TreeParams,
-    angles::QAOAAngles;
+    angles::QAOAAngles{T};
     steps::Int=params.p,
-)::Vector{ComplexF64}
+) where T
     0 ≤ steps ≤ params.p || throw(ArgumentError("steps must lie in 0:$(params.p), got $steps"))
     depth(angles) == params.p || throw(ArgumentError("angle depth must match tree depth"))
 
-    current = ones(ComplexF64, basso_configuration_count(params.p))
+    current = ones(Complex{T}, basso_configuration_count(params.p))
     for _ in 1:steps
         current = basso_branch_tensor_step(params, angles, current)
     end

@@ -226,4 +226,96 @@ end
         angles = QAOAAngles([0.1, 0.2], [0.3, 0.4])
         @test_throws ArgumentError QaoaXorsat.reference_parity_expectation(params, angles)
     end
+
+    @testset "Tier 1 state-vector internals" begin
+        @testset "qubit_state_sign" begin
+            @test QaoaXorsat.qubit_state_sign(0, 1) == 1    # qubit 1 is |0⟩ → +1
+            @test QaoaXorsat.qubit_state_sign(1, 1) == -1   # qubit 1 is |1⟩ → -1
+            @test QaoaXorsat.qubit_state_sign(2, 2) == -1   # qubit 2 is |1⟩ → -1
+            @test QaoaXorsat.qubit_state_sign(2, 1) == 1    # qubit 1 is |0⟩ → +1
+        end
+
+        @testset "clause_parity_sign" begin
+            # clause [1,2]: parity of qubits 1 and 2
+            @test QaoaXorsat.clause_parity_sign(0, [1, 2]) == 1    # (+1)(+1) = +1
+            @test QaoaXorsat.clause_parity_sign(1, [1, 2]) == -1   # (-1)(+1) = -1
+            @test QaoaXorsat.clause_parity_sign(3, [1, 2]) == 1    # (-1)(-1) = +1
+        end
+
+        @testset "plus_state" begin
+            state = QaoaXorsat.plus_state(3)
+            @test length(state) == 8
+            @test all(s ≈ 1 / sqrt(8) for s in state)
+        end
+
+        @testset "apply_problem_layer! zero γ" begin
+            state = QaoaXorsat.plus_state(2)
+            original = copy(state)
+            QaoaXorsat.apply_problem_layer!(state, [[1, 2]], 0.0)
+            @test state ≈ original
+        end
+
+        @testset "apply_problem_layer! nonzero γ" begin
+            state = QaoaXorsat.plus_state(2)
+            original = copy(state)
+            QaoaXorsat.apply_problem_layer!(state, [[1, 2]], 0.5; clause_sign=1)
+            @test !(state ≈ original)
+            @test sum(abs2, state) ≈ 1.0 atol = 1e-12  # unitarity
+        end
+
+        @testset "apply_single_qubit_mixer! zero β" begin
+            state = QaoaXorsat.plus_state(2)
+            original = copy(state)
+            QaoaXorsat.apply_single_qubit_mixer!(state, 0.0, 1)
+            @test state ≈ original
+        end
+
+        @testset "apply_single_qubit_mixer! nonzero β" begin
+            state = QaoaXorsat.plus_state(2)
+            original = copy(state)
+            QaoaXorsat.apply_single_qubit_mixer!(state, 0.3, 1)
+            @test !(state ≈ original)
+            @test sum(abs2, state) ≈ 1.0 atol = 1e-12  # unitarity
+        end
+
+        @testset "apply_mixer_layer! zero β" begin
+            state = QaoaXorsat.plus_state(2)
+            original = copy(state)
+            QaoaXorsat.apply_mixer_layer!(state, 0.0, 2)
+            @test state ≈ original
+        end
+
+        @testset "apply_mixer_layer! nonzero β" begin
+            state = QaoaXorsat.plus_state(2)
+            original = copy(state)
+            QaoaXorsat.apply_mixer_layer!(state, 0.3, 2)
+            @test !(state ≈ original)
+            @test sum(abs2, state) ≈ 1.0 atol = 1e-12  # unitarity
+        end
+    end
+
+    @testset "Tier 1 reference vs Tier 2 Basso" begin
+        @testset "k=$k, D=$D" for (k, D) in [(2, 3), (3, 2)]
+            params = TreeParams(k, D, 1)
+            angles = QAOAAngles([0.4], [0.2])
+            clause_sign = k == 2 ? -1 : 1
+
+            ref = QaoaXorsat.reference_parity_expectation(params, angles; clause_sign)
+            basso = basso_parity_expectation(params, angles; clause_sign)
+            @test ref ≈ basso atol = 1e-10
+        end
+    end
+
+    @testset "simulate_light_cone_state + root_parity_expectation" begin
+        params = TreeParams(2, 3, 1)
+        angles = QAOAAngles([0.4], [0.2])
+        tree, state = QaoaXorsat.simulate_light_cone_state(params, angles; clause_sign=-1)
+
+        @test length(state) == 2^tree.qubit_count
+        @test sum(abs2, state) ≈ 1.0 atol = 1e-12
+
+        parity = QaoaXorsat.root_parity_expectation(state, tree.root_clause)
+        @test -1.0 ≤ parity ≤ 1.0
+        @test parity ≈ QaoaXorsat.reference_parity_expectation(params, angles; clause_sign=-1) atol = 1e-12
+    end
 end

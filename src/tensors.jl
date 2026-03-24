@@ -5,16 +5,20 @@ QAOA angle parameters for depth `p`.
 
 - `γ`: problem angles, length `p`
 - `β`: mixer angles, length `p`
-"""
-struct QAOAAngles
-    γ::Vector{Float64}
-    β::Vector{Float64}
 
-    function QAOAAngles(γ::AbstractVector{<:Real}, β::AbstractVector{<:Real})
+The struct is parametric over the element type `T <: Real` so that
+ForwardDiff dual numbers propagate through the evaluation pipeline.
+"""
+struct QAOAAngles{T<:Real}
+    γ::Vector{T}
+    β::Vector{T}
+
+    function QAOAAngles(γ::AbstractVector{T1}, β::AbstractVector{T2}) where {T1<:Real,T2<:Real}
         length(γ) == length(β) ||
             throw(ArgumentError("γ and β must have same length"))
         !isempty(γ) || throw(ArgumentError("need at least p=1"))
-        new(Float64.(γ), Float64.(β))
+        T = promote_type(T1, T2)
+        new{T}(T.(γ), T.(β))
     end
 end
 

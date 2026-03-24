@@ -165,7 +165,7 @@ function reference_parity_expectation(
     params::TreeParams,
     angles::QAOAAngles;
     clause_sign::Int=1,
-)::Float64
+)
     tree, state = simulate_light_cone_state(params, angles; clause_sign)
     root_parity_expectation(state, tree.root_clause)
 end
@@ -180,7 +180,7 @@ function parity_expectation(
     params::TreeParams,
     angles::QAOAAngles;
     clause_sign::Int=1,
-)::Float64
+)
     basso_parity_expectation(params, angles; clause_sign)
 end
 
@@ -200,6 +200,6 @@ function qaoa_expectation(
     params::TreeParams,
     angles::QAOAAngles;
     clause_sign::Int=1,
-)::Float64
+)
     basso_expectation(params, angles; clause_sign)
 end

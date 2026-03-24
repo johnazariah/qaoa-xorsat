@@ -1,4 +1,6 @@
 using Optim
+using ADTypes: AutoForwardDiff
+using ForwardDiff
 using Random
 
 struct AngleOptimizationStartSpec
@@ -38,11 +40,11 @@ end
 
 default_clause_sign(k::Int) = k == 2 ? -1 : 1
 
-function angle_vector(angles::QAOAAngles)::Vector{Float64}
+function angle_vector(angles::QAOAAngles)
     [angles.γ; angles.β]
 end
 
-function angles_from_vector(values::AbstractVector{<:Real}, p::Int)::QAOAAngles
+function angles_from_vector(values::AbstractVector{<:Real}, p::Int)
     length(values) == 2p || throw(ArgumentError(
         "need exactly $(2p) angle values for depth $p, got $(length(values))",
     ))
@@ -61,7 +63,7 @@ Map the QAOA angles into a canonical periodic window:
 - `γ_r ∈ [0, 2π)`
 - `β_r ∈ [0, π)`
 """
-function canonicalize_angles(angles::QAOAAngles)::QAOAAngles
+function canonicalize_angles(angles::QAOAAngles)
     QAOAAngles(
         canonicalize_problem_angle.(angles.γ),
         canonicalize_mixer_angle.(angles.β),
@@ -73,7 +75,7 @@ end
 
 Sample a random depth-`p` angle vector in the canonical search box.
 """
-function random_angles(p::Int; rng=Random.default_rng())::QAOAAngles
+function random_angles(p::Int; rng=Random.default_rng())
     validate_depth(p)
 
     QAOAAngles(2π .* rand(rng, p), π .* rand(rng, p))
@@ -88,7 +90,7 @@ tail with the last known values.
 function extend_angles(
     previous::QAOAAngles,
     target_depth::Int=depth(previous) + 1,
-)::QAOAAngles
+)
     previous_depth = depth(previous)
     target_depth ≥ previous_depth || throw(ArgumentError(
         "target_depth must be ≥ $(previous_depth), got $target_depth",
@@ -207,17 +209,12 @@ function optimize_angles(
 
     guesses = build_initial_guesses(params.p, initial_guesses, initial_guess_kind, restarts, rng)
 
-    best_angles = first(guesses).angles
-    best_value = -Inf
-    best_iterations = 0
-    best_converged = false
-    best_start_wall_time_seconds = 0.0
-    best_start_kind = first(guesses).kind
-    total_evaluations = 0
-    start_results = AngleOptimizationStartResult[]
     optimization_started_at = time_ns()
 
-    for guess in guesses
+    # Run each restart independently — thread-parallel when multiple threads available
+    per_start_results = Vector{Tuple{QAOAAngles,Float64,AngleOptimizationStartResult}}(undef, length(guesses))
+    Threads.@threads for i in eachindex(guesses)
+        guess = guesses[i]
         local_evaluations = Ref(0)
         started_at = time_ns()
 
@@ -231,46 +228,44 @@ function optimize_angles(
             objective,
             angle_vector(guess.angles),
             Optim.LBFGS(),
-            Optim.Options(iterations=maxiters, g_abstol=1.0e-6, show_trace=false),
+            Optim.Options(iterations=maxiters, g_abstol=1.0e-6, show_trace=false);
+            autodiff=AutoForwardDiff(),
         )
 
-        total_evaluations += local_evaluations[]
         elapsed_seconds = (time_ns() - started_at) / 1.0e9
         candidate_angles = angles_from_vector(Optim.minimizer(result), params.p) |> canonicalize_angles
         candidate_value = qaoa_expectation(params, candidate_angles; clause_sign)
-        push!(start_results, AngleOptimizationStartResult(
+        start_result = AngleOptimizationStartResult(
             guess.kind,
             candidate_value,
             elapsed_seconds,
             local_evaluations[],
             Optim.iterations(result),
             Optim.converged(result),
-        ))
-
-        if candidate_value > best_value
-            best_angles = candidate_angles
-            best_value = candidate_value
-            best_iterations = Optim.iterations(result)
-            best_converged = Optim.converged(result)
-            best_start_wall_time_seconds = elapsed_seconds
-            best_start_kind = guess.kind
-        end
+        )
+        per_start_results[i] = (candidate_angles, candidate_value, start_result)
     end
+
+    # Collect results — pick the best start
+    start_results = [r[3] for r in per_start_results]
+    total_evaluations = sum(r.evaluations for r in start_results)
+    best_idx = argmax(r[2] for r in per_start_results)
+    best_angles, best_value, best_start = per_start_results[best_idx]
 
     wall_time_seconds = (time_ns() - optimization_started_at) / 1.0e9
     AngleOptimizationResult(
         best_angles,
         best_value,
         wall_time_seconds,
-        best_start_wall_time_seconds,
+        best_start.wall_time_seconds,
         total_evaluations,
         length(guesses),
-        best_iterations,
-        best_converged,
+        best_start.iterations,
+        best_start.converged,
         restarts,
         maxiters,
         0,
-        best_start_kind,
+        best_start.kind,
         start_results,
     )
 end
