@@ -272,13 +272,20 @@ function basso_constraint_kernel(
 ) where T
     branch_degree ≥ 1 || throw(ArgumentError("branch_degree must be ≥ 1, got $branch_degree"))
 
-    bit_count = basso_bit_count(depth(angles))
-    configuration_count = basso_configuration_count(depth(angles))
+    p = depth(angles)
+    bit_count = basso_bit_count(p)
+    configuration_count = basso_configuration_count(p)
     gamma_full = build_gamma_full_vector(angles)
 
-    [complex(cos(one(T) / 2 * sum(gamma_full .* configuration_spins(configuration, bit_count))))
-        for configuration in 0:configuration_count-1
-    ]
+    # Precompute spin table to avoid per-config allocations
+    half = one(T) / 2
+    [begin
+        phase_arg = zero(T)
+        for index in 1:bit_count
+            phase_arg += gamma_full[index] * z_eigenvalue((Int(configuration) >> (index - 1)) & 1)
+        end
+        complex(cos(half * phase_arg))
+    end for configuration in 0:configuration_count-1]
 end
 
 function basso_constraint_fold(
@@ -323,6 +330,7 @@ function basso_root_message(
     params::TreeParams,
     angles::QAOAAngles{T},
     branch_tensor::AbstractVector{<:Number},
+    f_table::AbstractVector{<:Number},
 ) where T
     configuration_count = basso_configuration_count(params.p)
     length(branch_tensor) == configuration_count || throw(ArgumentError(
@@ -330,10 +338,19 @@ function basso_root_message(
     ))
 
     [basso_root_parity(configuration, params.p) *
-        f_function(angles, configuration) *
+        f_table[configuration+1] *
         complex(branch_tensor[configuration+1])
         for configuration in 0:configuration_count-1
     ]
+end
+
+# Convenience method for callers that don't precompute f_table
+function basso_root_message(
+    params::TreeParams,
+    angles::QAOAAngles{T},
+    branch_tensor::AbstractVector{<:Number},
+) where T
+    basso_root_message(params, angles, branch_tensor, basso_f_table(angles))
 end
 
 function basso_root_parity_kernel(p::Int)
@@ -356,9 +373,15 @@ function basso_root_problem_kernel(
     configuration_count = basso_configuration_count(depth(angles))
     bit_count = basso_bit_count(depth(angles))
 
-    [complex(zero(T), sin(one(T) / 2 * clause_sign * sum(gamma_full .* configuration_spins(configuration, bit_count))))
-        for configuration in 0:configuration_count-1
-    ]
+    half = one(T) / 2
+    cs = T(clause_sign)
+    [begin
+        phase_arg = zero(T)
+        for index in 1:bit_count
+            phase_arg += gamma_full[index] * z_eigenvalue((Int(configuration) >> (index - 1)) & 1)
+        end
+        complex(zero(T), sin(half * cs * phase_arg))
+    end for configuration in 0:configuration_count-1]
 end
 
 function basso_root_kernel(
@@ -392,10 +415,11 @@ end
 function basso_root_parity_sum(
     params::TreeParams,
     angles::QAOAAngles,
-    branch_tensor::AbstractVector{<:Number};
+    branch_tensor::AbstractVector{<:Number},
+    f_table::AbstractVector{<:Number};
     clause_sign::Int=1,
 )
-    root_message = basso_root_message(params, angles, branch_tensor)
+    root_message = basso_root_message(params, angles, branch_tensor, f_table)
     root_kernel = basso_root_kernel(
         angles,
         basso_branching_degree(params),
@@ -404,6 +428,16 @@ function basso_root_parity_sum(
     )
 
     basso_root_fold(root_message, root_kernel, params.k)
+end
+
+# Convenience method for callers that don't precompute f_table
+function basso_root_parity_sum(
+    params::TreeParams,
+    angles::QAOAAngles,
+    branch_tensor::AbstractVector{<:Number};
+    clause_sign::Int=1,
+)
+    basso_root_parity_sum(params, angles, branch_tensor, basso_f_table(angles); clause_sign)
 end
 
 """
@@ -420,8 +454,10 @@ function basso_parity_expectation(
     depth(angles) == params.p || throw(ArgumentError("angle depth must match tree depth"))
     validate_clause_sign(clause_sign)
 
-    branch_tensor = basso_branch_tensor(params, angles)
-    real(basso_root_parity_sum(params, angles, branch_tensor; clause_sign))
+    # Precompute f_table once — shared by branch tensor iteration and root message
+    f_table = basso_f_table(angles)
+    branch_tensor = basso_branch_tensor(params, angles; f_table)
+    real(basso_root_parity_sum(params, angles, branch_tensor, f_table; clause_sign))
 end
 
 """
@@ -443,17 +479,29 @@ function basso_expectation(
 end
 
 """
-    basso_branch_tensor_step(params, angles, previous)
+    basso_f_table(angles)
+
+Precompute the mixer weight `f(a)` for all `2^(2p+1)` branch configurations.
+This table depends only on the angles and is reused across all branch-tensor
+iteration steps.
+"""
+function basso_f_table(angles::QAOAAngles{T}) where T
+    configuration_count = basso_configuration_count(depth(angles))
+    [f_function(angles, configuration) for configuration in 0:configuration_count-1]
+end
+
+"""
+    basso_branch_tensor_step(params, angles, previous, f_table, kernel)
 
 Apply one exact finite-D Basso branch-tensor update (Eq. 8.7) to the branch
-tensor `previous`.
-
-The returned vector has one entry for each `(2p + 1)`-bit branch configuration.
+tensor `previous`, using precomputed `f_table` and constraint `kernel`.
 """
 function basso_branch_tensor_step(
     params::TreeParams,
     angles::QAOAAngles{T},
     previous::AbstractVector{<:Number},
+    f_table::AbstractVector{<:Number},
+    kernel::AbstractVector{<:Number},
 ) where T
     depth(angles) == params.p || throw(ArgumentError("angle depth must match tree depth"))
 
@@ -465,13 +513,21 @@ function basso_branch_tensor_step(
 
     child_arity = params.k - 1
     branch_degree = basso_branching_degree(params)
-    child_weights = [f_function(angles, configuration) * complex(previous[configuration+1])
-        for configuration in 0:configuration_count-1
-    ]
-    kernel = basso_constraint_kernel(angles, branch_degree)
+    child_weights = f_table .* complex.(previous)
     branch_sum = basso_constraint_fold(child_weights, kernel, child_arity)
 
     branch_sum .^ branch_degree
+end
+
+# Convenience method: computes f_table and kernel on the fly (for tests / one-off calls)
+function basso_branch_tensor_step(
+    params::TreeParams,
+    angles::QAOAAngles,
+    previous::AbstractVector{<:Number},
+)
+    f_table = basso_f_table(angles)
+    kernel = basso_constraint_kernel(angles, basso_branching_degree(params))
+    basso_branch_tensor_step(params, angles, previous, f_table, kernel)
 end
 
 """
@@ -492,13 +548,16 @@ function basso_branch_tensor(
     params::TreeParams,
     angles::QAOAAngles{T};
     steps::Int=params.p,
+    f_table::AbstractVector=basso_f_table(angles),
 ) where T
     0 ≤ steps ≤ params.p || throw(ArgumentError("steps must lie in 0:$(params.p), got $steps"))
     depth(angles) == params.p || throw(ArgumentError("angle depth must match tree depth"))
 
+    kernel = basso_constraint_kernel(angles, basso_branching_degree(params))
+
     current = ones(Complex{T}, basso_configuration_count(params.p))
     for _ in 1:steps
-        current = basso_branch_tensor_step(params, angles, current)
+        current = basso_branch_tensor_step(params, angles, current, f_table, kernel)
     end
 
     current
