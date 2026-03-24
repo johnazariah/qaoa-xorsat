@@ -1,0 +1,21 @@
+{
+  "run_id": "20260324T092213-k3-d4-p1-13-r5-i80-s1234",
+  "run_kind": "experiment",
+  "runner_label": "m4-macbook",
+  "timestamp_utc": "2026-03-24T09:22:13",
+  "git_commit": "761ba651907296ebe4809fb0373b9d03a08fa3cc",
+  "git_branch": "main",
+  "git_dirty": true,
+  "reliability_artifacts_dir": "",
+  "reliability_artifacts": [],
+  "k": 3,
+  "D": 4,
+  "p_min": 1,
+  "p_max": 13,
+  "clause_sign": 1,
+  "restarts": 5,
+  "maxiters": 80,
+  "seed": 1234,
+  "preserve": true,
+  "result_count": 9
+}
