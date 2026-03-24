@@ -10,4 +10,5 @@ using Test
     include("test_qaoa.jl")
     include("test_optimization.jl")
     include("test_wht_factorisation.jl")
+    include("test_adjoint.jl")
 end
