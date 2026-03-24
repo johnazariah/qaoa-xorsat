@@ -134,6 +134,50 @@
 
 ## Phase 6 — Write-Up
 
+### Paper vision
+
+The paper has four layers, each building on the last:
+
+1. **The catamorphism framework** — the exact QAOA evaluation is a fold
+   (catamorphism) over the light-cone factor graph tree. The computation is
+   parametrized by a `CostAlgebra` that specifies the constraint fold, branching
+   structure, and observable. Tagless-final style: one abstract interface, many
+   concrete backends.
+
+2. **The WHT factorisation** — the k≥3 constraint fold is a convolution on
+   Z₂^{2p+1}, which the Walsh-Hadamard transform diagonalises. This reduces
+   cost from O(4^{kp}) to O(p²·4^p) for any k. Possibly novel — not in Basso
+   2021, Farhi 2025, or Villalonga's reference code.
+
+3. **The manual adjoint through the WHT fold** — reverse-mode differentiation
+   at cost ~1.6× a single evaluation, independent of p. The WHT is self-adjoint;
+   the β gradient uses a log-derivative trick through the trig product factors.
+   Definitely novel — no prior work implements exact reverse-mode AD for this
+   pipeline.
+
+4. **The results table** — QAOA satisfaction fractions for all 15 (k,D) pairs
+   in Stephen's comparison table, at depths up to p=14. The first complete QAOA
+   column against DQI across the full parameter space. The headline: QAOA
+   crosses DQI+BP at p≈11 for (k=3, D=4).
+
+Different algebras give different backends:
+- **Basso finite-D + WHT** — exact, O(p²·4^p), what we have now
+- **Large-D asymptotic** — Basso's original D→∞ iteration (cheap, O(1/D) error)
+- **GPU-accelerated** — same math on Metal/CUDA arrays
+- **Adjoint-enabled** — forward+backward through cached intermediates
+- **Mixed precision** — Float32 forward, Float64 adjoint for memory savings
+
+Different problem families just swap the constraint kernel:
+- **Max-k-XORSAT** — cos(γ/2 · Σ spins) kernel
+- **MaxCut** — same with k=2, clause_sign=-1
+- **Max-k-SAT** — different phase function
+- **Weighted CSPs** — weighted constraint kernels
+
+The tagless-final design means the code IS the proof — every instantiation is a
+specialization of the same abstract fold equation.
+
+### Write-up tasks
+
 - [ ] Document methodology and results
 - [ ] Prepare figures
 - [ ] Draft short note or contribute to Stephen's paper
