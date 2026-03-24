@@ -185,6 +185,25 @@ function parity_expectation(
 end
 
 """
+    qaoa_expectation(algebra, params, angles) -> Float64
+
+Evaluate the exact expected satisfaction of the root clause using the fold engine
+parametrised by the given `CostAlgebra`.
+
+This is the primary algebra-aware entry point.
+"""
+function qaoa_expectation(
+    algebra::XORSATAlgebra,
+    params::TreeParams,
+    angles::QAOAAngles,
+)
+    arity(algebra) == params.k || throw(ArgumentError(
+        "algebra arity $(arity(algebra)) does not match tree arity $(params.k)"
+    ))
+    basso_expectation(params, angles; clause_sign=default_clause_sign(algebra))
+end
+
+"""
     qaoa_expectation(params, angles; clause_sign=1) -> Float64
 
 Evaluate the exact expected satisfaction of the root clause
@@ -195,11 +214,14 @@ using the exact finite-D Tier 2 branch-transfer contraction in the physical
 `γ/2` convention.
 
 Set `clause_sign = -1` for odd clauses such as MaxCut edges.
+
+This is a convenience wrapper that constructs an `XORSATAlgebra` internally.
 """
 function qaoa_expectation(
     params::TreeParams,
     angles::QAOAAngles;
     clause_sign::Int=1,
 )
-    basso_expectation(params, angles; clause_sign)
+    algebra = algebra_from_clause_sign(params.k, clause_sign)
+    qaoa_expectation(algebra, params, angles)
 end
