@@ -68,4 +68,32 @@
 
         @test result_algebra.value ≈ result_legacy.value atol=1e-8
     end
+
+    @testset "MaxCutAlgebra reproduces Farhi 2025 Table 1 (p=1-5)" begin
+        # Farhi, Gutmann, Ranard, Villalonga (2025), arXiv:2503.12789, Table 1
+        # MaxCut on 3-regular graphs: c̃_edge(p)
+        farhi_values = Dict(
+            1 => 0.6924,
+            2 => 0.7559,
+            3 => 0.7923,
+            4 => 0.8168,
+            5 => 0.8363,
+        )
+
+        algebra = MaxCutAlgebra()
+        for (p, expected) in sort(collect(farhi_values))
+            params = TreeParams(2, 3, p)
+            result = optimize_angles(algebra, params; restarts=4, maxiters=100)
+            @test result.value ≈ expected atol=1e-3
+            @test result.converged
+        end
+    end
+
+    @testset "XORSATAlgebra(3) at p=1 matches known c̃ ≈ 0.676" begin
+        algebra = XORSATAlgebra(3)
+        params = TreeParams(3, 4, 1)
+        result = optimize_angles(algebra, params; restarts=4, maxiters=100)
+        @test result.value ≈ 0.676 atol=1e-3
+        @test result.converged
+    end
 end
