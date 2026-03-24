@@ -20,6 +20,7 @@ export parity_observable_tensor, observable_tensor
 include("cost_algebra.jl")
 export CostAlgebra, XORSATAlgebra, MaxCutAlgebra
 export arity, default_clause_sign, algebra_from_clause_sign
+export constraint_kernel, root_observable_kernel, expectation_from_parity
 
 # Raw transfer oracles
 include("transfer_oracles.jl")

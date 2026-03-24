@@ -373,7 +373,7 @@ Algebra-parameterised optimisation entry point. Delegates to the clause_sign-bas
 implementation.
 """
 function optimize_angles(
-    algebra::XORSATAlgebra,
+    algebra::CostAlgebra,
     params::TreeParams;
     kwargs...,
 )::AngleOptimizationResult

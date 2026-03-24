@@ -55,3 +55,39 @@ MaxCutAlgebra() = XORSATAlgebra(2; clause_sign=-1)
 Construct the appropriate CostAlgebra from the legacy (k, clause_sign) convention.
 """
 algebra_from_clause_sign(k::Int, clause_sign::Int) = XORSATAlgebra(k; clause_sign)
+
+# ── Dispatched kernel methods ────────────────────────────────────────────────
+
+"""
+    constraint_kernel(algebra, angles, branch_degree) -> Vector{ComplexF64}
+
+Build the constraint kernel for the fold. The kernel encodes the problem gate's
+contribution at each non-root constraint node.
+
+For XORSAT: κ(a) = cos(Γ · spins(a) / 2)
+"""
+function constraint_kernel(::XORSATAlgebra, angles::QAOAAngles, branch_degree::Int)
+    basso_constraint_kernel(angles, branch_degree)
+end
+
+"""
+    root_observable_kernel(algebra, angles, branch_degree) -> Vector{ComplexF64}
+
+Build the root observable kernel. This encodes both the root problem gate and
+the observable (Z₁···Zₖ expectation) used to extract the satisfaction fraction.
+
+For XORSAT with clause_sign s: κ_root(a) = i·sin(s · Γ · spins(a) / 2)
+"""
+function root_observable_kernel(algebra::XORSATAlgebra, angles::QAOAAngles, branch_degree::Int)
+    basso_root_problem_kernel(angles, branch_degree; clause_sign=algebra.clause_sign)
+end
+
+"""
+    expectation_from_parity(algebra, parity) -> Float64
+
+Convert a root parity correlator ⟨Z₁···Zₖ⟩ into the satisfaction fraction
+(1 + clause_sign · parity) / 2.
+"""
+function expectation_from_parity(algebra::XORSATAlgebra, parity::Real)
+    (1 + algebra.clause_sign * parity) / 2
+end
