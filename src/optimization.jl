@@ -193,6 +193,7 @@ Keyword arguments:
 - `restarts`: number of additional random starts beyond any supplied seeds
 - `maxiters`: per-start optimiser iteration cap
 - `initial_guesses`: optional seeded starting points of depth `p`
+- `autodiff`: use ForwardDiff exact gradients (`true`, default) or finite differences (`false`)
 - `rng`: random number generator for restart sampling
 """
 function optimize_angles(
@@ -202,6 +203,7 @@ function optimize_angles(
     maxiters::Int=200,
     initial_guesses::AbstractVector{<:QAOAAngles}=QAOAAngles[],
     initial_guess_kind::Symbol=:seeded,
+    autodiff::Bool=true,
     rng=Random.default_rng(),
 )::AngleOptimizationResult
     validate_clause_sign(clause_sign)
@@ -229,7 +231,7 @@ function optimize_angles(
             angle_vector(guess.angles),
             Optim.LBFGS(),
             Optim.Options(iterations=maxiters, g_abstol=1.0e-6, show_trace=false);
-            autodiff=AutoForwardDiff(),
+            autodiff=autodiff ? AutoForwardDiff() : :finite,
         )
 
         elapsed_seconds = (time_ns() - started_at) / 1.0e9
@@ -294,6 +296,7 @@ function optimize_depth_sequence(
     clause_sign::Int=default_clause_sign(k),
     restarts::Int=8,
     maxiters::Int=200,
+    autodiff::Bool=true,
     rng=Random.default_rng(),
     on_result=nothing,
 )::Vector{AngleOptimizationResult}
@@ -313,6 +316,7 @@ function optimize_depth_sequence(
             maxiters=budget.maxiters,
             initial_guesses,
             initial_guess_kind=:warm,
+            autodiff,
             rng,
         )
 
@@ -324,6 +328,7 @@ function optimize_depth_sequence(
                 maxiters=retry_optimization_budget(budget.maxiters),
                 initial_guesses=[result.angles],
                 initial_guess_kind=:retry,
+                autodiff,
                 rng,
             )
             result = merge_optimization_results(result, retry_result)

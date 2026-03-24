@@ -20,7 +20,7 @@ function parse_int(name::String, value::String)
 end
 
 function usage()
-    println(stderr, "Usage: julia --project=. scripts/optimize_qaoa.jl K D P_MIN P_MAX [RESTARTS] [MAXITERS] [SEED] [PRESERVE]")
+    println(stderr, "Usage: julia --project=. scripts/optimize_qaoa.jl K D P_MIN P_MAX [RESTARTS] [MAXITERS] [SEED] [PRESERVE] [AUTODIFF]")
 end
 
 json_escape(text::AbstractString) = escape_string(text)
@@ -378,6 +378,7 @@ restarts = length(ARGS) ≥ 5 ? parse_int("RESTARTS", ARGS[5]) : 8
 maxiters = length(ARGS) ≥ 6 ? parse_int("MAXITERS", ARGS[6]) : 200
 seed = length(ARGS) ≥ 7 ? parse_int("SEED", ARGS[7]) : 1234
 preserve = length(ARGS) ≥ 8 ? parse_bool_flag(ARGS[8]) : true
+autodiff = length(ARGS) ≥ 9 ? parse_bool_flag(ARGS[9]) : true
 
 p_max ≥ p_min || error("P_MAX must be ≥ P_MIN")
 
@@ -425,6 +426,7 @@ results = optimize_depth_sequence(
     clause_sign,
     restarts,
     maxiters,
+    autodiff,
     rng,
     on_result=emit_result,
 )
