@@ -50,15 +50,20 @@ using Test
         @test length(β_grad) == 1
     end
 
-    @testset "gradient symmetry: negating clause_sign flips γ gradient" begin
+    @testset "value + gradient at multiple clause_signs" begin
         params = TreeParams(2, 3, 1)
         angles = QAOAAngles([0.7], [0.3])
 
-        _, γ_pos, β_pos = basso_expectation_and_gradient(params, angles; clause_sign=1)
-        _, γ_neg, β_neg = basso_expectation_and_gradient(params, angles; clause_sign=-1)
+        for cs in [1, -1]
+            val, γg, βg = basso_expectation_and_gradient(params, angles; clause_sign=cs)
+            @test val ≈ basso_expectation(params, angles; clause_sign=cs) atol = 1e-12
 
-        # E_+ + E_- = 1, so ∂E_+/∂γ + ∂E_-/∂γ = 0
-        @test γ_pos .+ γ_neg ≈ zeros(1) atol = 1e-10
-        @test β_pos .+ β_neg ≈ zeros(1) atol = 1e-10
+            function obj(x)
+                basso_expectation(params, QAOAAngles(x[1:1], x[2:2]); clause_sign=cs)
+            end
+            fdg = ForwardDiff.gradient(obj, [0.7, 0.3])
+            @test γg ≈ fdg[1:1] atol = 1e-10
+            @test βg ≈ fdg[2:2] atol = 1e-10
+        end
     end
 end

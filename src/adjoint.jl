@@ -313,82 +313,41 @@ function _backward_pass(cache::BassoPipelineCache{T}) where T
     end
 
     # β gradient from f_table_bar:
-    # f_table[a] = ½ · ∏_{j=1}^{2p} trigs[Δ(a,j)+1, j]
-    # where trigs[1,j] = cos(β_j), trigs[2,j] = i·sin(β_j)
-    # For the product derivative: ∂f/∂trigs[d,j] = f / trigs[d,j] (if that factor is used)
-    # Then chain ∂trigs/∂β_r.
+    # f[a] = ½ · ∏_j trigs[Δ(a,j)+1, j]
+    # ∂f/∂β_r = f · [(dtrig_fwd/trig_fwd) at position r + (dtrig_bwd/trig_bwd) at mirror r]
+    # The log-derivative ratio dtrig/trig depends only on Δ and β_r:
+    #   Δ=0: dtrig/trig = -sin(β)/cos(β) = -tan(β)          (forward)
+    #   Δ=1: dtrig/trig = i·cos(β)/(i·sin(β)) = cot(β)      (forward)
+    #   Δ=0 mirror: dtrig/trig = -sin(β)/cos(β) = -tan(β)    (same as forward, since cos(-β)=cos(β))
+    #   Δ=1 mirror: dtrig/trig = -i·cos(β)/(i·(-sin(β))) = cos(β)/sin(β) = cot(β) (same!)
+    # So the log-derivative ratio is: Δ=0 → -tan(β_r), Δ=1 → cot(β_r), for both positions.
     #
-    # For round r:
-    #   trigs[1, r] = cos(β_r)  → d/dβ_r = -sin(β_r)
-    #   trigs[2, r] = i·sin(β_r) → d/dβ_r = i·cos(β_r)
-    #   trigs[1, mirror] = cos(-β_r) = cos(β_r) → d/dβ_r = -sin(β_r) · (-1) = sin(β_r)
-    #                                            wait, cos(-β) = cos(β), d/dβ of cos(-β) = sin(β) · ... no
-    #                                            d/dβ_r cos(-β_r) = sin(-β_r) · (-(-1)) = sin(β_r) ... hmm
-    #                                            Actually d cos(-β_r)/dβ_r = -sin(-β_r) · d(-β_r)/dβ_r = -sin(-β_r)·(-1) = sin(-β_r)·1... 
-    #                                            Wait: d cos(x)/dx = -sin(x), and x = -β_r, dx/dβ_r = -1
-    #                                            So d cos(-β_r)/dβ_r = -sin(-β_r) · (-1) = sin(-β_r) = -sin(β_r)
-    #                                            Hmm no: sin(-β_r) = -sin(β_r), so = -(-sin(β_r)) = sin(β_r)
-    #   trigs[2, mirror] = i·sin(-β_r) → d/dβ_r = i·cos(-β_r)·(-1) = -i·cos(β_r)
-    #
-    # This is getting complex. Let me compute it per-configuration numerically:
-    # For each config a, f_table[a] is a product of 2p factors.
-    # The derivative w.r.t. β_r involves the two positions (round r and mirror(r)) where β_r appears.
+    # Therefore: ∂f/∂β_r = f · (logderiv[Δ_fwd] + logderiv[Δ_bwd])
+    # And: β_bar[r] = Σ_a Re(conj(f_table_bar[a]) · f[a] · (logderiv[Δ_fwd(a)] + logderiv[Δ_bwd(a)]))
 
     β_bar = zeros(T, p)
-    bit_count = cache.bit_count
 
-    for config in 0:N-1
-        ftb = f_table_bar[config+1]
-        iszero(ftb) && continue
+    for round in 1:p
+        mirror = 2p - round + 1
+        β_r = cache.β[round]
+        neg_tan = -tan(β_r)
+        cot_val = cos(β_r) / sin(β_r)
+        # logderiv: Δ=0 → neg_tan, Δ=1 → cot_val
 
-        ft = cache.f_table[config+1]
-        iszero(ft) && continue
+        acc = zero(T)
+        for config in 0:N-1
+            @inbounds ft = cache.f_table[config+1]
+            @inbounds ftb = f_table_bar[config+1]
 
-        # For each round r, the factor at position r has Δ = bits[r] ⊕ bits[r+1]
-        # and the factor at position mirror has Δ = bits[mirror] ⊕ bits[mirror+1]
-        for round in 1:p
-            mirror = 2p - round + 1
-            β_r = cache.β[round]
-
-            # Position round: bit_difference at index round
             d_fwd = xor(cache.bits_table[round, config+1], cache.bits_table[round+1, config+1])
-            trig_fwd = cache.trig_table[d_fwd+1, round]
-            # Derivative of trig_fwd w.r.t. β_r:
-            if d_fwd == 0
-                dtrig_fwd = complex(-sin(β_r))      # d cos(β)/dβ = -sin(β)
-            else
-                dtrig_fwd = complex(zero(T), cos(β_r))  # d (i sin(β))/dβ = i cos(β)
-            end
-
-            # Position mirror: bit_difference at index mirror
             d_bwd = xor(cache.bits_table[mirror, config+1], cache.bits_table[mirror+1, config+1])
-            trig_bwd = cache.trig_table[d_bwd+1, mirror]
-            # Derivative of trig_bwd w.r.t. β_r (note: β at mirror is -β_r)
-            if d_bwd == 0
-                dtrig_bwd = complex(sin(β_r))        # d cos(-β)/dβ = sin(β)
-            else
-                dtrig_bwd = complex(zero(T), -cos(β_r))  # d (i sin(-β))/dβ = -i cos(β)
-            end
 
-            # Product rule: ∂f/∂β_r = f/trig_fwd · dtrig_fwd + f/trig_bwd · dtrig_bwd
-            # Cotangent contribution: Re(conj(∂f/∂β_r) · ftb) ... no, for real loss:
-            # β_bar[r] += Re(f_table_bar[a] · conj(∂f_table[a]/∂β_r))  ... actually:
-            # The cotangent convention: β_bar += 2·Re(conj(f_table_bar) · ∂f_table/∂β_r)
-            # Wait. f_table_bar contains ∂L/∂Re(f) + i·∂L/∂Im(f).
-            # For a complex intermediate and real loss:
-            # ∂L/∂θ = 2·Re(conj(z_bar) · ∂z/∂θ) where z_bar = ∂L/∂z* (Wirtinger).
-            # Hmm, I need to be consistent. Let me use the convention:
-            # z_bar = ∂L/∂Re(z) + i·∂L/∂Im(z)  (cotangent in ℝ² representation)
-            # Then for real parameter θ: ∂L/∂θ = Re(z_bar) · ∂Re(z)/∂θ + Im(z_bar) · ∂Im(z)/∂θ
-            # which equals Re(conj(z_bar) · ∂z/∂θ)  ... let me verify:
-            # Re(conj(a+bi) · (c+di)) = Re((a-bi)(c+di)) = ac + bd = a·c + b·d ✓
+            ld_fwd = d_fwd == 0 ? neg_tan : cot_val
+            ld_bwd = d_bwd == 0 ? neg_tan : cot_val
 
-            dfdb_fwd = (ft / trig_fwd) * dtrig_fwd  # contribution from forward position
-            dfdb_bwd = (ft / trig_bwd) * dtrig_bwd  # contribution from backward position
-            dfdb = dfdb_fwd + dfdb_bwd
-
-            β_bar[round] += real(conj(ftb) * dfdb)
+            acc += real(conj(ftb) * ft) * (ld_fwd + ld_bwd)
         end
+        β_bar[round] = acc
     end
 
     (γ_bar, β_bar)
