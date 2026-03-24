@@ -39,6 +39,10 @@ export optimize_angles, optimize_depth_sequence
 include("qaoa.jl")
 export parity_expectation, qaoa_expectation
 
+# Manual adjoint differentiation
+include("adjoint.jl")
+export basso_expectation_and_gradient
+
 # Comparison data
 # export load_comparison_data
 
