@@ -277,15 +277,16 @@ function basso_constraint_kernel(
     configuration_count = basso_configuration_count(p)
     gamma_full = build_gamma_full_vector(angles)
 
-    # Precompute spin table to avoid per-config allocations
     half = one(T) / 2
-    [begin
+    result = Vector{Complex{T}}(undef, configuration_count)
+    Threads.@threads for configuration in 0:configuration_count-1
         phase_arg = zero(T)
         for index in 1:bit_count
-            phase_arg += gamma_full[index] * z_eigenvalue((Int(configuration) >> (index - 1)) & 1)
+            @inbounds phase_arg += gamma_full[index] * z_eigenvalue((Int(configuration) >> (index - 1)) & 1)
         end
-        complex(cos(half * phase_arg))
-    end for configuration in 0:configuration_count-1]
+        @inbounds result[configuration+1] = complex(cos(half * phase_arg))
+    end
+    result
 end
 
 function basso_constraint_fold(
@@ -375,13 +376,15 @@ function basso_root_problem_kernel(
 
     half = one(T) / 2
     cs = T(clause_sign)
-    [begin
+    result = Vector{Complex{T}}(undef, configuration_count)
+    Threads.@threads for configuration in 0:configuration_count-1
         phase_arg = zero(T)
         for index in 1:bit_count
-            phase_arg += gamma_full[index] * z_eigenvalue((Int(configuration) >> (index - 1)) & 1)
+            @inbounds phase_arg += gamma_full[index] * z_eigenvalue((Int(configuration) >> (index - 1)) & 1)
         end
-        complex(zero(T), sin(half * cs * phase_arg))
-    end for configuration in 0:configuration_count-1]
+        @inbounds result[configuration+1] = complex(zero(T), sin(half * cs * phase_arg))
+    end
+    result
 end
 
 function basso_root_kernel(
@@ -487,7 +490,11 @@ iteration steps.
 """
 function basso_f_table(angles::QAOAAngles{T}) where T
     configuration_count = basso_configuration_count(depth(angles))
-    [f_function(angles, configuration) for configuration in 0:configuration_count-1]
+    table = Vector{Complex{T}}(undef, configuration_count)
+    Threads.@threads for config in 0:configuration_count-1
+        @inbounds table[config+1] = f_function(angles, config)
+    end
+    table
 end
 
 """
