@@ -365,3 +365,20 @@ function optimize_depth_sequence(
 
     results
 end
+
+"""
+    optimize_angles(algebra, params; kwargs...) -> AngleOptimizationResult
+
+Algebra-parameterised optimisation entry point. Delegates to the clause_sign-based
+implementation.
+"""
+function optimize_angles(
+    algebra::CostAlgebra,
+    params::TreeParams;
+    kwargs...,
+)::AngleOptimizationResult
+    arity(algebra) == params.k || throw(ArgumentError(
+        "algebra arity $(arity(algebra)) does not match tree arity $(params.k)"
+    ))
+    optimize_angles(params; clause_sign=default_clause_sign(algebra), kwargs...)
+end

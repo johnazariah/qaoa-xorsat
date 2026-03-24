@@ -11,4 +11,5 @@ using Test
     include("test_optimization.jl")
     include("test_wht_factorisation.jl")
     include("test_adjoint.jl")
+    include("test_cost_algebra.jl")
 end

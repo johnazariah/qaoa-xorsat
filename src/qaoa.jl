@@ -185,6 +185,46 @@ function parity_expectation(
 end
 
 """
+    qaoa_expectation(algebra, params, angles) -> Float64
+
+Evaluate the exact expected satisfaction of the root clause using the fold engine
+parametrised by the given `CostAlgebra`.
+
+This is the primary algebra-aware entry point. The fold pipeline is
+problem-agnostic — the algebra determines only the constraint kernel and
+root observable.
+"""
+function qaoa_expectation(
+    algebra::CostAlgebra,
+    params::TreeParams,
+    angles::QAOAAngles,
+)
+    arity(algebra) == params.k || throw(ArgumentError(
+        "algebra arity $(arity(algebra)) does not match tree arity $(params.k)"
+    ))
+    depth(angles) == params.p || throw(ArgumentError(
+        "angle depth $(depth(angles)) does not match tree depth $(params.p)"
+    ))
+
+    branch_degree = basso_branching_degree(params)
+    f_table = basso_f_table(angles)
+
+    # Problem-specific: constraint kernel from algebra
+    kernel = constraint_kernel(algebra, angles, branch_degree)
+
+    # Generic fold: leaf → [constraint fold → variable fold]^p
+    branch = basso_branch_tensor(params, angles; f_table)
+
+    # Problem-specific: root observable from algebra
+    root_message = basso_root_message(params, angles, branch, f_table)
+    root_kernel = root_observable_kernel(algebra, angles, branch_degree)
+    parity = real(basso_root_fold(root_message, root_kernel, params.k))
+
+    # Problem-specific: convert parity to satisfaction fraction
+    expectation_from_parity(algebra, parity)
+end
+
+"""
     qaoa_expectation(params, angles; clause_sign=1) -> Float64
 
 Evaluate the exact expected satisfaction of the root clause
@@ -195,11 +235,14 @@ using the exact finite-D Tier 2 branch-transfer contraction in the physical
 `γ/2` convention.
 
 Set `clause_sign = -1` for odd clauses such as MaxCut edges.
+
+This is a convenience wrapper that constructs an `XORSATAlgebra` internally.
 """
 function qaoa_expectation(
     params::TreeParams,
     angles::QAOAAngles;
     clause_sign::Int=1,
 )
-    basso_expectation(params, angles; clause_sign)
+    algebra = algebra_from_clause_sign(params.k, clause_sign)
+    qaoa_expectation(algebra, params, angles)
 end
