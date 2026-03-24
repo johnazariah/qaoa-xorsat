@@ -1,5 +1,113 @@
 # Project Journal
 
+## Entry 19 — M4 Bare Metal Migration + Performance Optimization Stack + p=9 Result (24 March 2026)
+
+### Summary
+
+Migrated from devcontainer to native Apple Silicon M4. Built a complete
+performance optimization stack that took p=8 from "never completes" to 11
+minutes, and reached p=9 (c̃ = 0.8613) — gap to DQI+BP now just 0.010.
+
+### Bare metal setup
+
+- Installed Julia 1.12.5 via juliaup on M4 Mac (64GB, 12 threads)
+- All 655 tests passing on native, then grew to 714 with new tests
+- Archived devcontainer to `.devcontainer.archived/`
+- Coverage verified at 100% (672/672 lines)
+
+### Optimization 1: ForwardDiff exact gradients (`a312e2f`)
+
+Made `QAOAAngles{T<:Real}` parametric so ForwardDiff dual numbers propagate
+through the entire Basso evaluation pipeline. Converted ~55 type barriers in
+`basso_finite_d.jl` from concrete `Float64`/`ComplexF64` to generic `T`/`Complex{T}`.
+
+Key experiment: FD vs ForwardDiff head-to-head showed FD **cannot converge at
+p≥4** due to gradient noise. ForwardDiff is 31× faster at p=5 and the only
+method that converges.
+
+### Optimization 2: Thread-parallel restarts (`a312e2f`)
+
+`Threads.@threads` over optimizer restarts. At p≥5 only 3 restarts run (budget
+cap), so modest wall-clock improvement — but correct architecture.
+
+### Optimization 3: Precomputed tables (`1a6bfc4`)
+
+`f_table` and `constraint_kernel` depend only on angles, not on iteration state.
+Computing them once and reusing across all p steps gave **3.3× at p=7** (270s → 81s).
+
+### Optimization 4: Threaded comprehensions (`7ea6209`)
+
+The three 131K-entry comprehensions (`f_table`, `constraint_kernel`,
+`root_problem_kernel`) parallelized with `Threads.@threads`. Float64 eval went
+from 416ms → 44ms at p=8 (**9.5×**).
+
+### Optimization 5: Manual adjoint differentiation (PR #5, `a6bd6ed`)
+
+Reverse-mode differentiation through the full Basso pipeline. Forward pass
+caches all intermediates; backward pass propagates cotangents using:
+- WHT is self-adjoint: `x̄ += WHT(z̄)`
+- Element-wise power/multiply: standard chain rule
+- β gradient: log-derivative trick (`-tan(β)` for cos factors, `cot(β)` for sin)
+- γ gradient: phase derivatives through constraint/root kernels
+
+**12× faster than ForwardDiff**, only 1.6× overhead vs plain eval, independent of p.
+
+Bug found and fixed: `d cos(-β)/dβ = -sin(β)`, not `+sin(β)`. Caught by
+cross-validation against ForwardDiff at p=1.
+
+### XORSAT results (k=3, D=4)
+
+| p | c̃(p) | Δc̃ | Wall time | Gap to DQI+BP |
+|---|-------|------|-----------|---------------|
+| 1 | 0.6761 | — | 1.5s | 0.195 |
+| 2 | 0.7391 | +0.0630 | 0.3s | 0.132 |
+| 3 | 0.7771 | +0.0380 | 0.3s | 0.094 |
+| 4 | 0.8022 | +0.0251 | 0.6s | 0.069 |
+| 5 | 0.8205 | +0.0183 | 1.2s | 0.050 |
+| 6 | 0.8344 | +0.0139 | 6.8s | 0.037 |
+| 7 | 0.8453 | +0.0109 | 69s | 0.026 |
+| 8 | 0.8541 | +0.0088 | 614s | 0.017 |
+| 9 | 0.8613 | +0.0072 | 3392s | **0.010** |
+
+Decay ratio ~0.80 per step. Projected DQI+BP crossing at p≈11.
+
+### Hardware plan
+
+- M4 64GB: p=1–13 (28GB at p=13, ~8 hours with adjoint)
+- Dual Xeon 128GB, 32 cores: p=14 (120GB, ~13 hours)
+- Azure 768GB VM ($8/hr): p=15 if needed (~$288)
+- Full 15-pair (k,D) table: weekend batch run with adjoint
+
+### Commits on main
+
+| Commit | Description |
+|--------|-------------|
+| `a312e2f` | ForwardDiff + thread-parallel restarts + 100% coverage |
+| `9e4e18e` | Archive devcontainer |
+| `03f262d` | Autodiff toggle (:adjoint/:forward/:finite) |
+| `1a6bfc4` | Precompute f_table + kernel |
+| `7ea6209` | Thread evaluation comprehensions + specs (B, C) |
+| `761ba65` | Manual adjoint spec |
+| `a6bd6ed` | Manual adjoint implementation (PR #5 squash merge) |
+| `02c6eaa` | Differentiation strategies learning doc |
+| `4475bc7` | Performance optimization journey (learning doc 18) |
+
+### Specs written
+
+- `.project/specs/autodiff-generics.md` — ForwardDiff parametric types
+- `.project/specs/threaded-eval.md` — approach B (threaded comprehensions)
+- `.project/specs/metal-gpu.md` — approach C (Metal.jl GPU, future)
+- `.project/specs/manual-adjoint.md` — reverse-mode adjoint derivation
+
+### Next steps
+
+1. Run adjoint sweep on M4 to p=12 (tomorrow)
+2. Set up Xeon for p=13-14
+3. Full 15-pair (k,D) comparison table for Stephen
+4. Metal.jl GPU for p≥15 (if scientifically needed)
+
+---
+
 ## Entry 18 — Clean Phase 4 p=1..5 XORSAT Sweep After Convergence Tolerance Fix (23 March 2026)
 
 ### What was done
