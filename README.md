@@ -2,7 +2,7 @@
 
 **Exact QAOA performance on D-regular Max-k-XORSAT via generic tree folding**
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.XXXXXXX.svg)](https://doi.org/10.5281/zenodo.XXXXXXX)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19211958.svg)](https://doi.org/10.5281/zenodo.19211958)
 ![Tests](https://img.shields.io/badge/tests-714%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 ![Julia](https://img.shields.io/badge/Julia-1.12+-purple)
@@ -112,7 +112,7 @@ The evaluator is generic over the angle element type `T <: Real` via `QAOAAngles
   title = {QAOA-XORSAT: Exact QAOA Performance on D-Regular Max-k-XORSAT},
   year = {2026},
   url = {https://github.com/johnazariah/qaoa-xorsat},
-  doi = {10.5281/zenodo.XXXXXXX}
+  doi = {10.5281/zenodo.19211958}
 }
 ```
 
