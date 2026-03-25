@@ -117,18 +117,38 @@ function _forward_pass(
     kernel_hat = wht(complex.(kernel))
 
     # Branch tensor iteration with caching
+    # Pre-allocate scratch buffer to avoid repeated allocations in the hot loop.
+    # Each step previously allocated ~5 temporary vectors of size N.
     B_history = Vector{Vector{Complex{T}}}(undef, p + 1)
     child_hat_history = Vector{Vector{Complex{T}}}(undef, p)
     folded_history = Vector{Vector{Complex{T}}}(undef, p)
 
+    scratch = Vector{Complex{T}}(undef, N)
+
     B_history[1] = ones(Complex{T}, N)
     for t in 1:p
-        child_weights = f_table .* B_history[t]
-        ch = wht(child_weights)
-        child_hat_history[t] = ch
-        fld = iwht(kernel_hat .* (ch .^ arity))
-        folded_history[t] = fld
-        B_history[t+1] = fld .^ degree
+        # child_weights = f_table .* B[t] — compute into scratch, then WHT in-place
+        @inbounds @simd for i in 1:N
+            scratch[i] = f_table[i] * B_history[t][i]
+        end
+        wht!(scratch)
+        child_hat_history[t] = copy(scratch)
+
+        # folded = iWHT(kernel_hat .* child_hat .^ arity) — reuse scratch
+        ch = child_hat_history[t]
+        @inbounds @simd for i in 1:N
+            scratch[i] = kernel_hat[i] * ch[i] ^ arity
+        end
+        iwht!(scratch)
+        folded_history[t] = copy(scratch)
+
+        # B[t+1] = folded .^ degree
+        fld = folded_history[t]
+        new_B = Vector{Complex{T}}(undef, N)
+        @inbounds @simd for i in 1:N
+            new_B[i] = fld[i] ^ degree
+        end
+        B_history[t+1] = new_B
     end
 
     # Root computation
@@ -206,25 +226,44 @@ function _backward_pass(cache::BassoPipelineCache{T}) where T
 
     # Branch tensor backward recurrence: t = p, p-1, ..., 1
     kernel_hat_bar = zeros(Complex{T}, N)
+    scratch = Vector{Complex{T}}(undef, N)
 
     for t in p:-1:1
         # B[t+1] = folded[t] .^ degree
-        folded_bar = cache.degree .* conj.(cache.folded[t] .^ (cache.degree - 1)) .* B_bar
+        # folded_bar = degree .* conj(folded[t] .^ (degree-1)) .* B_bar
+        @inbounds @simd for i in 1:N
+            scratch[i] = cache.degree * conj(cache.folded[t][i] ^ (cache.degree - 1)) * B_bar[i]
+        end
+        # scratch now holds folded_bar
 
         # folded[t] = iWHT(kernel_hat .* child_hat[t] .^ arity)
-        product_bar = iwht(folded_bar)
+        # product_bar = iWHT(folded_bar)  — iWHT is self-adjoint up to scale
+        iwht!(scratch)
+        # scratch now holds product_bar
 
-        kernel_hat_bar .+= conj.(cache.child_hat[t] .^ cache.arity) .* product_bar
+        # kernel_hat_bar .+= conj(child_hat .^ arity) .* product_bar
+        @inbounds @simd for i in 1:N
+            kernel_hat_bar[i] += conj(cache.child_hat[t][i] ^ cache.arity) * scratch[i]
+        end
 
-        child_hat_bar = cache.arity .* conj.(cache.child_hat[t] .^ (cache.arity - 1)) .*
-                        conj.(cache.kernel_hat) .* product_bar
+        # child_hat_bar = arity .* conj(child_hat .^ (arity-1)) .* conj(kernel_hat) .* product_bar
+        # Reuse scratch: overwrite with child_hat_bar, then WHT in-place
+        @inbounds @simd for i in 1:N
+            scratch[i] = cache.arity * conj(cache.child_hat[t][i] ^ (cache.arity - 1)) *
+                         conj(cache.kernel_hat[i]) * scratch[i]
+        end
 
         # child_hat[t] = WHT(f_table .* B[t])
-        child_weights_bar = wht(child_hat_bar)
+        # child_weights_bar = WHT(child_hat_bar)
+        wht!(scratch)
+        # scratch now holds child_weights_bar
 
-        # f_table .* B[t]
-        f_table_bar .+= conj.(cache.B[t]) .* child_weights_bar
-        B_bar = conj.(cache.f_table) .* child_weights_bar
+        # f_table_bar .+= conj(B[t]) .* child_weights_bar
+        # B_bar = conj(f_table) .* child_weights_bar
+        @inbounds for i in 1:N
+            f_table_bar[i] += conj(cache.B[t][i]) * scratch[i]
+            B_bar[i] = conj(cache.f_table[i]) * scratch[i]
+        end
     end
 
     # Convert kernel_hat_bar to kernel_bar: kernel_hat = WHT(kernel)

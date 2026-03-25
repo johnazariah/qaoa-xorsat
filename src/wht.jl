@@ -6,16 +6,20 @@ Apply the in-place Walsh-Hadamard transform to a vector of length `2^n`.
 The transform uses the XOR-character basis on `(ℤ₂^n, ⊕)`:
 
 `ĝ(s) = Σₓ g(x) (-1)^{⟨s, x⟩}`.
+
+Uses `@inbounds @simd` for the inner butterfly loop, which gives significant
+speedups at large N by enabling SIMD vectorization of the complex add/subtract.
 """
 function wht!(values::AbstractVector)
-    length(values) ≥ 1 || throw(ArgumentError("values must be non-empty"))
-    ispow2(length(values)) || throw(ArgumentError("length must be a power of two"))
+    N = length(values)
+    N ≥ 1 || throw(ArgumentError("values must be non-empty"))
+    ispow2(N) || throw(ArgumentError("length must be a power of two"))
 
     block = 1
-    while block < length(values)
+    @inbounds while block < N
         stride = 2 * block
-        for base in 1:stride:length(values)
-            for offset in 0:(block-1)
+        for base in 1:stride:N
+            @simd for offset in 0:(block-1)
                 left = base + offset
                 right = left + block
                 x = values[left]
