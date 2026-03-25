@@ -1,0 +1,195 @@
+# Experiment specs for all 15 (k,D) pairs from Jordan et al.
+# Each job runs p=1 through p_max with warm-starting.
+# Memory requirement at depth p: ~p × 2^(2p+1) × 16 bytes (Complex{Float64})
+# At p=13: ~28 GB for adjoint cache → needs 64GB VM
+
+[experiments]
+
+# k=3 family
+[[experiments.jobs]]
+k = 3
+D = 4
+p_max = 13
+clause_sign = 1
+restarts = 2
+maxiters = 320
+seed = 1234
+autodiff = "adjoint"
+priority = 1  # primary target
+
+[[experiments.jobs]]
+k = 3
+D = 5
+p_max = 13
+clause_sign = 1
+restarts = 2
+maxiters = 320
+seed = 1234
+autodiff = "adjoint"
+priority = 2
+
+[[experiments.jobs]]
+k = 3
+D = 6
+p_max = 13
+clause_sign = 1
+restarts = 2
+maxiters = 320
+seed = 1234
+autodiff = "adjoint"
+priority = 3
+
+[[experiments.jobs]]
+k = 3
+D = 7
+p_max = 13
+clause_sign = 1
+restarts = 2
+maxiters = 320
+seed = 1234
+autodiff = "adjoint"
+priority = 3
+
+[[experiments.jobs]]
+k = 3
+D = 8
+p_max = 13
+clause_sign = 1
+restarts = 2
+maxiters = 320
+seed = 1234
+autodiff = "adjoint"
+priority = 3
+
+# k=4 family
+[[experiments.jobs]]
+k = 4
+D = 5
+p_max = 13
+clause_sign = 1
+restarts = 2
+maxiters = 320
+seed = 1234
+autodiff = "adjoint"
+priority = 2
+
+[[experiments.jobs]]
+k = 4
+D = 6
+p_max = 13
+clause_sign = 1
+restarts = 2
+maxiters = 320
+seed = 1234
+autodiff = "adjoint"
+priority = 3
+
+[[experiments.jobs]]
+k = 4
+D = 7
+p_max = 13
+clause_sign = 1
+restarts = 2
+maxiters = 320
+seed = 1234
+autodiff = "adjoint"
+priority = 3
+
+[[experiments.jobs]]
+k = 4
+D = 8
+p_max = 13
+clause_sign = 1
+restarts = 2
+maxiters = 320
+seed = 1234
+autodiff = "adjoint"
+priority = 3
+
+# k=5 family
+[[experiments.jobs]]
+k = 5
+D = 6
+p_max = 13
+clause_sign = 1
+restarts = 2
+maxiters = 320
+seed = 1234
+autodiff = "adjoint"
+priority = 3
+
+[[experiments.jobs]]
+k = 5
+D = 7
+p_max = 13
+clause_sign = 1
+restarts = 2
+maxiters = 320
+seed = 1234
+autodiff = "adjoint"
+priority = 3
+
+[[experiments.jobs]]
+k = 5
+D = 8
+p_max = 13
+clause_sign = 1
+restarts = 2
+maxiters = 320
+seed = 1234
+autodiff = "adjoint"
+priority = 3
+
+# k=6 family
+[[experiments.jobs]]
+k = 6
+D = 7
+p_max = 13
+clause_sign = 1
+restarts = 2
+maxiters = 320
+seed = 1234
+autodiff = "adjoint"
+priority = 3
+
+[[experiments.jobs]]
+k = 6
+D = 8
+p_max = 13
+clause_sign = 1
+restarts = 2
+maxiters = 320
+seed = 1234
+autodiff = "adjoint"
+priority = 3
+
+# k=7 family
+[[experiments.jobs]]
+k = 7
+D = 8
+p_max = 13
+clause_sign = 1
+restarts = 2
+maxiters = 320
+seed = 1234
+autodiff = "adjoint"
+priority = 3
+
+# MaxCut validation (always run first)
+[[experiments.jobs]]
+k = 2
+D = 3
+p_max = 10
+clause_sign = -1
+restarts = 8
+maxiters = 200
+seed = 1234
+autodiff = "adjoint"
+priority = 0  # validation — run first
+
+[azure]
+vm_size = "Standard_E16s_v5"  # 16 cores, 128 GB RAM
+spot = true
+pool_size = 16  # 15 experiments + 1 MaxCut validation
+container = "qaoa-results"
+storage_account = "qaoaxorsat"
