@@ -34,3 +34,5 @@ Thumbs.db
 # Generated local machine-state capture artefacts
 /results/
 .project/
+.devcontainer.archived/
+.worktree/
