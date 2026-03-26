@@ -72,12 +72,12 @@ function format_angle_list(values)
 end
 
 function result_csv_header()
-    "run_id,run_kind,runner_label,timestamp_utc,git_commit,git_branch,git_dirty,k,D,p,clause_sign,restarts,maxiters,seed,value,wall_time_seconds,best_start_wall_time_seconds,evaluations,starts,iterations,converged,retry_count,best_start_kind,gamma,beta"
+    "run_id,run_kind,runner_label,timestamp_utc,git_commit,git_branch,git_dirty,k,D,p,clause_sign,restarts,maxiters,seed,value,wall_time_seconds,best_start_wall_time_seconds,evaluations,starts,iterations,converged,retry_count,best_start_kind,g_abstol,gamma,beta"
 end
 
 function result_csv_row(run_id, run_kind_value, runner_label_value, timestamp_utc, git_commit, git_branch, git_dirty, k, D, clause_sign, restarts, maxiters, seed, result)
     @sprintf(
-        "%s,%s,%s,%s,%s,%s,%s,%d,%d,%d,%d,%d,%d,%d,%.12f,%.6f,%.6f,%d,%d,%d,%s,%d,%s,%s,%s",
+        "%s,%s,%s,%s,%s,%s,%s,%d,%d,%d,%d,%d,%d,%d,%.12f,%.6f,%.6f,%d,%d,%d,%s,%d,%s,%.1e,%s,%s",
         run_id,
         run_kind_value,
         runner_label_value,
@@ -101,6 +101,7 @@ function result_csv_row(run_id, run_kind_value, runner_label_value, timestamp_ut
         string(result.converged),
         result.retry_count,
         string(result.best_start_kind),
+        result.g_abstol,
         format_angle_list(result.angles.γ),
         format_angle_list(result.angles.β),
     )
@@ -141,13 +142,19 @@ function normalize_results_row(header, row, run_kind_value, runner_label_value)
     legacy_header = "run_id,timestamp_utc,git_commit,git_branch,git_dirty,k,D,p,clause_sign,restarts,maxiters,seed,value,wall_time_seconds,best_start_wall_time_seconds,evaluations,starts,iterations,converged,gamma,beta"
     if header == legacy_header
         fields = split(row, ',')
-        return join(vcat(fields[1:1], [run_kind_value, runner_label_value], fields[2:19], ["0", "unknown"], fields[20:end]), ',')
+        return join(vcat(fields[1:1], [run_kind_value, runner_label_value], fields[2:19], ["0", "unknown", "1.0e-6"], fields[20:end]), ',')
     end
 
-    previous_header = "run_id,run_kind,runner_label,timestamp_utc,git_commit,git_branch,git_dirty,k,D,p,clause_sign,restarts,maxiters,seed,value,wall_time_seconds,best_start_wall_time_seconds,evaluations,starts,iterations,converged,gamma,beta"
-    if header == previous_header
+    previous_header_v1 = "run_id,run_kind,runner_label,timestamp_utc,git_commit,git_branch,git_dirty,k,D,p,clause_sign,restarts,maxiters,seed,value,wall_time_seconds,best_start_wall_time_seconds,evaluations,starts,iterations,converged,gamma,beta"
+    if header == previous_header_v1
         fields = split(row, ',')
-        return join(vcat(fields[1:21], ["0", "unknown"], fields[22:end]), ',')
+        return join(vcat(fields[1:21], ["0", "unknown", "1.0e-6"], fields[22:end]), ',')
+    end
+
+    previous_header_v2 = "run_id,run_kind,runner_label,timestamp_utc,git_commit,git_branch,git_dirty,k,D,p,clause_sign,restarts,maxiters,seed,value,wall_time_seconds,best_start_wall_time_seconds,evaluations,starts,iterations,converged,retry_count,best_start_kind,gamma,beta"
+    if header == previous_header_v2
+        fields = split(row, ',')
+        return join(vcat(fields[1:23], ["1.0e-6"], fields[24:end]), ',')
     end
 
     error("unsupported results.csv header: $(header)")
@@ -391,7 +398,7 @@ p_max ≥ p_min || error("P_MAX must be ≥ P_MIN")
 
 rng = MersenneTwister(seed)
 clause_sign = k == 2 ? -1 : 1
-println("p,value,wall_time_seconds,best_start_wall_time_seconds,evaluations,starts,iterations,converged,retry_count,best_start_kind,gamma,beta")
+println("p,value,wall_time_seconds,best_start_wall_time_seconds,evaluations,starts,iterations,converged,retry_count,best_start_kind,g_abstol,gamma,beta")
 flush(stdout)
 
 preservation_context = preserve ? initialize_run_preservation(k, D, p_min, p_max, clause_sign, restarts, maxiters, seed, preserve) : nothing
@@ -403,9 +410,27 @@ else
 end
 flush(stderr)
 
+function emit_progress(p, start_index, evaluations, elapsed_seconds)
+    @printf(stderr, "  p=%d start %d: %d evals, %.1fs elapsed\n", p, start_index, evaluations, elapsed_seconds)
+    flush(stderr)
+end
+
+function write_trace_csv(run_dir, result)
+    p = depth(result.angles)
+    trace_path = joinpath(run_dir, "trace-p$(p).csv")
+    open(trace_path, "w") do io
+        println(io, "start,kind,iteration,value,g_norm")
+        for (i, sr) in enumerate(result.start_results)
+            for entry in sr.trace
+                @printf(io, "%d,%s,%d,%.12e,%.6e\n", i, sr.kind, entry.iteration, entry.value, entry.g_norm)
+            end
+        end
+    end
+end
+
 function emit_result(result)
     @printf(
-        "%d,%.12f,%.6f,%.6f,%d,%d,%d,%s,%d,%s,%s,%s\n",
+        "%d,%.12f,%.6f,%.6f,%d,%d,%d,%s,%d,%s,%.1e,%s,%s\n",
         depth(result.angles),
         result.value,
         result.wall_time_seconds,
@@ -416,6 +441,7 @@ function emit_result(result)
         string(result.converged),
         result.retry_count,
         string(result.best_start_kind),
+        result.g_abstol,
         join(string.(result.angles.γ), ';'),
         join(string.(result.angles.β), ';'),
     )
@@ -423,8 +449,26 @@ function emit_result(result)
 
     if !isnothing(preservation_context)
         append_preserved_result!(preservation_context, result)
+        write_trace_csv(preservation_context.run_dir, result)
     end
 end
+
+current_p = Ref(p_min)
+
+function progress_callback(start_index, evaluations, elapsed_seconds)
+    emit_progress(current_p[], start_index, evaluations, elapsed_seconds)
+end
+
+function result_callback(result)
+    emit_result(result)
+    current_p[] = depth(result.angles) + 1
+end
+
+# JIT warmup: run a throwaway p=1 optimization so compilation cost
+# doesn't pollute the p=1 timing in the real sweep.
+@info "JIT warmup..."
+optimize_depth_sequence(k, D, [1]; clause_sign, restarts=0, maxiters=5, autodiff, rng=MersenneTwister(0))
+@info "JIT warmup complete, starting sweep"
 
 results = optimize_depth_sequence(
     k,
@@ -435,5 +479,6 @@ results = optimize_depth_sequence(
     maxiters,
     autodiff,
     rng,
-    on_result=emit_result,
+    on_result=result_callback,
+    on_evaluation=progress_callback,
 )
