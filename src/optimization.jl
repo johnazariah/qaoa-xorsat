@@ -160,7 +160,7 @@ function depth_optimization_budget(
     end
 end
 
-retry_optimization_budget(maxiters::Int) = maxiters ≥ 1 ? 2 * maxiters : throw(ArgumentError(
+retry_optimization_budget(maxiters::Int) = maxiters ≥ 1 ? maxiters : throw(ArgumentError(
     "maxiters must be ≥ 1, got $maxiters",
 ))
 
@@ -396,18 +396,28 @@ function optimize_depth_sequence(
         )
 
         if !isnothing(warm_start) && !result.converged
-            retry_result = optimize_angles(
-                TreeParams(k, D, p);
-                clause_sign,
-                restarts=0,
-                maxiters=retry_optimization_budget(budget.maxiters),
-                initial_guesses=[result.angles],
-                initial_guess_kind=:retry,
-                autodiff,
-                rng,
-                on_evaluation,
-            )
-            result = merge_optimization_results(result, retry_result)
+            # Adaptive tolerance escalation: relax g_abstol by 10× each retry
+            # until convergence or the floor is hit. At high p the gradient noise
+            # floor is ~1e-8 in c̃, so g_abstol=1e-6 may be unreachable. Instead
+            # of doubling iterations (which wastes hours), we accept a slightly
+            # looser gradient norm. The trace is preserved for post-hoc analysis.
+            escalated_tol = DEFAULT_G_ABSTOL
+            while !result.converged && escalated_tol < RELAXED_G_ABSTOL_FLOOR
+                escalated_tol = min(escalated_tol * 10, RELAXED_G_ABSTOL_FLOOR)
+                retry_result = optimize_angles(
+                    TreeParams(k, D, p);
+                    clause_sign,
+                    restarts=0,
+                    maxiters=retry_optimization_budget(budget.maxiters),
+                    initial_guesses=[result.angles],
+                    initial_guess_kind=:retry,
+                    autodiff,
+                    rng,
+                    g_abstol=escalated_tol,
+                    on_evaluation,
+                )
+                result = merge_optimization_results(result, retry_result)
+            end
         end
 
         push!(results, result)
