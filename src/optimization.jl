@@ -164,6 +164,26 @@ retry_optimization_budget(maxiters::Int) = maxiters ≥ 1 ? maxiters : throw(Arg
     "maxiters must be ≥ 1, got $maxiters",
 ))
 
+"""
+    depth_g_abstol(p) -> Float64
+
+Depth-dependent gradient tolerance. At high p the gradient noise floor
+grows (cross-run agreement is ~1e-8 in c̃ at p=10), making tight tolerances
+unreachable. Starting with a looser tolerance avoids wasting a full
+iteration budget before the adaptive escalation kicks in.
+
+| Depth    | g_abstol | Rationale                                |
+|----------|----------|------------------------------------------|
+| p ≤ 10   | 1e-6     | Converges in 5-45 iterations reliably    |
+| p = 11-12| 1e-5     | Gradient noise floor makes 1e-6 marginal |
+| p ≥ 13   | 1e-4     | 2^27 element WHT, higher noise floor     |
+"""
+function depth_g_abstol(p::Int)
+    p ≤ 10 ? DEFAULT_G_ABSTOL :
+    p ≤ 12 ? 1.0e-5 :
+             RELAXED_G_ABSTOL_FLOOR
+end
+
 function merge_optimization_results(
     primary::AngleOptimizationResult,
     secondary::AngleOptimizationResult,
@@ -382,6 +402,7 @@ function optimize_depth_sequence(
 
     for p in validated_p_values
         budget = depth_optimization_budget(p, restarts, maxiters)
+        start_tol = depth_g_abstol(p)
         initial_guesses = isnothing(warm_start) ? QAOAAngles[] : [extend_angles(warm_start, p)]
         result = optimize_angles(
             TreeParams(k, D, p);
@@ -392,16 +413,17 @@ function optimize_depth_sequence(
             initial_guess_kind=:warm,
             autodiff,
             rng,
+            g_abstol=start_tol,
             on_evaluation,
         )
 
         if !isnothing(warm_start) && !result.converged
             # Adaptive tolerance escalation: relax g_abstol by 10× each retry
             # until convergence or the floor is hit. At high p the gradient noise
-            # floor is ~1e-8 in c̃, so g_abstol=1e-6 may be unreachable. Instead
+            # floor is ~1e-8 in c̃, so tight tolerances may be unreachable. Instead
             # of doubling iterations (which wastes hours), we accept a slightly
             # looser gradient norm. The trace is preserved for post-hoc analysis.
-            escalated_tol = DEFAULT_G_ABSTOL
+            escalated_tol = start_tol
             while !result.converged && escalated_tol < RELAXED_G_ABSTOL_FLOOR
                 escalated_tol = min(escalated_tol * 10, RELAXED_G_ABSTOL_FLOOR)
                 retry_result = optimize_angles(
