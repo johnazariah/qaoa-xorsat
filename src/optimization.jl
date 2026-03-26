@@ -25,7 +25,7 @@ struct AngleOptimizationStartResult
 end
 
 const DEFAULT_G_ABSTOL = 1.0e-6
-const RELAXED_G_ABSTOL_FLOOR = 1.0e-4
+const RELAXED_G_ABSTOL_FLOOR = 1.0e-3
 const F_RELTOL = 1.0e-10
 
 struct DepthOptimizationBudget
@@ -180,13 +180,13 @@ iteration budget before the adaptive escalation kicks in.
 | Depth    | g_abstol | Rationale                                |
 |----------|----------|------------------------------------------|
 | p ≤ 10   | 1e-6     | Converges in 5-45 iterations reliably    |
-| p = 11-12| 1e-5     | Gradient noise floor makes 1e-6 marginal |
-| p ≥ 13   | 1e-4     | 2^27 element WHT, higher noise floor     |
+| p = 11   | 1e-5     | Gradient noise floor makes 1e-6 marginal |
+| p ≥ 12   | 1e-4     | g_norm oscillates ~1e-4 at p=12          |
 """
 function depth_g_abstol(p::Int)
     p ≤ 10 ? DEFAULT_G_ABSTOL :
-    p ≤ 12 ? 1.0e-5 :
-             RELAXED_G_ABSTOL_FLOOR
+    p == 11 ? 1.0e-5 :
+              1.0e-4
 end
 
 function merge_optimization_results(
