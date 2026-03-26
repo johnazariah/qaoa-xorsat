@@ -7,20 +7,61 @@ The transform uses the XOR-character basis on `(ℤ₂^n, ⊕)`:
 
 `ĝ(s) = Σₓ g(x) (-1)^{⟨s, x⟩}`.
 
-Uses `@inbounds @simd` for the inner butterfly loop, which gives significant
-speedups at large N by enabling SIMD vectorization of the complex add/subtract.
+Uses a recursive cache-oblivious decomposition: for large vectors, the transform
+splits into a butterfly merge followed by two independent sub-transforms on each
+half. Sub-problems that fit in L1 cache (~32KB) use the iterative SIMD kernel.
+Since WHT butterfly levels operate on independent bit positions, the
+level-ordering is free — the recursive and iterative approaches produce
+identical results.
 """
 function wht!(values::AbstractVector)
     N = length(values)
     N ≥ 1 || throw(ArgumentError("values must be non-empty"))
     ispow2(N) || throw(ArgumentError("length must be a power of two"))
+    _wht_recursive!(values, 1, N)
+    values
+end
 
+# Cutoff: sub-problems of this size or smaller use the iterative kernel.
+# 2048 ComplexF64 elements = 32KB, fits comfortably in L1 cache on all targets
+# (M4 Apple Silicon: 192KB L1, Intel/AMD Xeon: 32-48KB L1).
+const _WHT_RECURSIVE_CUTOFF = 2048
+
+"""
+Recursive cache-oblivious WHT on values[offset : offset+n-1].
+Splits the transform at the top butterfly level, then recurses on each half.
+"""
+function _wht_recursive!(values::AbstractVector, offset::Int, n::Int)
+    if n ≤ _WHT_RECURSIVE_CUTOFF
+        _wht_iterative!(values, offset, n)
+        return
+    end
+    half = n >> 1
+    # Top-level butterfly: combine the two halves
+    @inbounds @simd for i in 0:half-1
+        left = offset + i
+        right = left + half
+        x = values[left]
+        y = values[right]
+        values[left] = x + y
+        values[right] = x - y
+    end
+    # Recurse on each half — sub-problems stay in cache longer
+    _wht_recursive!(values, offset, half)
+    _wht_recursive!(values, offset + half, half)
+end
+
+"""
+Iterative SIMD WHT kernel for contiguous sub-arrays. Used as the base case
+of the recursive decomposition.
+"""
+function _wht_iterative!(values::AbstractVector, offset::Int, n::Int)
     block = 1
-    @inbounds while block < N
+    @inbounds while block < n
         stride = 2 * block
-        for base in 1:stride:N
-            @simd for offset in 0:(block-1)
-                left = base + offset
+        for base in offset:stride:(offset + n - 1)
+            @simd for j in 0:(block-1)
+                left = base + j
                 right = left + block
                 x = values[left]
                 y = values[right]
@@ -30,8 +71,6 @@ function wht!(values::AbstractVector)
         end
         block = stride
     end
-
-    values
 end
 
 """Out-of-place Walsh-Hadamard transform."""

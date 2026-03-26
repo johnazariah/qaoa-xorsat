@@ -8,6 +8,12 @@ struct AngleOptimizationStartSpec
     angles::QAOAAngles
 end
 
+struct OptimizationTraceEntry
+    iteration::Int
+    value::Float64
+    g_norm::Float64
+end
+
 struct AngleOptimizationStartResult
     kind::Symbol
     value::Float64
@@ -15,7 +21,12 @@ struct AngleOptimizationStartResult
     evaluations::Int
     iterations::Int
     converged::Bool
+    trace::Vector{OptimizationTraceEntry}
 end
+
+const DEFAULT_G_ABSTOL = 1.0e-6
+const RELAXED_G_ABSTOL_FLOOR = 1.0e-4
+const F_RELTOL = 1.0e-10
 
 struct DepthOptimizationBudget
     restarts::Int
@@ -35,6 +46,7 @@ struct AngleOptimizationResult
     maxiters::Int
     retry_count::Int
     best_start_kind::Symbol
+    g_abstol::Float64
     start_results::Vector{AngleOptimizationStartResult}
 end
 
@@ -177,6 +189,7 @@ function merge_optimization_results(
         max(primary.maxiters, secondary.maxiters),
         primary.retry_count + secondary.retry_count + 1,
         best.best_start_kind,
+        best.g_abstol,
         vcat(primary.start_results, secondary.start_results),
     )
 end
@@ -195,6 +208,8 @@ Keyword arguments:
 - `initial_guesses`: optional seeded starting points of depth `p`
 - `autodiff`: gradient method — `:adjoint` (default, fastest), `:forward` (ForwardDiff), or `:finite` (finite differences)
 - `rng`: random number generator for restart sampling
+- `g_abstol`: gradient absolute tolerance for convergence (default: `DEFAULT_G_ABSTOL`)
+- `on_evaluation`: optional callback `(start_index, evaluations, elapsed_seconds) -> nothing` throttled to at most once per 30 seconds per start
 """
 function optimize_angles(
     params::TreeParams;
@@ -205,6 +220,8 @@ function optimize_angles(
     initial_guess_kind::Symbol=:seeded,
     autodiff::Symbol=:adjoint,
     rng=Random.default_rng(),
+    g_abstol::Float64=DEFAULT_G_ABSTOL,
+    on_evaluation=nothing,
 )::AngleOptimizationResult
     validate_clause_sign(clause_sign)
     maxiters ≥ 1 || throw(ArgumentError("maxiters must be ≥ 1, got $maxiters"))
@@ -218,12 +235,26 @@ function optimize_angles(
     Threads.@threads for i in eachindex(guesses)
         guess = guesses[i]
         local_evaluations = Ref(0)
+        last_progress_at = Ref(time_ns())
         started_at = time_ns()
 
+        function maybe_report_progress!()
+            isnothing(on_evaluation) && return
+            now = time_ns()
+            elapsed_since_report = (now - last_progress_at[]) / 1.0e9
+            elapsed_since_report ≥ 30.0 || return
+            last_progress_at[] = now
+            elapsed = (now - started_at) / 1.0e9
+            on_evaluation(i, local_evaluations[], elapsed)
+        end
+
         if autodiff == :adjoint
-            # Manual adjoint: combined value+gradient
+            # Manual adjoint: combined value+gradient via fg! for efficiency.
+            # Optim's line search calls fg! when it needs both f and g together,
+            # avoiding the redundant forward pass that separate f/g! would require.
             function f_adjoint(values)
                 local_evaluations[] += 1
+                maybe_report_progress!()
                 candidate = angles_from_vector(values, params.p)
                 -qaoa_expectation(params, candidate; clause_sign)
             end
@@ -235,16 +266,27 @@ function optimize_angles(
                 G[params.p+1:2*params.p] .= .-βg
             end
 
-            od = Optim.OnceDifferentiable(f_adjoint, g_adjoint!, angle_vector(guess.angles))
+            function fg_adjoint!(G, values)
+                local_evaluations[] += 1
+                maybe_report_progress!()
+                candidate = angles_from_vector(values, params.p)
+                val, γg, βg = basso_expectation_and_gradient(params, candidate; clause_sign)
+                G[1:params.p] .= .-γg
+                G[params.p+1:2*params.p] .= .-βg
+                -val
+            end
+
+            od = Optim.OnceDifferentiable(f_adjoint, g_adjoint!, fg_adjoint!, angle_vector(guess.angles))
             result = Optim.optimize(
                 od,
                 angle_vector(guess.angles),
                 Optim.LBFGS(),
-                Optim.Options(iterations=maxiters, g_abstol=1.0e-6, show_trace=false),
+                Optim.Options(iterations=maxiters, g_abstol=g_abstol, f_reltol=F_RELTOL, store_trace=true, show_trace=false),
             )
         else
             function objective(values)
                 local_evaluations[] += 1
+                maybe_report_progress!()
                 candidate = angles_from_vector(values, params.p)
                 -qaoa_expectation(params, candidate; clause_sign)
             end
@@ -253,7 +295,7 @@ function optimize_angles(
                 objective,
                 angle_vector(guess.angles),
                 Optim.LBFGS(),
-                Optim.Options(iterations=maxiters, g_abstol=1.0e-6, show_trace=false);
+                Optim.Options(iterations=maxiters, g_abstol=g_abstol, f_reltol=F_RELTOL, store_trace=true, show_trace=false);
                 autodiff=autodiff == :forward ? AutoForwardDiff() : :finite,
             )
         end
@@ -261,6 +303,11 @@ function optimize_angles(
         elapsed_seconds = (time_ns() - started_at) / 1.0e9
         candidate_angles = angles_from_vector(Optim.minimizer(result), params.p) |> canonicalize_angles
         candidate_value = qaoa_expectation(params, candidate_angles; clause_sign)
+        optim_trace = Optim.trace(result)
+        trace_entries = [
+            OptimizationTraceEntry(state.iteration, state.value, state.g_norm)
+            for state in optim_trace
+        ]
         start_result = AngleOptimizationStartResult(
             guess.kind,
             candidate_value,
@@ -268,6 +315,7 @@ function optimize_angles(
             local_evaluations[],
             Optim.iterations(result),
             Optim.converged(result),
+            trace_entries,
         )
         per_start_results[i] = (candidate_angles, candidate_value, start_result)
     end
@@ -292,6 +340,7 @@ function optimize_angles(
         maxiters,
         0,
         best_start.kind,
+        g_abstol,
         start_results,
     )
 end
@@ -323,6 +372,7 @@ function optimize_depth_sequence(
     autodiff::Symbol=:adjoint,
     rng=Random.default_rng(),
     on_result=nothing,
+    on_evaluation=nothing,
 )::Vector{AngleOptimizationResult}
     validate_clause_sign(clause_sign)
     validated_p_values = validate_depth_sequence(collect(Int, p_values))
@@ -342,6 +392,7 @@ function optimize_depth_sequence(
             initial_guess_kind=:warm,
             autodiff,
             rng,
+            on_evaluation,
         )
 
         if !isnothing(warm_start) && !result.converged
@@ -354,6 +405,7 @@ function optimize_depth_sequence(
                 initial_guess_kind=:retry,
                 autodiff,
                 rng,
+                on_evaluation,
             )
             result = merge_optimization_results(result, retry_result)
         end
