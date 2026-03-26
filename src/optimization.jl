@@ -155,8 +155,13 @@ function depth_optimization_budget(
         return DepthOptimizationBudget(restarts, maxiters)
     elseif p == 4
         return DepthOptimizationBudget(min(restarts, 4), 2 * maxiters)
-    else
+    elseif p ≤ 10
         return DepthOptimizationBudget(min(restarts, 2), 4 * maxiters)
+    else
+        # At p≥11, random starts can't compete with warm start — the landscape
+        # is too large. Run warm start only to avoid waiting hours for hopeless
+        # random starts to hit maxiters.
+        return DepthOptimizationBudget(0, 4 * maxiters)
     end
 end
 
