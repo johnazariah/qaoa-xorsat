@@ -343,6 +343,10 @@ function optimize_angles(
                 remaining -= Optim.iterations(result)
                 current_x = Optim.minimizer(result)
 
+                # Flush trace after every chunk — before checking convergence
+                # so we always get visibility into what happened
+                isnothing(on_chunk) || on_chunk(i, total_iterations, all_trace)
+
                 # Check for convergence (gradient tolerance met)
                 if Optim.converged(result)
                     converged_flag = true
@@ -362,9 +366,6 @@ function optimize_angles(
                 if Optim.iterations(result) < chunk
                     break
                 end
-
-                # Notify listener for incremental trace flushing
-                isnothing(on_chunk) || on_chunk(i, total_iterations, all_trace)
             end
 
             # Package results using the accumulated state
