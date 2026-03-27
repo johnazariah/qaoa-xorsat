@@ -1,0 +1,16 @@
+# Template: run a single (k,D) pair from a given starting depth
+# Copy this file and edit the parameters, or use the CLI:
+#   julia --project=. -t 12 scripts/optimize_qaoa.jl K D P_MIN P_MAX 2 320 1234 true adjoint
+
+k = 3
+D = 4
+p_min = 1
+p_max = 14
+restarts = 2
+maxiters = 320
+seed = 1234
+autodiff = "adjoint"
+preserve = true
+
+# Optional: resume from a previous run directory
+# resume_from = "path/to/previous/run/directory"
