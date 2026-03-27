@@ -16,7 +16,7 @@ using Random
 using QaoaXorsat
 
 p_max = length(ARGS) ≥ 1 ? parse(Int, ARGS[1]) : 13
-D_ref = 100  # large enough that O(1/D) ≈ 1%
+D_ref = 20  # large enough that O(1/D) ≈ 5%, small enough to avoid overflow
 seed = 1234
 restarts = 2
 maxiters = 320
@@ -35,7 +35,7 @@ pairs = [
 
 # JIT warmup
 @info "JIT warmup..."
-optimize_depth_sequence(3, 100, [1]; clause_sign=1, restarts=0, maxiters=5,
+optimize_depth_sequence(3, 20, [1]; clause_sign=1, restarts=0, maxiters=5,
     autodiff=:adjoint, rng=MersenneTwister(0))
 @info "JIT warmup complete"
 
@@ -74,8 +74,8 @@ end
 @printf(stderr, "\nSaved: %s\n", output_path)
 
 # Print summary comparison table for (k=3, D=4) reference
-println(stderr, "\n=== Quick comparison: k=3 asymptotic vs finite-D=4 ===")
-println(stderr, "  p | D=100 (≈∞) | D=4 (exact)  | Δ (O(1/D))")
+println(stderr, "\n=== Quick comparison: k=3 D=20 (ref) vs finite-D=4 ===")
+println(stderr, "  p | D=20 (ref)  | D=4 (exact)  | Δ (O(1/D))")
 println(stderr, "  --|------------|--------------|----------")
 
 # Known finite-D=4 values from our runs
