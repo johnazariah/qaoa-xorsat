@@ -234,7 +234,7 @@ Keyword arguments:
 - `autodiff`: gradient method — `:adjoint` (default, fastest), `:forward` (ForwardDiff), or `:finite` (finite differences)
 - `rng`: random number generator for restart sampling
 - `g_abstol`: gradient absolute tolerance for convergence (default: `DEFAULT_G_ABSTOL`)
-- `on_evaluation`: optional callback `(start_index, evaluations, elapsed_seconds) -> nothing` throttled to at most once per 30 seconds per start
+- `on_evaluation`: optional callback `(start_index, evaluations, elapsed_seconds, value, g_norm) -> nothing` throttled to at most once per 30 seconds per start
 """
 function optimize_angles(
     params::TreeParams;
@@ -262,6 +262,8 @@ function optimize_angles(
         local_evaluations = Ref(0)
         last_progress_at = Ref(time_ns())
         started_at = time_ns()
+        last_value = Ref(NaN)
+        last_g_norm = Ref(NaN)
 
         function maybe_report_progress!()
             isnothing(on_evaluation) && return
@@ -270,7 +272,7 @@ function optimize_angles(
             elapsed_since_report ≥ 30.0 || return
             last_progress_at[] = now
             elapsed = (now - started_at) / 1.0e9
-            on_evaluation(i, local_evaluations[], elapsed)
+            on_evaluation(i, local_evaluations[], elapsed, last_value[], last_g_norm[])
         end
 
         if autodiff == :adjoint
@@ -289,6 +291,7 @@ function optimize_angles(
                 _, γg, βg = basso_expectation_and_gradient(params, candidate; clause_sign)
                 G[1:params.p] .= .-γg
                 G[params.p+1:2*params.p] .= .-βg
+                last_g_norm[] = maximum(abs, G)
             end
 
             function fg_adjoint!(G, values)
@@ -298,6 +301,8 @@ function optimize_angles(
                 val, γg, βg = basso_expectation_and_gradient(params, candidate; clause_sign)
                 G[1:params.p] .= .-γg
                 G[params.p+1:2*params.p] .= .-βg
+                last_g_norm[] = maximum(abs, G)
+                last_value[] = val
                 -val
             end
 
@@ -398,12 +403,12 @@ function optimize_depth_sequence(
     rng=Random.default_rng(),
     on_result=nothing,
     on_evaluation=nothing,
+    warm_start::Union{Nothing,QAOAAngles}=nothing,
 )::Vector{AngleOptimizationResult}
     validate_clause_sign(clause_sign)
     validated_p_values = validate_depth_sequence(collect(Int, p_values))
 
     results = AngleOptimizationResult[]
-    warm_start = nothing
 
     for p in validated_p_values
         budget = depth_optimization_budget(p, restarts, maxiters)

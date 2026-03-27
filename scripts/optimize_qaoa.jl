@@ -20,8 +20,13 @@ function parse_int(name::String, value::String)
 end
 
 function usage()
-    println(stderr, "Usage: julia --project=. scripts/optimize_qaoa.jl K D P_MIN P_MAX [RESTARTS] [MAXITERS] [SEED] [PRESERVE] [AUTODIFF]")
-    println(stderr, "  AUTODIFF: adjoint (default), forward, or finite")
+    println(stderr, """Usage:
+  julia --project=. scripts/optimize_qaoa.jl CONFIG.toml
+  julia --project=. scripts/optimize_qaoa.jl K D P_MIN P_MAX [RESTARTS] [MAXITERS] [SEED] [PRESERVE] [AUTODIFF]
+
+TOML config keys: k, D, p_min, p_max, restarts, maxiters, seed, autodiff, preserve, resume_from
+  resume_from: path to a previous run directory — copies results for p < p_min and
+               warm-starts p_min from the p_min-1 angles found in that run.""")
 end
 
 json_escape(text::AbstractString) = escape_string(text)
@@ -376,22 +381,42 @@ function preserve_run(results, k, D, p_min, p_max, clause_sign, restarts, maxite
     context.run_dir, context.run_id
 end
 
-length(ARGS) ≥ 4 || (usage(); exit(1))
+length(ARGS) ≥ 1 || (usage(); exit(1))
 
-k = parse_int("K", ARGS[1])
-D = parse_int("D", ARGS[2])
-p_min = parse_int("P_MIN", ARGS[3])
-p_max = parse_int("P_MAX", ARGS[4])
-restarts = length(ARGS) ≥ 5 ? parse_int("RESTARTS", ARGS[5]) : 8
-maxiters = length(ARGS) ≥ 6 ? parse_int("MAXITERS", ARGS[6]) : 200
-seed = length(ARGS) ≥ 7 ? parse_int("SEED", ARGS[7]) : 1234
-preserve = length(ARGS) ≥ 8 ? parse_bool_flag(ARGS[8]) : true
-autodiff = if length(ARGS) ≥ 9
-    s = lowercase(ARGS[9])
-    s in ("adjoint", "forward", "finite") || error("AUTODIFF must be adjoint, forward, or finite; got $s")
-    Symbol(s)
+# ── Parse config: TOML file or positional CLI args ────────────────────────────
+resume_from = ""
+if length(ARGS) == 1 && endswith(ARGS[1], ".toml")
+    using TOML
+    config = TOML.parsefile(ARGS[1])
+    k = config["k"]::Int
+    D = config["D"]::Int
+    p_min = config["p_min"]::Int
+    p_max = config["p_max"]::Int
+    restarts = get(config, "restarts", 2)::Int
+    maxiters = get(config, "maxiters", 320)::Int
+    seed = get(config, "seed", 1234)::Int
+    preserve = get(config, "preserve", true)::Bool
+    autodiff_str = get(config, "autodiff", "adjoint")::String
+    autodiff_str in ("adjoint", "forward", "finite") || error("autodiff must be adjoint, forward, or finite; got $autodiff_str")
+    autodiff = Symbol(autodiff_str)
+    resume_from = get(config, "resume_from", "")::String
 else
-    :adjoint
+    length(ARGS) ≥ 4 || (usage(); exit(1))
+    k = parse_int("K", ARGS[1])
+    D = parse_int("D", ARGS[2])
+    p_min = parse_int("P_MIN", ARGS[3])
+    p_max = parse_int("P_MAX", ARGS[4])
+    restarts = length(ARGS) ≥ 5 ? parse_int("RESTARTS", ARGS[5]) : 8
+    maxiters = length(ARGS) ≥ 6 ? parse_int("MAXITERS", ARGS[6]) : 200
+    seed = length(ARGS) ≥ 7 ? parse_int("SEED", ARGS[7]) : 1234
+    preserve = length(ARGS) ≥ 8 ? parse_bool_flag(ARGS[8]) : true
+    autodiff = if length(ARGS) ≥ 9
+        s = lowercase(ARGS[9])
+        s in ("adjoint", "forward", "finite") || error("AUTODIFF must be adjoint, forward, or finite; got $s")
+        Symbol(s)
+    else
+        :adjoint
+    end
 end
 
 p_max ≥ p_min || error("P_MAX must be ≥ P_MIN")
@@ -410,8 +435,49 @@ else
 end
 flush(stderr)
 
-function emit_progress(p, start_index, evaluations, elapsed_seconds)
-    @printf(stderr, "  p=%d start %d: %d evals, %.1fs elapsed\n", p, start_index, evaluations, elapsed_seconds)
+# ── Resume: load previous run, copy results for p < p_min, extract warm-start ─
+warm_start_angles = nothing
+if !isempty(resume_from)
+    resume_dir = isabspath(resume_from) ? resume_from : joinpath(@__DIR__, "..", resume_from)
+    resume_csv = joinpath(resume_dir, "results.csv")
+    isfile(resume_csv) || error("resume_from results.csv not found: $resume_csv")
+    println(stderr, "resuming from: $resume_dir")
+
+    # Parse the previous results
+    lines = readlines(resume_csv)
+    header = lines[1]
+    for line in lines[2:end]
+        fields = split(line, ',')
+        prev_p = parse(Int, fields[10])
+
+        # Copy results for p < p_min into the new run
+        if prev_p < p_min && !isnothing(preservation_context)
+            append_results_csv_row(preservation_context.results_path, line)
+            # Also copy trace files
+            src_trace = joinpath(resume_dir, "trace-p$(prev_p).csv")
+            dst_trace = joinpath(preservation_context.run_dir, "trace-p$(prev_p).csv")
+            isfile(src_trace) && cp(src_trace, dst_trace; force=true)
+        end
+
+        # Extract warm-start angles from p_min - 1
+        if prev_p == p_min - 1
+            γ_strs = split(fields[25], ';')
+            β_strs = split(fields[26], ';')
+            γ = parse.(Float64, γ_strs)
+            β = parse.(Float64, β_strs)
+            warm_start_angles = QAOAAngles(γ, β)
+            @printf(stderr, "warm-start from p=%d: c̃=%.12f\n", prev_p, parse(Float64, fields[15]))
+        end
+    end
+    flush(stderr)
+end
+
+function emit_progress(p, start_index, evaluations, elapsed_seconds, value, g_norm)
+    if isnan(value) || isnan(g_norm)
+        @printf(stderr, "  p=%d start %d: %d evals, %.1fs elapsed\n", p, start_index, evaluations, elapsed_seconds)
+    else
+        @printf(stderr, "  p=%d start %d: %d evals, %.1fs elapsed, c̃=%.10f, g_norm=%.2e\n", p, start_index, evaluations, elapsed_seconds, value, g_norm)
+    end
     flush(stderr)
 end
 
@@ -455,8 +521,8 @@ end
 
 current_p = Ref(p_min)
 
-function progress_callback(start_index, evaluations, elapsed_seconds)
-    emit_progress(current_p[], start_index, evaluations, elapsed_seconds)
+function progress_callback(start_index, evaluations, elapsed_seconds, value, g_norm)
+    emit_progress(current_p[], start_index, evaluations, elapsed_seconds, value, g_norm)
 end
 
 function result_callback(result)
@@ -481,4 +547,5 @@ results = optimize_depth_sequence(
     rng,
     on_result=result_callback,
     on_evaluation=progress_callback,
+    warm_start=warm_start_angles,
 )
