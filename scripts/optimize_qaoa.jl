@@ -525,6 +525,20 @@ function progress_callback(start_index, evaluations, elapsed_seconds, value, g_n
     emit_progress(current_p[], start_index, evaluations, elapsed_seconds, value, g_norm)
 end
 
+function chunk_callback(start_index, iterations, trace_entries)
+    # Flush incremental trace every 100 iterations so we can see what's happening
+    if !isnothing(preservation_context)
+        p = current_p[]
+        trace_path = joinpath(preservation_context.run_dir, "trace-p$(p)-partial.csv")
+        open(trace_path, "w") do io
+            println(io, "start,iteration,value,g_norm")
+            for entry in trace_entries
+                @printf(io, "%d,%d,%.12e,%.6e\n", start_index, entry.iteration, entry.value, entry.g_norm)
+            end
+        end
+    end
+end
+
 function result_callback(result)
     emit_result(result)
     current_p[] = depth(result.angles) + 1
@@ -547,5 +561,6 @@ results = optimize_depth_sequence(
     rng,
     on_result=result_callback,
     on_evaluation=progress_callback,
+    on_chunk=chunk_callback,
     warm_start=warm_start_angles,
 )

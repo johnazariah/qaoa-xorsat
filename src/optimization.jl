@@ -27,6 +27,8 @@ end
 const DEFAULT_G_ABSTOL = 1.0e-6
 const RELAXED_G_ABSTOL_FLOOR = 1.0e-3
 const F_RELTOL = 1.0e-10
+const PLATEAU_CHUNK_SIZE = 100
+const PLATEAU_VALUE_EPSILON = 1.0e-9  # if max-min of values over a chunk < this, plateau
 
 struct DepthOptimizationBudget
     restarts::Int
@@ -235,6 +237,7 @@ Keyword arguments:
 - `rng`: random number generator for restart sampling
 - `g_abstol`: gradient absolute tolerance for convergence (default: `DEFAULT_G_ABSTOL`)
 - `on_evaluation`: optional callback `(start_index, evaluations, elapsed_seconds, value, g_norm) -> nothing` throttled to at most once per 30 seconds per start
+- `on_chunk`: optional callback `(start_index, iterations, trace_entries) -> nothing` called after every $(PLATEAU_CHUNK_SIZE)-iteration chunk for incremental trace flushing
 """
 function optimize_angles(
     params::TreeParams;
@@ -247,6 +250,7 @@ function optimize_angles(
     rng=Random.default_rng(),
     g_abstol::Float64=DEFAULT_G_ABSTOL,
     on_evaluation=nothing,
+    on_chunk=nothing,
 )::AngleOptimizationResult
     validate_clause_sign(clause_sign)
     maxiters ≥ 1 || throw(ArgumentError("maxiters must be ≥ 1, got $maxiters"))
@@ -307,13 +311,78 @@ function optimize_angles(
             end
 
             od = Optim.OnceDifferentiable(f_adjoint, g_adjoint!, fg_adjoint!, angle_vector(guess.angles))
-            result = Optim.optimize(
-                od,
-                angle_vector(guess.angles),
-                Optim.LBFGS(),
-                Optim.Options(iterations=maxiters, g_abstol=g_abstol, f_reltol=F_RELTOL, store_trace=true, show_trace=false),
+
+            # Chunked optimization: run PLATEAU_CHUNK_SIZE iterations at a time.
+            # After each chunk, check if the value has plateaued (max-min over
+            # the chunk < PLATEAU_VALUE_EPSILON). If so, declare converged even
+            # if g_norm hasn't hit g_abstol. This avoids grinding for hours on a
+            # flat landscape where the gradient can't reach the tolerance.
+            current_x = angle_vector(guess.angles)
+            all_trace = OptimizationTraceEntry[]
+            total_iterations = 0
+            converged_flag = false
+            remaining = maxiters
+
+            while remaining > 0
+                chunk = min(remaining, PLATEAU_CHUNK_SIZE)
+                result = Optim.optimize(
+                    od,
+                    current_x,
+                    Optim.LBFGS(),
+                    Optim.Options(iterations=chunk, g_abstol=g_abstol, f_reltol=F_RELTOL, store_trace=true, show_trace=false),
+                )
+
+                # Accumulate trace
+                optim_trace = Optim.trace(result)
+                chunk_values = Float64[]
+                for state in optim_trace
+                    push!(all_trace, OptimizationTraceEntry(total_iterations + state.iteration, state.value, state.g_norm))
+                    push!(chunk_values, state.value)
+                end
+                total_iterations += Optim.iterations(result)
+                remaining -= Optim.iterations(result)
+                current_x = Optim.minimizer(result)
+
+                # Check for convergence (gradient tolerance met)
+                if Optim.converged(result)
+                    converged_flag = true
+                    break
+                end
+
+                # Check for plateau (value stopped moving)
+                if length(chunk_values) ≥ 10
+                    value_range = maximum(chunk_values) - minimum(chunk_values)
+                    if value_range < PLATEAU_VALUE_EPSILON
+                        converged_flag = true  # plateau = converged for our purposes
+                        break
+                    end
+                end
+
+                # Early exit if Optim used fewer iterations than requested (hit f_reltol or similar)
+                if Optim.iterations(result) < chunk
+                    break
+                end
+
+                # Notify listener for incremental trace flushing
+                isnothing(on_chunk) || on_chunk(i, total_iterations, all_trace)
+            end
+
+            # Package results using the accumulated state
+            elapsed_seconds_start = (time_ns() - started_at) / 1.0e9
+            candidate_angles_start = angles_from_vector(current_x, params.p) |> canonicalize_angles
+            candidate_value_start = qaoa_expectation(params, candidate_angles_start; clause_sign)
+            start_result = AngleOptimizationStartResult(
+                guess.kind,
+                candidate_value_start,
+                elapsed_seconds_start,
+                local_evaluations[],
+                total_iterations,
+                converged_flag,
+                all_trace,
             )
+            per_start_results[i] = (candidate_angles_start, candidate_value_start, start_result)
         else
+            # Non-adjoint path (ForwardDiff or finite differences) — no chunking
             function objective(values)
                 local_evaluations[] += 1
                 maybe_report_progress!()
@@ -328,26 +397,26 @@ function optimize_angles(
                 Optim.Options(iterations=maxiters, g_abstol=g_abstol, f_reltol=F_RELTOL, store_trace=true, show_trace=false);
                 autodiff=autodiff == :forward ? AutoForwardDiff() : :finite,
             )
-        end
 
-        elapsed_seconds = (time_ns() - started_at) / 1.0e9
-        candidate_angles = angles_from_vector(Optim.minimizer(result), params.p) |> canonicalize_angles
-        candidate_value = qaoa_expectation(params, candidate_angles; clause_sign)
-        optim_trace = Optim.trace(result)
-        trace_entries = [
-            OptimizationTraceEntry(state.iteration, state.value, state.g_norm)
-            for state in optim_trace
-        ]
-        start_result = AngleOptimizationStartResult(
-            guess.kind,
-            candidate_value,
-            elapsed_seconds,
-            local_evaluations[],
-            Optim.iterations(result),
-            Optim.converged(result),
-            trace_entries,
-        )
-        per_start_results[i] = (candidate_angles, candidate_value, start_result)
+            elapsed_seconds = (time_ns() - started_at) / 1.0e9
+            candidate_angles = angles_from_vector(Optim.minimizer(result), params.p) |> canonicalize_angles
+            candidate_value = qaoa_expectation(params, candidate_angles; clause_sign)
+            optim_trace = Optim.trace(result)
+            trace_entries = [
+                OptimizationTraceEntry(state.iteration, state.value, state.g_norm)
+                for state in optim_trace
+            ]
+            start_result = AngleOptimizationStartResult(
+                guess.kind,
+                candidate_value,
+                elapsed_seconds,
+                local_evaluations[],
+                Optim.iterations(result),
+                Optim.converged(result),
+                trace_entries,
+            )
+            per_start_results[i] = (candidate_angles, candidate_value, start_result)
+        end
     end
 
     # Collect results — pick the best start
@@ -403,6 +472,7 @@ function optimize_depth_sequence(
     rng=Random.default_rng(),
     on_result=nothing,
     on_evaluation=nothing,
+    on_chunk=nothing,
     warm_start::Union{Nothing,QAOAAngles}=nothing,
 )::Vector{AngleOptimizationResult}
     validate_clause_sign(clause_sign)
@@ -425,6 +495,7 @@ function optimize_depth_sequence(
             rng,
             g_abstol=start_tol,
             on_evaluation,
+            on_chunk,
         )
 
         if !isnothing(warm_start) && !result.converged
@@ -447,6 +518,7 @@ function optimize_depth_sequence(
                     rng,
                     g_abstol=escalated_tol,
                     on_evaluation,
+                    on_chunk,
                 )
                 result = merge_optimization_results(result, retry_result)
             end
