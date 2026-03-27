@@ -465,7 +465,7 @@ if !isempty(resume_from)
             β_strs = split(fields[26], ';')
             γ = parse.(Float64, γ_strs)
             β = parse.(Float64, β_strs)
-            warm_start_angles = QAOAAngles(γ, β)
+            global warm_start_angles = QAOAAngles(γ, β)
             @printf(stderr, "warm-start from p=%d: c̃=%.12f\n", prev_p, parse(Float64, fields[15]))
         end
     end
