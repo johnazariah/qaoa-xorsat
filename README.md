@@ -2,6 +2,9 @@
 
 **Exact QAOA performance on D-regular Max-k-XORSAT via generic tree folding**
 
+*John S Azariah — Centre for Quantum Software and Information, UTS*\
+*ORCID: [0009-0007-9870-1970](https://orcid.org/0009-0007-9870-1970)*
+
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19211958.svg)](https://doi.org/10.5281/zenodo.19211958)
 ![Tests](https://img.shields.io/badge/tests-746%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
@@ -81,7 +84,7 @@ println("k=3, D=4, p=1: $result")
 julia --project=. -t 12 scripts/optimize_qaoa.jl 3 4 1 12 2 320 1234 true adjoint
 
 # TOML config with resume from previous run
-julia --project=. -t 12 scripts/optimize_qaoa.jl experiments/resume-p13-14.toml
+julia --project=. -t 12 scripts/optimize_qaoa.jl experiments/single-pair.toml
 
 # Full 15-pair table at p=11
 julia --project=. -t 12 scripts/run_full_table.jl 11
@@ -107,6 +110,14 @@ docker run --rm -v $(pwd)/results:/workspace/results qaoa-xorsat \
 | 12 | 33M | 19 GB | 32 GB |
 | 13 | 134M | 84 GB | 128 GB |
 | 14 | 537M | 394 GB | 512 GB |
+
+## Documentation
+
+See [`docs/learning/`](docs/learning/) for background material and design notes:
+- [Problem statement](docs/learning/problem-statement.md) — what we're solving and why
+- [WHT factorisation](docs/learning/wht-factorisation.md) — the core algorithmic insight
+- [Performance optimization](docs/learning/performance-optimization.md) — 100× in 11 stages
+- [Differentiation strategies](docs/learning/differentiation-strategies.md) — why manual adjoint
 
 ## Architecture
 
