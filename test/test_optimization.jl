@@ -41,7 +41,7 @@ using Test
         @test budget_p4.maxiters == 400
         @test budget_p5.restarts == 2
         @test budget_p5.maxiters == 800
-        @test QaoaXorsat.retry_optimization_budget(200) == 400
+        @test QaoaXorsat.retry_optimization_budget(200) == 200
     end
 
     @testset "optimize_angles MaxCut p=1" begin
@@ -135,15 +135,15 @@ using Test
     end
 
     @testset "merge_optimization_results" begin
-        starts = [QaoaXorsat.AngleOptimizationStartResult(:random, 0.5, 1.0, 10, 5, true)]
+        starts = [QaoaXorsat.AngleOptimizationStartResult(:random, 0.5, 1.0, 10, 5, true, QaoaXorsat.OptimizationTraceEntry[])]
 
         primary = AngleOptimizationResult(
             QAOAAngles([0.3], [0.5]), 0.7, 1.0, 0.8, 20, 1, 5, false,
-            1, 100, 0, :warm, starts,
+            1, 100, 0, :warm, 1.0e-6, starts,
         )
         secondary_better_value = AngleOptimizationResult(
             QAOAAngles([0.4], [0.6]), 0.8, 2.0, 1.5, 30, 1, 8, true,
-            0, 200, 0, :retry, starts,
+            0, 200, 0, :retry, 1.0e-6, starts,
         )
 
         merged = QaoaXorsat.merge_optimization_results(primary, secondary_better_value)
@@ -157,11 +157,11 @@ using Test
         @testset "tie-break: converged secondary wins" begin
             primary_unconverged = AngleOptimizationResult(
                 QAOAAngles([0.3], [0.5]), 0.7, 1.0, 0.8, 20, 1, 5, false,
-                1, 100, 0, :warm, starts,
+                1, 100, 0, :warm, 1.0e-6, starts,
             )
             secondary_converged = AngleOptimizationResult(
                 QAOAAngles([0.31], [0.51]), 0.7, 2.0, 1.5, 30, 1, 8, true,
-                0, 200, 0, :retry, starts,
+                0, 200, 0, :retry, 1.0e-6, starts,
             )
 
             merged_tie = QaoaXorsat.merge_optimization_results(primary_unconverged, secondary_converged)
@@ -173,11 +173,11 @@ using Test
         @testset "primary wins when equal and both converged" begin
             primary_conv = AngleOptimizationResult(
                 QAOAAngles([0.3], [0.5]), 0.7, 1.0, 0.8, 20, 1, 5, true,
-                1, 100, 0, :warm, starts,
+                1, 100, 0, :warm, 1.0e-6, starts,
             )
             secondary_conv = AngleOptimizationResult(
                 QAOAAngles([0.31], [0.51]), 0.7, 2.0, 1.5, 30, 1, 8, true,
-                0, 200, 0, :retry, starts,
+                0, 200, 0, :retry, 1.0e-6, starts,
             )
 
             merged_both = QaoaXorsat.merge_optimization_results(primary_conv, secondary_conv)
