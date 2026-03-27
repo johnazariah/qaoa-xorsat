@@ -28,7 +28,9 @@ const DEFAULT_G_ABSTOL = 1.0e-6
 const RELAXED_G_ABSTOL_FLOOR = 1.0e-3
 const F_RELTOL = 1.0e-10
 const PLATEAU_CHUNK_SIZE = 100
-const PLATEAU_VALUE_EPSILON = 1.0e-9  # if max-min of values over a chunk < this, plateau
+# Plateau detection: if the value range over a chunk is less than g_abstol,
+# the optimizer is stuck — the value isn't moving by more than the gradient
+# tolerance allows. Declare converged.
 
 struct DepthOptimizationBudget
     restarts::Int
@@ -353,10 +355,10 @@ function optimize_angles(
                     break
                 end
 
-                # Check for plateau (value stopped moving)
+                # Check for plateau (value stopped moving relative to tolerance)
                 if length(chunk_values) ≥ 10
                     value_range = maximum(chunk_values) - minimum(chunk_values)
-                    if value_range < PLATEAU_VALUE_EPSILON
+                    if value_range < g_abstol
                         converged_flag = true  # plateau = converged for our purposes
                         break
                     end
