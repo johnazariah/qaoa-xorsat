@@ -3,7 +3,7 @@
 **Exact QAOA performance on D-regular Max-k-XORSAT via generic tree folding**
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19211958.svg)](https://doi.org/10.5281/zenodo.19211958)
-![Tests](https://img.shields.io/badge/tests-714%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-746%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 ![Julia](https://img.shields.io/badge/Julia-1.12+-purple)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -12,22 +12,37 @@
 
 ## Results
 
-Exact QAOA satisfaction fractions for Max-3-XORSAT on 4-regular hypergraphs, computed on a single Apple M4 Max workstation (64 GB RAM, 10 threads):
+Best-found QAOA satisfaction fractions at finite D, computed on a single Apple M4 Mac Studio (64 GB RAM, 12 threads). Full data in [`results/qaoa-best-values.csv`](results/qaoa-best-values.csv).
 
-| p | c̃(p) | Δc̃ | Wall time | Gap to DQI+BP |
-|---|-------|------|-----------|---------------|
-| 1 | 0.6761 | — | 1.7 s | 0.195 |
-| 2 | 0.7391 | +0.0630 | 5 ms | 0.132 |
-| 3 | 0.7771 | +0.0380 | 25 ms | 0.094 |
-| 4 | 0.8022 | +0.0251 | 100 ms | 0.069 |
-| 5 | 0.8205 | +0.0183 | 260 ms | 0.050 |
-| 6 | 0.8344 | +0.0139 | 1.3 s | 0.037 |
-| 7 | 0.8453 | +0.0109 | 10 s | 0.026 |
-| 8 | 0.8541 | +0.0088 | 88 s | 0.017 |
-| 9 | 0.8613 | +0.0072 | 6.5 min | 0.010 |
-| 10 | 0.8674 | +0.0060 | 87 min | **0.003** |
+### Primary target: (k=3, D=4) through p=12
 
-Previous published state of the art for exact finite-D evaluation at k ≥ 3 was p ≤ 5.
+| p | c̃(p) | Δc̃ | Wall time |
+|---|-------|------|-----------|
+| 1 | 0.6761 | — | 72 ms |
+| 2 | 0.7391 | +0.0631 | 3 ms |
+| 3 | 0.7771 | +0.0380 | 12 ms |
+| 4 | 0.8022 | +0.0251 | 24 ms |
+| 5 | 0.8205 | +0.0183 | 120 ms |
+| 6 | 0.8344 | +0.0139 | 0.8 s |
+| 7 | 0.8453 | +0.0109 | 5.2 s |
+| 8 | 0.8541 | +0.0088 | 41 s |
+| 9 | 0.8613 | +0.0072 | 3.6 min |
+| 10 | 0.8674 | +0.0060 | 11 min |
+| 11 | 0.8725 | +0.0051 | 10 min |
+| **12** | **0.8769** | **+0.0044** | **2.1 hr** |
+
+### All 15 (k,D) pairs
+
+| (k,D) | p | c̃ | (k,D) | p | c̃ | (k,D) | p | c̃ |
+|-------|---|------|-------|---|------|-------|---|------|
+| (3,4) | 12 | 0.877 | (4,5) | 8 | 0.842 | (5,6) | 8 | 0.830 |
+| (3,5) | 11 | 0.835 | (4,6) | 8 | 0.813 | (5,7) | 8 | 0.807 |
+| (3,6) | 11 | 0.807 | (4,7) | 8 | 0.791 | (5,8) | 8 | 0.788 |
+| (3,7) | 11 | 0.777 | (4,8) | 8 | 0.772 | (6,7) | 8 | 0.818 |
+| (3,8) | 11 | 0.768 | | | | (6,8) | 8 | 0.798 |
+| | | | | | | (7,8) | 8 | 0.823 |
+
+To our knowledge, no prior exact finite-D QAOA evaluation has been performed for k ≥ 3. Basso et al. (2021) derived the general iteration but evaluated it only in the D→∞ limit.
 
 ## Technical Contributions
 
@@ -48,7 +63,7 @@ git clone https://github.com/johnazariah/qaoa-xorsat.git
 cd qaoa-xorsat
 julia --project=. -e 'using Pkg; Pkg.instantiate()'
 
-# Run tests (714 tests, 100% coverage)
+# Run tests (746 tests, 100% coverage)
 julia --project=. -t auto -e 'using Pkg; Pkg.test()'
 
 # Smoke test
@@ -62,15 +77,36 @@ println("k=3, D=4, p=1: $result")
 ## Running Experiments
 
 ```bash
-# XORSAT (k=3, D=4) p=1-10 with adjoint gradients, 10 threads
-julia --project=. -t 10 scripts/optimize_qaoa.jl 3 4 1 10 2 320 1234 true adjoint
+# Single (k,D) pair with CLI args
+julia --project=. -t 12 scripts/optimize_qaoa.jl 3 4 1 12 2 320 1234 true adjoint
 
-# MaxCut validation (k=2, D=3)
-julia --project=. -t 10 scripts/optimize_qaoa.jl 2 3 1 5 8 200 1234 true adjoint
+# TOML config with resume from previous run
+julia --project=. -t 12 scripts/optimize_qaoa.jl experiments/resume-p13-14.toml
 
-# Gradient method toggle: adjoint (default), forward (ForwardDiff), finite (FD)
-julia --project=. -t 10 scripts/optimize_qaoa.jl 3 4 1 8 2 320 1234 true forward
+# Full 15-pair table at p=11
+julia --project=. -t 12 scripts/run_full_table.jl 11
+
+# Deploy script (handles logging, caffeinate, thread detection)
+./scripts/deploy.sh experiments/full-table.toml 16
 ```
+
+### Docker
+
+```bash
+docker build -t qaoa-xorsat .
+docker run --rm -v $(pwd)/results:/workspace/results qaoa-xorsat \
+  scripts/optimize_qaoa.jl experiments/full-table.toml
+```
+
+### Memory Requirements
+
+| p | Vector size | Adjoint cache | Minimum RAM |
+|---|-----------|--------------|-------------|
+| ≤10 | ≤2M | ≤2 GB | 8 GB |
+| 11 | 8M | 8 GB | 16 GB |
+| 12 | 33M | 19 GB | 32 GB |
+| 13 | 134M | 84 GB | 128 GB |
+| 14 | 537M | 394 GB | 512 GB |
 
 ## Architecture
 

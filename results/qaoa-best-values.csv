@@ -1,0 +1,20 @@
+# Best QAOA satisfaction fractions for D-regular Max-k-XORSAT
+# Computed with exact finite-D branch-tensor evaluation + WHT factorisation
+# Code: https://github.com/johnazariah/qaoa-xorsat (DOI: 10.5281/zenodo.19211958)
+# All values are best-found lower bounds on the true QAOA optimum at indicated depth
+k,D,p_max,ctilde,wall_time_seconds,converged,g_abstol,machine
+3,4,12,0.876904874000,7406.8,true,1.0e-04,m4-mac-studio-64gb
+3,5,11,0.835200723320,4636.2,true,1.0e-05,m4-mac-studio-64gb
+3,6,11,0.806720974338,1334.2,true,1.0e-05,m4-mac-studio-64gb
+3,7,11,0.776515601398,1764.0,true,1.0e-05,m4-mac-studio-64gb
+3,8,11,0.767642417811,891.5,true,1.0e-05,m4-mac-studio-64gb
+4,5,8,0.842037150953,46.8,true,1.0e-06,m4-mac-studio-64gb
+4,6,8,0.813391151623,665.0,true,1.0e-04,m4-mac-studio-64gb
+4,7,8,0.790780046398,910.6,true,1.0e-06,m4-mac-studio-64gb
+4,8,8,0.772404321169,224.6,true,1.0e-06,m4-mac-studio-64gb
+5,6,8,0.829842944021,128.7,true,1.0e-06,m4-mac-studio-64gb
+5,7,8,0.806675438460,62.2,true,1.0e-06,m4-mac-studio-64gb
+5,8,8,0.787931479013,94.4,true,1.0e-06,m4-mac-studio-64gb
+6,7,8,0.817684362383,49.3,true,1.0e-06,m4-mac-studio-64gb
+6,8,8,0.798078984941,113.7,true,1.0e-06,m4-mac-studio-64gb
+7,8,8,0.822963047535,66.5,true,1.0e-06,m4-mac-studio-64gb
