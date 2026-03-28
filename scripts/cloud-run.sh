@@ -51,6 +51,35 @@ julia --project=. -e 'using QaoaXorsat; println("QaoaXorsat loaded OK")'
 # Create results directory
 mkdir -p results/logs
 
+# Set up periodic results sync (every 10 minutes)
+# Pushes results back to GitHub on a branch so we can see progress remotely
+BRANCH="results/$(hostname)-$(date -u +%Y%m%d)"
+git checkout -b "$BRANCH" 2>/dev/null || git checkout "$BRANCH" 2>/dev/null || true
+
+cat > results/logs/sync-results.sh << 'SYNC'
+#!/usr/bin/env bash
+cd "$(dirname "$0")/../.."
+while true; do
+    sleep 600
+    # Update the best-values CSV from the summary
+    cp .project/results/full-table-summary.csv results/full-table-summary.csv 2>/dev/null || true
+    
+    # Snapshot the latest log tail
+    tail -100 results/logs/cloud-*.log > results/logs/latest-snapshot.txt 2>/dev/null || true
+    
+    # Commit and push
+    git add -f results/ 2>/dev/null
+    git commit -m "auto: results snapshot $(date -u +%H:%M)" --allow-empty 2>/dev/null
+    git push origin HEAD 2>/dev/null || true
+done
+SYNC
+chmod +x results/logs/sync-results.sh
+
+echo "Starting results sync (pushes to GitHub every 10 min)..."
+nohup bash results/logs/sync-results.sh > /dev/null 2>&1 &
+SYNC_PID=$!
+echo "Sync PID=$SYNC_PID"
+
 # Determine the script and log name
 TIMESTAMP=$(date -u +%Y%m%dT%H%M%S)
 LOGFILE="results/logs/cloud-${TIMESTAMP}-p${P_MAX}.log"
