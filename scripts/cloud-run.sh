@@ -51,8 +51,9 @@ julia --project=. -e 'using QaoaXorsat; println("QaoaXorsat loaded OK")'
 # Create results directory
 mkdir -p results/logs
 
-# Set up periodic results sync (every 10 minutes)
-# Pushes results back to GitHub on a branch so we can see progress remotely
+# Set up periodic results sync (optional — requires git push access)
+# If git push fails, results are still saved locally in results/
+# To retrieve results manually: scp -r <vm>:qaoa-xorsat/results/ .
 BRANCH="results/$(hostname)-$(date -u +%Y%m%d)"
 git checkout -b "$BRANCH" 2>/dev/null || git checkout "$BRANCH" 2>/dev/null || true
 
@@ -67,7 +68,7 @@ while true; do
     # Snapshot the latest log tail
     tail -100 results/logs/cloud-*.log > results/logs/latest-snapshot.txt 2>/dev/null || true
     
-    # Commit and push
+    # Try to commit and push (silently fails if no git auth)
     git add -f results/ 2>/dev/null
     git commit -m "auto: results snapshot $(date -u +%H:%M)" --allow-empty 2>/dev/null
     git push origin HEAD 2>/dev/null || true
@@ -75,10 +76,13 @@ done
 SYNC
 chmod +x results/logs/sync-results.sh
 
-echo "Starting results sync (pushes to GitHub every 10 min)..."
+echo "Starting results sync (local + optional GitHub push)..."
 nohup bash results/logs/sync-results.sh > /dev/null 2>&1 &
 SYNC_PID=$!
 echo "Sync PID=$SYNC_PID"
+echo ""
+echo "Results stored locally in: qaoa-xorsat/results/"
+echo "To retrieve: scp -r <this-vm>:qaoa-xorsat/results/ ."
 
 # Determine the script and log name
 TIMESTAMP=$(date -u +%Y%m%dT%H%M%S)
