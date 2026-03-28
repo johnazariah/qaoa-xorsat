@@ -315,10 +315,11 @@ function optimize_angles(
             od = Optim.OnceDifferentiable(f_adjoint, g_adjoint!, fg_adjoint!, angle_vector(guess.angles))
 
             # Chunked optimization: run PLATEAU_CHUNK_SIZE iterations at a time.
-            # After each chunk, check if the value has plateaued (max-min over
-            # the chunk < PLATEAU_VALUE_EPSILON). If so, declare converged even
-            # if g_norm hasn't hit g_abstol. This avoids grinding for hours on a
-            # flat landscape where the gradient can't reach the tolerance.
+            # After each chunk:
+            #   1. Fire on_chunk for trace flushing (always, regardless of convergence)
+            #   2. Check gradient convergence (g_norm < g_abstol)
+            #   3. Check value plateau (max-min over chunk < g_abstol)
+            # This avoids grinding for hours when the value has stopped moving.
             current_x = angle_vector(guess.angles)
             all_trace = OptimizationTraceEntry[]
             total_iterations = 0
@@ -341,31 +342,41 @@ function optimize_angles(
                     push!(all_trace, OptimizationTraceEntry(total_iterations + state.iteration, state.value, state.g_norm))
                     push!(chunk_values, state.value)
                 end
-                total_iterations += Optim.iterations(result)
-                remaining -= Optim.iterations(result)
+                chunk_iters = Optim.iterations(result)
+                total_iterations += chunk_iters
+                remaining -= chunk_iters
                 current_x = Optim.minimizer(result)
 
-                # Flush trace after every chunk — before checking convergence
-                # so we always get visibility into what happened
-                isnothing(on_chunk) || on_chunk(i, total_iterations, all_trace)
+                # Always flush trace — this is our visibility into long-running jobs
+                if !isnothing(on_chunk)
+                    try
+                        on_chunk(i, total_iterations, all_trace)
+                    catch e
+                        @warn "on_chunk callback failed" exception=e
+                    end
+                end
 
-                # Check for convergence (gradient tolerance met)
+                # Check for gradient convergence
                 if Optim.converged(result)
                     converged_flag = true
                     break
                 end
 
-                # Check for plateau (value stopped moving relative to tolerance)
-                if length(chunk_values) ≥ 10
+                # Check for value plateau — if the value hasn't moved by more than
+                # g_abstol over the chunk, declare converged. No minimum chunk size
+                # requirement: even a short chunk where f_reltol triggered tells us
+                # the value has stopped moving.
+                if !isempty(chunk_values)
                     value_range = maximum(chunk_values) - minimum(chunk_values)
                     if value_range < g_abstol
-                        converged_flag = true  # plateau = converged for our purposes
+                        converged_flag = true
                         break
                     end
                 end
 
-                # Early exit if Optim used fewer iterations than requested (hit f_reltol or similar)
-                if Optim.iterations(result) < chunk
+                # Early exit if Optim used fewer iterations than requested
+                # (hit f_reltol or another internal stopping criterion)
+                if chunk_iters < chunk
                     break
                 end
             end
