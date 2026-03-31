@@ -250,7 +250,7 @@ Keyword arguments:
 - `rng`: random number generator for restart sampling
 - `g_abstol`: gradient absolute tolerance for convergence (default: `DEFAULT_G_ABSTOL`)
 - `on_evaluation`: optional callback `(start_index, evaluations, elapsed_seconds, value, g_norm) -> nothing` throttled to at most once per 30 seconds per start
-- `on_chunk`: optional callback `(start_index, iterations, trace_entries) -> nothing` called after each plateau-detection chunk for incremental trace flushing
+- `on_chunk`: optional callback `(start_index, iterations, trace_entries, current_angles_vector) -> nothing` called after each plateau-detection chunk for incremental trace flushing
 """
 function optimize_angles(
     params::TreeParams;
@@ -360,7 +360,7 @@ function optimize_angles(
                         # Flush trace before stopping
                         if !isnothing(on_chunk)
                             try
-                                on_chunk(i, iter, all_trace)
+                                on_chunk(i, iter, all_trace, state.x)
                             catch e
                                 @warn "on_chunk callback failed" exception=e
                             end
@@ -375,7 +375,7 @@ function optimize_angles(
                 if elapsed_since_check >= PLATEAU_CHECK_SECONDS
                     if !isnothing(on_chunk)
                         try
-                            on_chunk(i, iter, all_trace)
+                            on_chunk(i, iter, all_trace, state.x)
                         catch e
                             @warn "on_chunk callback failed" exception=e
                         end
@@ -408,7 +408,7 @@ function optimize_angles(
             # Final on_chunk flush
             if !isnothing(on_chunk)
                 try
-                    on_chunk(i, Optim.iterations(result), all_trace)
+                    on_chunk(i, Optim.iterations(result), all_trace, Optim.minimizer(result))
                 catch e
                     @warn "on_chunk callback failed" exception=e
                 end

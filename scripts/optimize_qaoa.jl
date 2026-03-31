@@ -472,6 +472,41 @@ if !isempty(resume_from)
     flush(stderr)
 end
 
+# ── Checkpoint recovery: look for checkpoint files from interrupted runs ──────
+if isnothing(warm_start_angles) && preserve
+    # Scan all run directories for checkpoint files at p_min
+    runs_dir = joinpath(@__DIR__, "..", ".project", "results", "optimization", "runs")
+    if isdir(runs_dir)
+        best_checkpoint_value = -Inf
+        for run_name in readdir(runs_dir)
+            cp_path = joinpath(runs_dir, run_name, "checkpoint-p$(p_min).csv")
+            isfile(cp_path) || continue
+            try
+                cp_lines = readlines(cp_path)
+                length(cp_lines) >= 2 || continue
+                fields = split(cp_lines[2], ',')
+                cp_p = parse(Int, fields[2])
+                cp_p == p_min || continue
+                γ = parse.(Float64, split(fields[3], ';'))
+                β = parse.(Float64, split(fields[4], ';'))
+                # Evaluate to find which checkpoint is best
+                candidate = QAOAAngles(γ, β)
+                val = qaoa_expectation(TreeParams(k, D, cp_p), candidate; clause_sign)
+                if val > best_checkpoint_value
+                    best_checkpoint_value = val
+                    global warm_start_angles = candidate
+                end
+            catch e
+                @warn "skipping corrupted checkpoint" path=cp_path exception=e
+            end
+        end
+        if !isnothing(warm_start_angles)
+            @printf(stderr, "recovered checkpoint for p=%d: c̃=%.12f\n", p_min, best_checkpoint_value)
+            flush(stderr)
+        end
+    end
+end
+
 function emit_progress(p, start_index, evaluations, elapsed_seconds, value, g_norm)
     if isnan(value) || isnan(g_norm)
         @printf(stderr, "  p=%d start %d: %d evals, %.1fs elapsed\n", p, start_index, evaluations, elapsed_seconds)
@@ -525,7 +560,7 @@ function progress_callback(start_index, evaluations, elapsed_seconds, value, g_n
     emit_progress(current_p[], start_index, evaluations, elapsed_seconds, value, g_norm)
 end
 
-function chunk_callback(start_index, iterations, trace_entries)
+function chunk_callback(start_index, iterations, trace_entries, current_angles_vector)
     # Flush incremental trace every 100 iterations so we can see what's happening
     if !isnothing(preservation_context)
         p = current_p[]
@@ -535,6 +570,15 @@ function chunk_callback(start_index, iterations, trace_entries)
             for entry in trace_entries
                 @printf(io, "%d,%d,%.12e,%.6e\n", start_index, entry.iteration, entry.value, entry.g_norm)
             end
+        end
+
+        # Checkpoint current angles so we can warm-start after eviction
+        checkpoint_path = joinpath(preservation_context.run_dir, "checkpoint-p$(p).csv")
+        open(checkpoint_path, "w") do io
+            println(io, "start_index,p,gamma,beta")
+            gamma_str = join(string.(current_angles_vector[1:p]), ';')
+            beta_str = join(string.(current_angles_vector[p+1:2*p]), ';')
+            println(io, "$(start_index),$(p),$(gamma_str),$(beta_str)")
         end
     end
 end
