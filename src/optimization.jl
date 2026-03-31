@@ -27,10 +27,22 @@ end
 const DEFAULT_G_ABSTOL = 1.0e-6
 const RELAXED_G_ABSTOL_FLOOR = 1.0e-3
 const F_RELTOL = 1.0e-10
-const PLATEAU_CHUNK_SIZE = 100
 # Plateau detection: if the value range over a chunk is less than g_abstol,
-# the optimizer is stuck — the value isn't moving by more than the gradient
-# tolerance allows. Declare converged.
+# the optimizer is stuck. Chunk size scales with depth — at high p where
+# each eval costs 50+ seconds, we check frequently to avoid wasting hours.
+
+"""
+    plateau_chunk_size(p) -> Int
+
+Depth-dependent chunk size for plateau detection. Smaller chunks at high p
+where evaluations are expensive.
+"""
+function plateau_chunk_size(p::Int)
+    p ≤ 8  ? 100 :
+    p ≤ 10 ? 50 :
+    p ≤ 12 ? 20 :
+             10
+end
 
 struct DepthOptimizationBudget
     restarts::Int
@@ -239,7 +251,7 @@ Keyword arguments:
 - `rng`: random number generator for restart sampling
 - `g_abstol`: gradient absolute tolerance for convergence (default: `DEFAULT_G_ABSTOL`)
 - `on_evaluation`: optional callback `(start_index, evaluations, elapsed_seconds, value, g_norm) -> nothing` throttled to at most once per 30 seconds per start
-- `on_chunk`: optional callback `(start_index, iterations, trace_entries) -> nothing` called after every $(PLATEAU_CHUNK_SIZE)-iteration chunk for incremental trace flushing
+- `on_chunk`: optional callback `(start_index, iterations, trace_entries) -> nothing` called after each plateau-detection chunk for incremental trace flushing
 """
 function optimize_angles(
     params::TreeParams;
@@ -314,7 +326,9 @@ function optimize_angles(
 
             od = Optim.OnceDifferentiable(f_adjoint, g_adjoint!, fg_adjoint!, angle_vector(guess.angles))
 
-            # Chunked optimization: run PLATEAU_CHUNK_SIZE iterations at a time.
+            # Chunked optimization: check plateau every plateau_chunk_size(p) iterations.
+            # At high p (expensive evals), chunks are smaller to detect plateaus quickly.
+            chunk_size = plateau_chunk_size(params.p)
             # After each chunk:
             #   1. Fire on_chunk for trace flushing (always, regardless of convergence)
             #   2. Check gradient convergence (g_norm < g_abstol)
@@ -327,7 +341,7 @@ function optimize_angles(
             remaining = maxiters
 
             while remaining > 0
-                chunk = min(remaining, PLATEAU_CHUNK_SIZE)
+                chunk = min(remaining, chunk_size)
                 result = Optim.optimize(
                     od,
                     current_x,
