@@ -94,8 +94,15 @@ echo "Log: $LOGFILE"
 echo "Monitor: tail -f $LOGFILE"
 echo ""
 
-# Run the full table
-nohup julia --project=. -t "$THREADS" scripts/run_full_table.jl "$P_MAX" > "$LOGFILE" 2>&1 &
+# Run the full table — parallel if enough memory, sequential otherwise
+MEM_GB=$(free -g 2>/dev/null | awk '/^Mem:/{print $2}' || echo "64")
+if [ "$MEM_GB" -gt 200 ]; then
+    echo "Large memory detected (${MEM_GB}GB) — using parallel runner"
+    nohup julia --project=. scripts/run_parallel_table.jl "$P_MAX" > "$LOGFILE" 2>&1 &
+else
+    echo "Standard memory (${MEM_GB}GB) — using sequential runner"
+    nohup julia --project=. -t "$THREADS" scripts/run_full_table.jl "$P_MAX" > "$LOGFILE" 2>&1 &
+fi
 PID=$!
 echo "Started PID=$PID"
 echo "To check: tail -20 $LOGFILE"
