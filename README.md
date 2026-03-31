@@ -32,7 +32,7 @@ Best-found QAOA satisfaction fractions at finite D, computed on a single Apple M
 | 9 | 0.8613 | +0.0072 | 3.6 min |
 | 10 | 0.8674 | +0.0060 | 11 min |
 | 11 | 0.8725 | +0.0051 | 10 min |
-| **12** | **0.8769** | **+0.0044** | **2.1 hr** |
+| **12** | **0.8769** | **+0.0044** | **~40 min** |
 
 ### All 15 (k,D) pairs
 
