@@ -316,3 +316,12 @@ for ($i = 0; $i -lt $NumVMs; $i++) {
 Write-Host ""
 Write-Host "Destroy everything:" -ForegroundColor Red
 Write-Host "  az group delete -n $ResourceGroup --yes"
+
+# ── Launch monitor with auto-restart ──────────────────────────────────────────
+if (-not $DryRun) {
+    Write-Host ""
+    Write-Host "Launching fleet monitor (auto-restarts evicted VMs)..." -ForegroundColor Green
+    $monitorScript = Join-Path $PSScriptRoot "monitor-fleet.ps1"
+    Start-Process pwsh -ArgumentList "-NoExit", "-File", $monitorScript, "-ResourceGroup", $ResourceGroup, "-NumVMs", $NumVMs -WindowStyle Normal
+    Write-Host "  Monitor running in new window. Close it to stop monitoring."
+}
