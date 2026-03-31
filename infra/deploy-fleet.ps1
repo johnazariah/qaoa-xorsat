@@ -278,6 +278,26 @@ echo "=== VM-$i setup complete at `$(date -u) ==="
     Remove-Item $initFile -ErrorAction SilentlyContinue
 }
 
+# ── Fix NSG rules: ensure SSH is allowed on both NIC and subnet NSGs ──────────
+if (-not $DryRun) {
+    Write-Host "Ensuring SSH access on NSGs..." -ForegroundColor DarkCyan
+    for ($i = 0; $i -lt $NumVMs; $i++) {
+        az network nsg rule create -g $ResourceGroup --nsg-name "qaoa-vm-${i}NSG" `
+            -n AllowSSH --priority 1000 --access Allow --protocol Tcp `
+            --direction Inbound --source-address-prefixes '*' --destination-port-ranges 22 `
+            -o none 2>$null
+    }
+    # Subnet-level NSG (created automatically by Azure)
+    $subnetNsgs = az network nsg list -g $ResourceGroup --query "[?contains(name,'Subnet')].name" -o tsv 2>$null
+    foreach ($nsg in ($subnetNsgs -split "`n" | Where-Object { $_ })) {
+        az network nsg rule create -g $ResourceGroup --nsg-name $nsg.Trim() `
+            -n AllowSSH --priority 1000 --access Allow --protocol Tcp `
+            --direction Inbound --source-address-prefixes '*' --destination-port-ranges 22 `
+            -o none 2>$null
+    }
+    Write-Host "  SSH rules configured"
+}
+
 # ── Print monitoring commands ─────────────────────────────────────────────────
 Write-Host ""
 Write-Host "=== Fleet Deployed ===" -ForegroundColor Green
