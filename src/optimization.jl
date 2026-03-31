@@ -27,9 +27,8 @@ end
 const DEFAULT_G_ABSTOL = 1.0e-6
 const RELAXED_G_ABSTOL_FLOOR = 1.0e-3
 const F_RELTOL = 1.0e-10
-# Plateau detection: if the value range over a chunk is less than g_abstol,
-# the optimizer is stuck. Chunk size scales with depth — at high p where
-# each eval costs 50+ seconds, we check frequently to avoid wasting hours.
+const PLATEAU_CHECK_SECONDS = 300  # check plateau every 5 minutes wall time
+const PLATEAU_WINDOW_SIZE = 50     # rolling window of recent values for plateau detection
 
 """
     plateau_chunk_size(p) -> Int
@@ -326,85 +325,105 @@ function optimize_angles(
 
             od = Optim.OnceDifferentiable(f_adjoint, g_adjoint!, fg_adjoint!, angle_vector(guess.angles))
 
-            # Chunked optimization: check plateau every plateau_chunk_size(p) iterations.
-            # At high p (expensive evals), chunks are smaller to detect plateaus quickly.
-            chunk_size = plateau_chunk_size(params.p)
-            # After each chunk:
-            #   1. Fire on_chunk for trace flushing (always, regardless of convergence)
-            #   2. Check gradient convergence (g_norm < g_abstol)
-            #   3. Check value plateau (max-min over chunk < g_abstol)
-            # This avoids grinding for hours when the value has stopped moving.
-            current_x = angle_vector(guess.angles)
+            # Single Optim run with a per-iteration callback that:
+            #   1. Maintains a circular buffer of recent values
+            #   2. Every PLATEAU_CHECK_SECONDS, fires on_chunk for trace visibility
+            #      and checks if max-min over the buffer < g_abstol (plateau)
+            #   3. Returns true to stop Optim if plateau detected
             all_trace = OptimizationTraceEntry[]
-            total_iterations = 0
             converged_flag = false
-            remaining = maxiters
+            last_check_time = time_ns()
+            value_buffer = Float64[]
 
-            while remaining > 0
-                chunk = min(remaining, chunk_size)
-                result = Optim.optimize(
-                    od,
-                    current_x,
-                    Optim.LBFGS(),
-                    Optim.Options(iterations=chunk, g_abstol=g_abstol, f_reltol=F_RELTOL, store_trace=true, show_trace=false),
-                )
+            iteration_count = Ref(0)
 
-                # Accumulate trace
-                optim_trace = Optim.trace(result)
-                chunk_values = Float64[]
-                for state in optim_trace
-                    push!(all_trace, OptimizationTraceEntry(total_iterations + state.iteration, state.value, state.g_norm))
-                    push!(chunk_values, state.value)
-                end
-                chunk_iters = Optim.iterations(result)
-                total_iterations += chunk_iters
-                remaining -= chunk_iters
-                current_x = Optim.minimizer(result)
+            function plateau_callback(state)
+                iteration_count[] += 1
+                iter = iteration_count[]
+                val = state.f_x           # raw objective (negated c̃)
+                gnorm = maximum(abs, state.g_x)
 
-                # Always flush trace — this is our visibility into long-running jobs
-                if !isnothing(on_chunk)
-                    try
-                        on_chunk(i, total_iterations, all_trace)
-                    catch e
-                        @warn "on_chunk callback failed" exception=e
-                    end
+                push!(all_trace, OptimizationTraceEntry(iter, val, gnorm))
+
+                # Update circular buffer
+                push!(value_buffer, val)
+                if length(value_buffer) > PLATEAU_WINDOW_SIZE
+                    popfirst!(value_buffer)
                 end
 
-                # Check for gradient convergence
-                if Optim.converged(result)
-                    converged_flag = true
-                    break
-                end
-
-                # Check for value plateau — if the value hasn't moved by more than
-                # g_abstol over the chunk, declare converged. No minimum chunk size
-                # requirement: even a short chunk where f_reltol triggered tells us
-                # the value has stopped moving.
-                if !isempty(chunk_values)
-                    value_range = maximum(chunk_values) - minimum(chunk_values)
-                    if value_range < g_abstol
+                # Check plateau every iteration once buffer is full
+                if length(value_buffer) == PLATEAU_WINDOW_SIZE
+                    buffer_min = minimum(value_buffer)
+                    buffer_max = maximum(value_buffer)
+                    vrange = buffer_max - buffer_min
+                    if vrange < g_abstol
+                        # Flush trace before stopping
+                        if !isnothing(on_chunk)
+                            try
+                                on_chunk(i, iter, all_trace)
+                            catch e
+                                @warn "on_chunk callback failed" exception=e
+                            end
+                        end
                         converged_flag = true
-                        break
+                        return true  # stop Optim immediately
                     end
                 end
 
-                # Early exit if Optim used fewer iterations than requested
-                # (hit f_reltol or another internal stopping criterion)
-                if chunk_iters < chunk
-                    break
+                # Periodic trace flush for visibility (independent of convergence)
+                elapsed_since_check = (time_ns() - last_check_time) / 1.0e9
+                if elapsed_since_check >= PLATEAU_CHECK_SECONDS
+                    if !isnothing(on_chunk)
+                        try
+                            on_chunk(i, iter, all_trace)
+                        catch e
+                            @warn "on_chunk callback failed" exception=e
+                        end
+                    end
+                    last_check_time = time_ns()
+                end
+
+                return false  # keep going
+            end
+
+            result = Optim.optimize(
+                od,
+                angle_vector(guess.angles),
+                Optim.LBFGS(),
+                Optim.Options(
+                    iterations=maxiters,
+                    g_abstol=g_abstol,
+                    f_reltol=F_RELTOL,
+                    store_trace=false,  # we track trace ourselves in the callback
+                    show_trace=false,
+                    callback=plateau_callback,
+                ),
+            )
+
+            # If Optim converged via g_abstol (not our plateau), mark it
+            if Optim.converged(result) && !converged_flag
+                converged_flag = true
+            end
+
+            # Final on_chunk flush
+            if !isnothing(on_chunk)
+                try
+                    on_chunk(i, Optim.iterations(result), all_trace)
+                catch e
+                    @warn "on_chunk callback failed" exception=e
                 end
             end
 
-            # Package results using the accumulated state
+            # Package results
             elapsed_seconds_start = (time_ns() - started_at) / 1.0e9
-            candidate_angles_start = angles_from_vector(current_x, params.p) |> canonicalize_angles
+            candidate_angles_start = angles_from_vector(Optim.minimizer(result), params.p) |> canonicalize_angles
             candidate_value_start = qaoa_expectation(params, candidate_angles_start; clause_sign)
             start_result = AngleOptimizationStartResult(
                 guess.kind,
                 candidate_value_start,
                 elapsed_seconds_start,
                 local_evaluations[],
-                total_iterations,
+                Optim.iterations(result),
                 converged_flag,
                 all_trace,
             )
