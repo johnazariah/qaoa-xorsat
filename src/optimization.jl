@@ -28,7 +28,7 @@ const DEFAULT_G_ABSTOL = 1.0e-6
 const RELAXED_G_ABSTOL_FLOOR = 1.0e-3
 const F_RELTOL = 1.0e-10
 const PLATEAU_CHECK_SECONDS = 300  # check plateau every 5 minutes wall time
-const PLATEAU_WINDOW_SIZE = 50     # rolling window of recent values for plateau detection
+const PLATEAU_WINDOW_SIZE = 30     # rolling window of recent values for plateau detection
 
 """
     plateau_chunk_size(p) -> Int
