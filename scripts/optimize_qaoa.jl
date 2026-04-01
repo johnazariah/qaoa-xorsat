@@ -493,7 +493,7 @@ if isnothing(warm_start_angles) && preserve
                 candidate = QAOAAngles(γ, β)
                 val = qaoa_expectation(TreeParams(k, D, cp_p), candidate; clause_sign)
                 if val > best_checkpoint_value
-                    best_checkpoint_value = val
+                    global best_checkpoint_value = val
                     global warm_start_angles = candidate
                 end
             catch e

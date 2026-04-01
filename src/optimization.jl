@@ -296,16 +296,29 @@ function optimize_angles(
             # Manual adjoint: combined value+gradient via fg! for efficiency.
             # Optim's line search calls fg! when it needs both f and g together,
             # avoiding the redundant forward pass that separate f/g! would require.
+            #
+            # Overflow guard: at high (k,D,p) the branch tensor iteration can
+            # overflow Float64, producing c̃ > 1 or c̃ < 0 or NaN/Inf.
+            # We return +Inf with zeroed gradient so L-BFGS backtracks.
             function f_adjoint(values)
                 local_evaluations[] += 1
                 maybe_report_progress!()
                 candidate = angles_from_vector(values, params.p)
-                -qaoa_expectation(params, candidate; clause_sign)
+                val = qaoa_expectation(params, candidate; clause_sign)
+                if !isfinite(val) || val < -0.01 || val > 1.01
+                    return Inf  # overflow — force line search to backtrack
+                end
+                -val
             end
 
             function g_adjoint!(G, values)
                 candidate = angles_from_vector(values, params.p)
                 _, γg, βg = basso_expectation_and_gradient(params, candidate; clause_sign)
+                if any(!isfinite, γg) || any(!isfinite, βg)
+                    G .= 0
+                    last_g_norm[] = 0.0
+                    return
+                end
                 G[1:params.p] .= .-γg
                 G[params.p+1:2*params.p] .= .-βg
                 last_g_norm[] = maximum(abs, G)
@@ -316,6 +329,13 @@ function optimize_angles(
                 maybe_report_progress!()
                 candidate = angles_from_vector(values, params.p)
                 val, γg, βg = basso_expectation_and_gradient(params, candidate; clause_sign)
+                if !isfinite(val) || val < -0.01 || val > 1.01 ||
+                   any(!isfinite, γg) || any(!isfinite, βg)
+                    G .= 0
+                    last_g_norm[] = 0.0
+                    last_value[] = NaN
+                    return Inf  # overflow — force line search to backtrack
+                end
                 G[1:params.p] .= .-γg
                 G[params.p+1:2*params.p] .= .-βg
                 last_g_norm[] = maximum(abs, G)
