@@ -2,6 +2,33 @@
 
 Quick guide for running on a SLURM cluster with high-memory nodes.
 
+## Recovering from a failed run
+
+If a run overflows or crashes partway through, the recovery script identifies
+what's salvageable and generates a fresh SLURM job that resumes from there:
+
+```bash
+# 1. Stop the broken jobs
+scancel <JOB_ID>
+
+# 2. Pull the latest code (includes overflow guard)
+git pull
+
+# 3. Run the recovery script — scans results, identifies last good p per (k,D)
+python3 scripts/recover-run.py
+
+# 4. Review the status table, then submit the generated recovery job
+sbatch scripts/qaoa_recovery.sh
+```
+
+The recovery script:
+- Reads each run's `results.csv` and finds the highest p with c̃ ∈ (0, 1)
+- Generates TOML configs in `experiments/recovery/` with `resume_from`
+  pointing at the previous run directory (copies valid results, warm-starts
+  from last good angles)
+- Writes `scripts/qaoa_recovery.sh` as a SLURM array job covering only
+  the pairs that need re-running
+
 ## Prerequisites
 
 - **Julia 1.10+** installed (`juliaup` recommended)
