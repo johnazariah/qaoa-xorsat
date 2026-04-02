@@ -2,6 +2,64 @@
 
 Quick guide for running on a SLURM cluster with high-memory nodes.
 
+## What's new (April 2, 2026)
+
+**The overflow problem is fixed.** Previous runs produced impossible values
+(c̃ > 1, NaN, -1e+88) at high (k,D,p) because the branch tensor recurrence
+raised complex arrays to `^(k-1)` and `^(D-1)` at each step, compounding
+magnitudes exponentially until Float64 overflowed (~1.8e+308).
+
+The fix has two layers:
+
+### 1. Normalized evaluator (prevents overflow at the source)
+
+Before each power operation, vectors are divided by their max magnitude.
+Scale factors are tracked in log space and applied once at the end:
+
+```
+child_hat_norm = child_hat / max|child_hat|     # safe to raise to ^(k-1)
+folded_norm    = folded / max|folded|            # safe to raise to ^(D-1)
+msg_hat_norm   = msg_hat / max|msg_hat|          # safe to raise to ^k at root
+```
+
+The physical answer is reconstructed in log space:
+`c̃ = (1 + cs · exp(log_total_scale) · Re(S_normalized)) / 2`
+
+The backward pass (gradient) operates entirely on normalized intermediates
+(all magnitudes ≤ 1, cannot overflow), with the single `exp(log_scale)`
+multiplier applied to the final gradients.
+
+### 2. Safety guards (prevents bad values from propagating)
+
+Even if some edge case still produces an invalid value:
+- **Post-evaluation check**: any final c̃ outside [0, 1] is rejected
+- **Best-start selection**: valid results always beat invalid ones in argmax
+- **Merge logic**: validity-aware — a valid c̃ = 0.88 beats an overflowed c̃ = 21.44
+- **Warm-start chain**: poisoned angles are not propagated to the next depth
+- **Overflow gradient**: returns a non-zero gradient pointing away from the
+  overflow region (zero gradient was faking convergence in previous versions)
+
+### Validation
+
+1741 tests pass, including 273 new tests that verify:
+- Exact agreement with the un-normalized evaluator at low (k,D)
+- Physical bounds c̃ ∈ [0, 1] at all previously-overflowing (k,D,p)
+- Finite gradients at high (k,D)
+- Cluster overflow regression: all 15 pairs at p=10 produce valid values
+
+## Running a fresh sweep
+
+Pull the latest code and submit:
+
+```bash
+cd ~/qaoa-xorsat
+git pull
+sbatch scripts/qaoa_sweep.sh
+```
+
+This runs all 15 (k,D) pairs from p=1 through p=15 with warm-starting.
+The normalized evaluator handles all depths without overflow.
+
 ## Recovering from a failed run
 
 If a run overflows or crashes partway through, the recovery script identifies
