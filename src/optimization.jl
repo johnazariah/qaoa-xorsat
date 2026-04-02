@@ -204,13 +204,27 @@ function depth_g_abstol(p::Int)
               1.0e-4
 end
 
+"""
+    is_valid_qaoa_value(v) -> Bool
+
+Return `true` if `v` is a physically plausible QAOA satisfaction fraction.
+Values outside [0, 1] (with a tiny tolerance for floating-point noise)
+indicate evaluator overflow and must never be accepted as results."""
+is_valid_qaoa_value(v::Real) = isfinite(v) && -1.0e-9 ≤ v ≤ 1.0 + 1.0e-9
+
 function merge_optimization_results(
     primary::AngleOptimizationResult,
     secondary::AngleOptimizationResult,
 )::AngleOptimizationResult
-    best = if secondary.value > primary.value
+    pv = is_valid_qaoa_value(primary.value)
+    sv = is_valid_qaoa_value(secondary.value)
+    best = if sv && !pv
         secondary
-    elseif secondary.value ≈ primary.value && secondary.converged && !primary.converged
+    elseif pv && !sv
+        primary
+    elseif sv && pv && secondary.value > primary.value
+        secondary
+    elseif sv && pv && secondary.value ≈ primary.value && secondary.converged && !primary.converged
         secondary
     else
         primary
@@ -299,14 +313,25 @@ function optimize_angles(
             #
             # Overflow guard: at high (k,D,p) the branch tensor iteration can
             # overflow Float64, producing c̃ > 1 or c̃ < 0 or NaN/Inf.
-            # We return +Inf with zeroed gradient so L-BFGS backtracks.
+            # We return a large positive objective with a large gradient pointing
+            # back toward the origin, so L-BFGS backtracks. Returning zero
+            # gradient is dangerous because it fakes convergence.
+            function _overflow_gradient!(G, values, p)
+                # Point gradient toward the origin so L-BFGS moves away
+                # from the overflow region, not park at it.
+                for j in eachindex(G)
+                    G[j] = values[j] > 0 ? 1.0 : -1.0
+                end
+                last_g_norm[] = 1.0
+            end
+
             function f_adjoint(values)
                 local_evaluations[] += 1
                 maybe_report_progress!()
                 candidate = angles_from_vector(values, params.p)
                 val = qaoa_expectation(params, candidate; clause_sign)
-                if !isfinite(val) || val < -0.01 || val > 1.01
-                    return Inf  # overflow — force line search to backtrack
+                if !is_valid_qaoa_value(val)
+                    return 1.0e6  # overflow — large but finite so Optim doesn't choke
                 end
                 -val
             end
@@ -315,8 +340,7 @@ function optimize_angles(
                 candidate = angles_from_vector(values, params.p)
                 _, γg, βg = basso_expectation_and_gradient(params, candidate; clause_sign)
                 if any(!isfinite, γg) || any(!isfinite, βg)
-                    G .= 0
-                    last_g_norm[] = 0.0
+                    _overflow_gradient!(G, values, params.p)
                     return
                 end
                 G[1:params.p] .= .-γg
@@ -329,12 +353,11 @@ function optimize_angles(
                 maybe_report_progress!()
                 candidate = angles_from_vector(values, params.p)
                 val, γg, βg = basso_expectation_and_gradient(params, candidate; clause_sign)
-                if !isfinite(val) || val < -0.01 || val > 1.01 ||
+                if !is_valid_qaoa_value(val) ||
                    any(!isfinite, γg) || any(!isfinite, βg)
-                    G .= 0
-                    last_g_norm[] = 0.0
+                    _overflow_gradient!(G, values, params.p)
                     last_value[] = NaN
-                    return Inf  # overflow — force line search to backtrack
+                    return 1.0e6  # overflow — large but finite
                 end
                 G[1:params.p] .= .-γg
                 G[params.p+1:2*params.p] .= .-βg
@@ -434,10 +457,15 @@ function optimize_angles(
                 end
             end
 
-            # Package results
+            # Package results — re-evaluate and reject overflow
             elapsed_seconds_start = (time_ns() - started_at) / 1.0e9
             candidate_angles_start = angles_from_vector(Optim.minimizer(result), params.p) |> canonicalize_angles
             candidate_value_start = qaoa_expectation(params, candidate_angles_start; clause_sign)
+            if !is_valid_qaoa_value(candidate_value_start)
+                @warn "start $(i) ($(guess.kind)) produced invalid value $(candidate_value_start); marking failed"
+                candidate_value_start = -Inf
+                converged_flag = false
+            end
             start_result = AngleOptimizationStartResult(
                 guess.kind,
                 candidate_value_start,
@@ -468,6 +496,10 @@ function optimize_angles(
             elapsed_seconds = (time_ns() - started_at) / 1.0e9
             candidate_angles = angles_from_vector(Optim.minimizer(result), params.p) |> canonicalize_angles
             candidate_value = qaoa_expectation(params, candidate_angles; clause_sign)
+            if !is_valid_qaoa_value(candidate_value)
+                @warn "start $(i) ($(guess.kind), non-adjoint) produced invalid value $(candidate_value); marking failed"
+                candidate_value = -Inf
+            end
             optim_trace = Optim.trace(result)
             trace_entries = [
                 OptimizationTraceEntry(state.iteration, state.value, state.g_norm)
@@ -486,10 +518,16 @@ function optimize_angles(
         end
     end
 
-    # Collect results — pick the best start
+    # Collect results — pick the best start, preferring valid values over invalid
     start_results = [r[3] for r in per_start_results]
     total_evaluations = sum(r.evaluations for r in start_results)
-    best_idx = argmax(r[2] for r in per_start_results)
+    valid_mask = [is_valid_qaoa_value(r[2]) for r in per_start_results]
+    best_idx = if any(valid_mask)
+        argmax(j -> valid_mask[j] ? per_start_results[j][2] : -Inf, eachindex(per_start_results))
+    else
+        # All starts overflowed — pick the least-bad one
+        argmax(j -> isfinite(per_start_results[j][2]) ? per_start_results[j][2] : -Inf, eachindex(per_start_results))
+    end
     best_angles, best_value, best_start = per_start_results[best_idx]
 
     wall_time_seconds = (time_ns() - optimization_started_at) / 1.0e9
@@ -593,7 +631,16 @@ function optimize_depth_sequence(
 
         push!(results, result)
         isnothing(on_result) || on_result(result)
-        warm_start = result.angles
+
+        # Only propagate warm-start if the result is physically valid.
+        # A poisoned warm-start will corrupt all subsequent depths.
+        if is_valid_qaoa_value(result.value)
+            warm_start = result.angles
+        else
+            @warn "depth p=$(p): invalid result c̃=$(result.value); not propagating as warm start"
+            # Keep previous warm_start (from last valid depth) so the next
+            # depth at least gets a plausible starting point.
+        end
     end
 
     results
