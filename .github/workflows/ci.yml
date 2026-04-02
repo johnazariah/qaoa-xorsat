@@ -125,3 +125,45 @@ jobs:
             using Test, QaoaXorsat
             @testset verbose=true "Optimization" begin include("test/test_optimization.jl") end
           '
+
+  # ── Layer 6: Adjoint, algebra, normalization, extensions ───────────────────
+  extensions:
+    name: "Layer 6 — Adjoint, algebra, normalization, extensions"
+    needs: optimization
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with: { version: '1' }
+      - uses: julia-actions/cache@v2
+      - run: julia --project=. -e 'using Pkg; Pkg.instantiate()'
+      - name: "Adjoint differentiation (value match, gradient vs ForwardDiff)"
+        run: |
+          julia --project=. -e '
+            using Test, QaoaXorsat, ForwardDiff
+            @testset verbose=true "Adjoint" begin include("test/test_adjoint.jl") end
+          '
+      - name: "Cost algebra (XORSAT, MaxCut dispatch)"
+        run: |
+          julia --project=. -e '
+            using Test, QaoaXorsat
+            @testset verbose=true "CostAlgebra" begin include("test/test_cost_algebra.jl") end
+          '
+      - name: "Reduced basis (4× memory reduction)"
+        run: |
+          julia --project=. -e '
+            using Test, QaoaXorsat
+            @testset verbose=true "ReducedBasis" begin include("test/test_reduced_basis.jl") end
+          '
+      - name: "Spectral analysis (branch tensor spectrum)"
+        run: |
+          julia --project=. -e '
+            using Test, QaoaXorsat
+            @testset verbose=true "Spectral" begin include("test/test_spectral_analysis.jl") end
+          '
+      - name: "Normalized evaluator (overflow prevention, 273 tests)"
+        run: |
+          julia --project=. -e '
+            using Test, QaoaXorsat, ForwardDiff, Random
+            @testset verbose=true "Normalization" begin include("test/test_normalization.jl") end
+          '
