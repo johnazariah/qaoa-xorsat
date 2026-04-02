@@ -47,7 +47,19 @@ export parity_expectation, qaoa_expectation
 
 # Manual adjoint differentiation
 include("adjoint.jl")
-export basso_expectation_and_gradient
+export basso_expectation_and_gradient, basso_expectation_normalized
+
+# 4× reduced branch-tensor iteration
+include("reduced_basis.jl")
+export ReducedBasis, basso_branch_tensor_reduced, basso_expectation_reduced
+export expand_symmetric
+
+# Spectral analysis of branch tensor iteration
+include("spectral_analysis.jl")
+export SpectralSnapshot, SpectralProfile
+export spectral_snapshot, spectral_decay_rate
+export basso_branch_tensor_instrumented
+export format_spectral_report, write_spectral_csv, write_effective_ranks_csv
 
 # Comparison data
 # export load_comparison_data

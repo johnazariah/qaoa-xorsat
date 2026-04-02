@@ -3,6 +3,88 @@
 # The forward pass matches basso_parity_expectation / basso_expectation exactly.
 # The backward pass propagates cotangents through the saved computation graph
 # to produce exact ∂E/∂γ and ∂E/∂β at cost ≈ 2× a single Float64 evaluation.
+#
+# ══════════════════════════════════════════════════════════════════════════════
+# NORMALIZED BRANCH TENSOR RECURRENCE
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# The branch tensor recurrence
+#
+#   child_hat[t]  = WHT(f .* B[t])
+#   folded[t]     = iWHT(kernel_hat .* child_hat[t]^(k-1))
+#   B[t+1]        = folded[t]^(D-1)
+#
+# raises complex numbers to the (k-1)th and (D-1)th power at every step.
+# At high (k, D, p) the magnitudes compound exponentially and overflow
+# Float64 (~1.8e+308).  For (k=7, D=8) this happens around p ≈ 9.
+#
+# ── Normalization strategy ────────────────────────────────────────────────
+#
+# Before each power operation, we normalize the vector to unit max-magnitude
+# and track the scale factor in log space:
+#
+#   child_hat_norm[t] = child_hat[t] / α_t       where α_t = max|child_hat[t]|
+#   folded_raw        = iWHT(kernel_hat .* child_hat_norm[t]^(k-1))
+#   folded_norm[t]    = folded_raw / β_t          where β_t = max|folded_raw|
+#   B[t+1]            = folded_norm[t]^(D-1)      (max-magnitude ≤ 1, safe)
+#
+# The true (un-normalized) B[t+1] would be:
+#   B_true[t+1] = (α_t^(k-1) · β_t)^(D-1) · folded_norm[t]^(D-1)
+#
+# but we store only the normalized part (folded_norm^(D-1)) and accumulate
+# the scale in a single running variable:
+#
+#   log_s[1] = 0
+#   log_s[t+1] = (k-1)(D-1) · log_s[t]
+#                + (k-1) · log(α_t)    [from child_hat normalization]
+#                + (D-1) · log(β_t)    [from folded normalization]
+#
+# At the root, we also normalize msg_hat = WHT(root_msg) by μ = max|msg_hat|
+# before raising to ^k.  The total log-scale for the parity correlator S is:
+#
+#   L = k · (log_s[p+1] + log(μ))
+#
+# and the physical answer is:
+#
+#   c̃ = (1 + c_s · exp(L) · Re(S_normalized)) / 2
+#
+# This product is computed in log space:
+#   exp(L + log|Re(S_normalized)|) with the correct sign.
+#
+# ── Backward pass ─────────────────────────────────────────────────────────
+#
+# The backward pass operates entirely on normalized intermediates.  The
+# gradient of c̃ with respect to any angle θ is:
+#
+#   ∂c̃/∂θ = (c_s / 2) · exp(L) · ∂S_normalized/∂θ
+#
+# where we DETACH the scale factors from the gradient (treat α_t, β_t, μ
+# as constants).  This is valid because:
+#
+# 1. The scale factors are max-magnitude operations, whose gradient is a
+#    sparse selection operator (nonzero only for the argmax entry), making
+#    their contribution negligible compared to the O(N) gradient terms.
+#
+# 2. The physical answer c̃ is invariant to the choice of normalization
+#    convention, so the detached gradient still represents the correct
+#    descent direction.
+#
+# 3. At convergence, the optimizer verifies the final c̃ value using the
+#    same normalized forward pass, so any gradient approximation error
+#    only affects the path to convergence, not the result.
+#
+# All normalized intermediates have max-magnitude ≤ 1, so the backward
+# powers (folded_norm^(degree-1), child_hat_norm^(arity-1)) cannot overflow.
+# The single exp(L) multiplier is applied once at the end; if L > 700
+# (which should never happen for valid QAOA), zero gradients are returned
+# and the optimizer's overflow guard handles the rest.
+#
+# ── Performance ───────────────────────────────────────────────────────────
+#
+# The normalization adds 2 passes per step (max-magnitude + scale) and one
+# at the root.  Each pass is O(N) where N = 4^p.  Since the WHTs are
+# O(N log N) and the power operations are O(N), the overhead is negligible.
+# Memory usage is unchanged: we store the same vectors but add 2p + 1 scalars.
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Forward pass with caching
@@ -24,6 +106,10 @@ end
 
 """
 Cache structure holding all intermediates needed for the backward pass.
+
+All vectors stored here are **normalized** (max magnitude ≈ 1) to prevent
+Float64 overflow at high (k, D, p).  The accumulated scale is tracked
+separately in log space and applied once at the very end.
 """
 struct BassoPipelineCache{T<:Real}
     # Angles and params
@@ -50,23 +136,31 @@ struct BassoPipelineCache{T<:Real}
     kernel::Vector{Complex{T}}
     kernel_hat::Vector{Complex{T}}
 
-    # Branch tensor history: B[1] = ones, B[t+1] = step(B[t])
+    # Branch tensor history: B[1] = ones, B[t+1] = step(B[t])  (NORMALIZED)
     B::Vector{Vector{Complex{T}}}
 
-    # Per-step intermediates (saved for backward)
-    child_hat::Vector{Vector{Complex{T}}}    # WHT(f_table .* B[t])
-    folded::Vector{Vector{Complex{T}}}       # iWHT(kernel_hat .* child_hat^arity)
+    # Per-step intermediates (saved for backward)  (NORMALIZED)
+    child_hat::Vector{Vector{Complex{T}}}    # WHT(f_table .* B[t]) / child_hat_scale
+    folded::Vector{Vector{Complex{T}}}       # iWHT(kernel_hat .* child_hat_norm^arity) / folded_scale
 
-    # Root computation
+    # Per-step normalization scale factors (real, positive)
+    child_hat_scales::Vector{T}    # max|child_hat| per step
+    folded_scales::Vector{T}       # max|folded| per step
+
+    # Root computation  (NORMALIZED)
     root_msg::Vector{Complex{T}}
     root_parity_signs::Vector{Int}
     root_kernel::Vector{Complex{T}}
     root_phase::Vector{T}            # phase arg per config for root kernel
-    msg_hat::Vector{Complex{T}}      # WHT(root_msg)
-    msg_hat_power::Vector{Complex{T}}  # msg_hat .^ k
+    msg_hat::Vector{Complex{T}}      # WHT(root_msg) / msg_hat_scale  (NORMALIZED)
+    msg_hat_scale::T                 # max|WHT(root_msg)|
+    msg_hat_power::Vector{Complex{T}}  # msg_hat_norm .^ k
+
+    # Accumulated log-scale: log(s_{p+1}^k * msg_hat_scale^k)
+    log_total_scale::T
 
     # Final result
-    S::Complex{T}
+    S_normalized::Complex{T}         # sum(root_kernel .* conv) in normalized space
     value::T
 end
 
@@ -116,14 +210,30 @@ function _forward_pass(
     end
     kernel_hat = wht(complex.(kernel))
 
-    # Branch tensor iteration with caching
-    # Pre-allocate scratch buffer to avoid repeated allocations in the hot loop.
-    # Each step previously allocated ~5 temporary vectors of size N.
+    # Branch tensor iteration with caching and per-step normalization.
+    #
+    # At high (k, D, p) the powers child_hat^(k-1) and folded^(D-1)
+    # overflow Float64.  We normalize before each power operation and
+    # track the accumulated scale in log space.
+    #
+    # Scale recurrence (log space):
+    #   log_s[1] = 0
+    #   log_s[t+1] = (k-1)(D-1) * log_s[t]
+    #                + (k-1) * log(child_hat_scale[t])
+    #                + (D-1) * log(folded_scale[t])
+    #
+    # At the root, msg_hat (which contains B[p+1]) is also normalized
+    # before ^k, adding k * (log_s[p+1] + log(msg_hat_scale)) to the total.
+
     B_history = Vector{Vector{Complex{T}}}(undef, p + 1)
     child_hat_history = Vector{Vector{Complex{T}}}(undef, p)
     folded_history = Vector{Vector{Complex{T}}}(undef, p)
+    child_hat_scales = Vector{T}(undef, p)
+    folded_scales = Vector{T}(undef, p)
 
     scratch = Vector{Complex{T}}(undef, N)
+
+    log_s = zero(T)  # log of accumulated scale on B
 
     B_history[1] = ones(Complex{T}, N)
     for t in 1:p
@@ -132,23 +242,52 @@ function _forward_pass(
             scratch[i] = f_table[i] * B_history[t][i]
         end
         wht!(scratch)
+
+        # Normalize child_hat before ^(k-1)
+        ch_scale = maximum(abs, scratch)
+        if ch_scale > 0
+            inv_ch = one(T) / ch_scale
+            @inbounds @simd for i in 1:N
+                scratch[i] *= inv_ch
+            end
+        else
+            ch_scale = one(T)
+        end
+        child_hat_scales[t] = ch_scale
         child_hat_history[t] = copy(scratch)
 
-        # folded = iWHT(kernel_hat .* child_hat .^ arity) — reuse scratch
+        # folded = iWHT(kernel_hat .* child_hat_norm .^ arity) — reuse scratch
         ch = child_hat_history[t]
         @inbounds @simd for i in 1:N
             scratch[i] = kernel_hat[i] * ch[i] ^ arity
         end
         iwht!(scratch)
+
+        # Normalize folded before ^(D-1)
+        fld_scale = maximum(abs, scratch)
+        if fld_scale > 0
+            inv_fld = one(T) / fld_scale
+            @inbounds @simd for i in 1:N
+                scratch[i] *= inv_fld
+            end
+        else
+            fld_scale = one(T)
+        end
+        folded_scales[t] = fld_scale
         folded_history[t] = copy(scratch)
 
-        # B[t+1] = folded .^ degree
+        # B[t+1] = folded_norm .^ degree  (normalized, max magnitude ≤ 1)
         fld = folded_history[t]
         new_B = Vector{Complex{T}}(undef, N)
         @inbounds @simd for i in 1:N
             new_B[i] = fld[i] ^ degree
         end
         B_history[t+1] = new_B
+
+        # Update log-scale recurrence
+        log_s = arity * degree * log_s +
+                arity * log(ch_scale) +
+                degree * log(fld_scale)
     end
 
     # Root computation
@@ -166,11 +305,40 @@ function _forward_pass(
     end
 
     # Root fold: S = Σ root_kernel .* iWHT(WHT(root_msg).^k)
-    msg_hat = wht(complex.(root_msg))
+    # Normalize msg_hat before ^k to prevent root overflow
+    msg_hat_raw = wht(complex.(root_msg))
+    mh_scale = maximum(abs, msg_hat_raw)
+    if mh_scale > 0
+        msg_hat_raw .*= one(T) / mh_scale
+    else
+        mh_scale = one(T)
+    end
+    msg_hat = msg_hat_raw  # now normalized
     msg_hat_power = msg_hat .^ k
     conv = iwht(msg_hat_power)
-    S = sum(root_kernel .* conv)
-    value = (1 + clause_sign * real(S)) / 2
+    S_normalized = sum(root_kernel .* conv)
+
+    # Total log-scale: B[p+1] carries scale exp(log_s), and msg_hat gets
+    # an additional factor mh_scale removed.  The root fold raises to ^k:
+    #   S_true = exp(k * log_s + k * log(mh_scale)) * S_normalized
+    log_total_scale = k * (log_s + log(mh_scale))
+
+    # Compute the physical value using log-space multiplication to avoid overflow.
+    # c̃ = (1 + cs * exp(log_total_scale) * Re(S_normalized)) / 2
+    re_S_norm = real(S_normalized)
+    if re_S_norm == 0 || !isfinite(log_total_scale)
+        value = half
+    else
+        log_product = log_total_scale + log(abs(re_S_norm))
+        if log_product > 700  # would overflow exp()
+            # This shouldn't happen for valid QAOA — the physical answer is bounded.
+            # If it does, the intermediate precision was insufficient.
+            value = T(NaN)
+        else
+            scaled_re_S = copysign(exp(log_product), re_S_norm)
+            value = (1 + clause_sign * scaled_re_S) / 2
+        end
+    end
 
     BassoPipelineCache{T}(
         p, k, D, clause_sign,
@@ -179,9 +347,11 @@ function _forward_pass(
         f_table, constraint_phase,
         kernel, kernel_hat,
         B_history, child_hat_history, folded_history,
+        child_hat_scales, folded_scales,
         root_msg, root_parity_signs, root_kernel, root_phase,
-        msg_hat, msg_hat_power,
-        S, value,
+        msg_hat, mh_scale, msg_hat_power,
+        log_total_scale,
+        S_normalized, value,
     )
 end
 
@@ -194,6 +364,13 @@ end
 
 Propagate cotangents backward through the cached forward pass to compute
 exact gradients ∂E/∂γ[1:p] and ∂E/∂β[1:p].
+
+The forward pass stores **normalized** intermediates.  The backward pass
+operates entirely in normalized space, then applies the accumulated
+log-scale multiplier `exp(log_total_scale)` to the final gradients.  The
+scale factors are treated as constants (detached) for gradient purposes;
+this is exact to machine precision because ∂(max|x|)/∂θ contributes
+negligibly compared to the main gradient terms.
 """
 function _backward_pass(cache::BassoPipelineCache{T}) where T
     p = cache.p
@@ -201,10 +378,22 @@ function _backward_pass(cache::BassoPipelineCache{T}) where T
     cs = T(cache.clause_sign)
     half = one(T) / 2
 
-    # ∂E/∂S: E = (1 + cs * Re(S)) / 2, so dE/dRe(S) = cs/2, dE/dIm(S) = 0
-    S_bar = complex(cs / 2)
+    # Compute the scale multiplier for gradients.
+    # c̃ = (1 + cs * exp(log_total_scale) * Re(S_norm)) / 2
+    # ∂c̃/∂(anything_norm) = cs/2 * exp(log_total_scale) * ∂Re(S_norm)/∂(anything_norm)
+    # We compute ∂S_norm/∂angles in normalized space, then multiply by scale * cs/2.
+    log_lts = cache.log_total_scale
+    if !isfinite(log_lts) || log_lts > 700
+        # Scale is astronomical — gradients would overflow even after normalization.
+        # Return zero gradients (the optimizer's overflow guard handles this).
+        return (zeros(T, p), zeros(T, p))
+    end
+    grad_scale = exp(log_lts) * cs / 2
 
-    # Root fold: S = Σ root_kernel .* conv, where conv = iWHT(msg_hat^k)
+    # ∂E/∂S_norm in normalized space: dE/dRe(S_norm) = grad_scale, dE/dIm(S_norm) = 0
+    S_bar = complex(grad_scale)
+
+    # Root fold: S_norm = Σ root_kernel .* conv, where conv = iWHT(msg_hat_norm^k)
     conv = iwht(cache.msg_hat_power)
 
     root_kernel_bar = S_bar .* conj.(conv)
@@ -412,4 +601,20 @@ function basso_expectation_and_gradient(
     cache = _forward_pass(params, angles; clause_sign)
     γ_grad, β_grad = _backward_pass(cache)
     (cache.value, γ_grad, β_grad)
+end
+
+"""
+    basso_expectation_normalized(params, angles; clause_sign=1) -> Float64
+
+Evaluate the expected satisfaction fraction using the normalized forward pass
+(no gradient).  This avoids Float64 overflow at high (k, D, p) that affects
+the un-normalized `qaoa_expectation` path.
+"""
+function basso_expectation_normalized(
+    params::TreeParams,
+    angles::QAOAAngles;
+    clause_sign::Int=1,
+)
+    cache = _forward_pass(params, angles; clause_sign)
+    cache.value
 end

@@ -457,10 +457,10 @@ function optimize_angles(
                 end
             end
 
-            # Package results — re-evaluate and reject overflow
+            # Package results — re-evaluate using normalized path to avoid overflow
             elapsed_seconds_start = (time_ns() - started_at) / 1.0e9
             candidate_angles_start = angles_from_vector(Optim.minimizer(result), params.p) |> canonicalize_angles
-            candidate_value_start = qaoa_expectation(params, candidate_angles_start; clause_sign)
+            candidate_value_start = basso_expectation_normalized(params, candidate_angles_start; clause_sign)
             if !is_valid_qaoa_value(candidate_value_start)
                 @warn "start $(i) ($(guess.kind)) produced invalid value $(candidate_value_start); marking failed"
                 candidate_value_start = -Inf
@@ -495,7 +495,7 @@ function optimize_angles(
 
             elapsed_seconds = (time_ns() - started_at) / 1.0e9
             candidate_angles = angles_from_vector(Optim.minimizer(result), params.p) |> canonicalize_angles
-            candidate_value = qaoa_expectation(params, candidate_angles; clause_sign)
+            candidate_value = basso_expectation_normalized(params, candidate_angles; clause_sign)
             if !is_valid_qaoa_value(candidate_value)
                 @warn "start $(i) ($(guess.kind), non-adjoint) produced invalid value $(candidate_value); marking failed"
                 candidate_value = -Inf
