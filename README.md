@@ -6,7 +6,7 @@
 *ORCID: [0009-0007-9870-1970](https://orcid.org/0009-0007-9870-1970)*
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19211958.svg)](https://doi.org/10.5281/zenodo.19211958)
-![Tests](https://img.shields.io/badge/tests-746%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-1741%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 ![Julia](https://img.shields.io/badge/Julia-1.12+-purple)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -15,7 +15,7 @@
 
 ## Results
 
-Best-found QAOA satisfaction fractions at finite D, computed on a single Apple M4 Mac Studio (64 GB RAM, 12 threads). Full data in [`results/qaoa-best-values.csv`](results/qaoa-best-values.csv).
+Best-found QAOA satisfaction fractions at finite D, computed on Apple M4 Mac Studio (64 GB) and Azure fleet (5× E8as_v5, 256 GB). Full data in [`results/qaoa-best-values.csv`](results/qaoa-best-values.csv).
 
 ### Primary target: (k=3, D=4) through p=12
 
@@ -38,20 +38,22 @@ Best-found QAOA satisfaction fractions at finite D, computed on a single Apple M
 
 | (k,D) | p | c̃ | (k,D) | p | c̃ | (k,D) | p | c̃ |
 |-------|---|------|-------|---|------|-------|---|------|
-| (3,4) | 12 | 0.877 | (4,5) | 8 | 0.842 | (5,6) | 8 | 0.830 |
-| (3,5) | 11 | 0.835 | (4,6) | 8 | 0.813 | (5,7) | 8 | 0.807 |
-| (3,6) | 11 | 0.807 | (4,7) | 8 | 0.791 | (5,8) | 8 | 0.788 |
-| (3,7) | 11 | 0.777 | (4,8) | 8 | 0.772 | (6,7) | 8 | 0.818 |
-| (3,8) | 11 | 0.768 | | | | (6,8) | 8 | 0.798 |
+| (3,4) | 12 | 0.877 | (4,5) | 11 | 0.861 | (5,6) | 10 | 0.849 |
+| (3,5) | 11 | 0.835 | (4,6) | 10 | 0.827 | (5,7) | 9 | 0.813 |
+| (3,6) | 11 | 0.807 | (4,7) | 10 | 0.806 | (5,8) | 9 | 0.801 |
+| (3,7) | 11 | 0.779 | (4,8) | 10 | 0.800 | (6,7) | 8 | 0.819 |
+| (3,8) | 11 | 0.768 | | | | (6,8) | 8 | 0.799 |
 | | | | | | | (7,8) | 8 | 0.823 |
 
-To our knowledge, no prior exact finite-D QAOA evaluation has been performed for k ≥ 3. Basso et al. (2021) derived the general iteration but evaluated it only in the D→∞ limit.
+QAOA surpasses DQI+BP for 11 of 15 pairs. At four pairs — (3,6), (3,7), (3,8), (4,8) — QAOA also exceeds Regev+FGUM. To our knowledge, no prior exact finite-D QAOA evaluation has been performed for k ≥ 3.
 
 ## Technical Contributions
 
 1. **Walsh-Hadamard factorisation**: The k-body constraint fold is a convolution on Z₂^{2p+1}. The WHT diagonalises it, reducing cost from O(4^{kp}) to O(p²·4^p) for any k. For k=3, p=8 this is 65,000× faster.
 
 2. **Manual adjoint differentiation**: Reverse-mode gradients through the full evaluation pipeline at ~1.6× a single forward evaluation, independent of p. The WHT is self-adjoint; β gradients use a log-derivative trick. 12× faster than forward-mode AD at p=8.
+
+3. **Normalized branch tensor recurrence**: Per-step normalization prevents Float64 overflow at high (k,D,p) by tracking scale in log space. Enables exact evaluation at all 15 pairs through p=15 on high-memory nodes.
 
 3. **Generic fold engine**: The Basso-Farhi branch-tensor contraction is a catamorphism over the light-cone tree, parametrised by a cost algebra. MaxCut and Max-k-XORSAT are different instantiations of the same interface — validated by reproducing Farhi et al. (2025) MaxCut results with no code changes.
 
@@ -66,7 +68,7 @@ git clone https://github.com/johnazariah/qaoa-xorsat.git
 cd qaoa-xorsat
 julia --project=. -e 'using Pkg; Pkg.instantiate()'
 
-# Run tests (746 tests, 100% coverage)
+# Run tests (1741 tests, 100% coverage)
 julia --project=. -t auto -e 'using Pkg; Pkg.test()'
 
 # Smoke test
