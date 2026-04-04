@@ -213,17 +213,21 @@ function _forward_pass(
     # Branch tensor iteration with caching and per-step normalization.
     #
     # At high (k, D, p) the powers child_hat^(k-1) and folded^(D-1)
-    # overflow Float64.  We normalize before each power operation and
-    # track the accumulated scale in log space.
+    # overflow Float64.  We normalize before each power operation ONLY
+    # when magnitudes threaten to overflow, and track the accumulated
+    # scale in log space.
     #
-    # Scale recurrence (log space):
-    #   log_s[1] = 0
-    #   log_s[t+1] = (k-1)(D-1) * log_s[t]
-    #                + (k-1) * log(child_hat_scale[t])
-    #                + (D-1) * log(folded_scale[t])
+    # Normalizing every step destroys the relative magnitude relationships
+    # between entries that carry the physical signal (the deviation from
+    # c̃ = 0.5), causing signal underflow at high depth.  By only
+    # normalizing when max-magnitude exceeds a safe threshold, we preserve
+    # precision while still preventing overflow.
     #
-    # At the root, msg_hat (which contains B[p+1]) is also normalized
-    # before ^k, adding k * (log_s[p+1] + log(msg_hat_scale)) to the total.
+    # Threshold: 1e100 is safe because (1e100)^7 = 1e700 < 1.8e308 is
+    # false — actually we need (threshold)^max(arity,degree) < 1e300.
+    # For degree=7: threshold < 1e300/7 ≈ 1e42.  Use 1e30 for safety.
+
+    _NORM_THRESHOLD = T(1e30)
 
     B_history = Vector{Vector{Complex{T}}}(undef, p + 1)
     child_hat_history = Vector{Vector{Complex{T}}}(undef, p)
@@ -243,35 +247,35 @@ function _forward_pass(
         end
         wht!(scratch)
 
-        # Normalize child_hat before ^(k-1)
+        # Normalize child_hat before ^(k-1) — ONLY if needed
         ch_scale = maximum(abs, scratch)
-        if ch_scale > 0
+        if ch_scale > _NORM_THRESHOLD
             inv_ch = one(T) / ch_scale
             @inbounds @simd for i in 1:N
                 scratch[i] *= inv_ch
             end
         else
-            ch_scale = one(T)
+            ch_scale = one(T)  # no normalization applied
         end
         child_hat_scales[t] = ch_scale
         child_hat_history[t] = copy(scratch)
 
-        # folded = iWHT(kernel_hat .* child_hat_norm .^ arity) — reuse scratch
+        # folded = iWHT(kernel_hat .* child_hat .^ arity) — reuse scratch
         ch = child_hat_history[t]
         @inbounds @simd for i in 1:N
             scratch[i] = kernel_hat[i] * ch[i] ^ arity
         end
         iwht!(scratch)
 
-        # Normalize folded before ^(D-1)
+        # Normalize folded before ^(D-1) — ONLY if needed
         fld_scale = maximum(abs, scratch)
-        if fld_scale > 0
+        if fld_scale > _NORM_THRESHOLD
             inv_fld = one(T) / fld_scale
             @inbounds @simd for i in 1:N
                 scratch[i] *= inv_fld
             end
         else
-            fld_scale = one(T)
+            fld_scale = one(T)  # no normalization applied
         end
         folded_scales[t] = fld_scale
         folded_history[t] = copy(scratch)
@@ -305,15 +309,15 @@ function _forward_pass(
     end
 
     # Root fold: S = Σ root_kernel .* iWHT(WHT(root_msg).^k)
-    # Normalize msg_hat before ^k to prevent root overflow
+    # Normalize msg_hat before ^k — ONLY if needed
     msg_hat_raw = wht(complex.(root_msg))
     mh_scale = maximum(abs, msg_hat_raw)
-    if mh_scale > 0
+    if mh_scale > _NORM_THRESHOLD
         msg_hat_raw .*= one(T) / mh_scale
     else
-        mh_scale = one(T)
+        mh_scale = one(T)  # no normalization applied
     end
-    msg_hat = msg_hat_raw  # now normalized
+    msg_hat = msg_hat_raw
     msg_hat_power = msg_hat .^ k
     conv = iwht(msg_hat_power)
     S_normalized = sum(root_kernel .* conv)
