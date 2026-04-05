@@ -1,0 +1,21 @@
+{
+  "run_id": "20260404T211332-k4-d5-p8-8-r2-i320-s1234",
+  "run_kind": "experiment",
+  "runner_label": "unknown",
+  "timestamp_utc": "2026-04-04T21:13:32",
+  "git_commit": "f354eb1347b61745b2131a6750a8faeac4d3e8c0",
+  "git_branch": "main",
+  "git_dirty": true,
+  "reliability_artifacts_dir": "",
+  "reliability_artifacts": [],
+  "k": 4,
+  "D": 5,
+  "p_min": 8,
+  "p_max": 8,
+  "clause_sign": 1,
+  "restarts": 2,
+  "maxiters": 320,
+  "seed": 1234,
+  "preserve": true,
+  "result_count": 1
+}

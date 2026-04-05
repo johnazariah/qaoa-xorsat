@@ -1,0 +1,2 @@
+run_id,run_kind,runner_label,timestamp_utc,git_commit,git_branch,git_dirty,k,D,p,clause_sign,restarts,maxiters,seed,value,wall_time_seconds,best_start_wall_time_seconds,evaluations,starts,iterations,converged,retry_count,best_start_kind,g_abstol,gamma,beta
+20260404T210419-k4-d6-p2-2-r2-i320-s1234,experiment,unknown,2026-04-04T21:04:19,f354eb1347b61745b2131a6750a8faeac4d3e8c0,main,true,4,6,2,1,2,320,1234,0.706214179347,0.891881,0.605651,147,3,13,true,0,random,1.0e-06,3.497963748710876;0.5651365311364938,0.2762483517861768;0.1723959751167221
