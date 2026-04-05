@@ -662,3 +662,189 @@ function optimize_angles(
     ))
     optimize_angles(params; clause_sign=default_clause_sign(algebra), kwargs...)
 end
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Swarm optimizer — memetic algorithm for rugged landscapes at high (k,D)
+# ──────────────────────────────────────────────────────────────────────────────
+
+struct SwarmCandidate
+    angles::QAOAAngles
+    value::Float64
+end
+
+"""
+    swarm_optimize(params; kwargs...) -> AngleOptimizationResult
+
+Memetic (evolutionary + local search) optimizer for QAOA angles.
+
+At high (k, D) the loss landscape is extremely rugged: most starting points
+see c̃ ≈ 0.5 (flat), and only specific basins carry signal.  Standard
+multi-start L-BFGS with a handful of restarts misses these basins.  The
+swarm strategy maintains a population of candidates and repeatedly:
+
+1. Runs short L-BFGS bursts on all candidates (local improvement)
+2. Culls the worst half
+3. Replenishes with random starts + midpoint crossovers from the survivors
+
+This explores far more basins than a fixed-restart strategy while concentrating
+L-BFGS effort on promising regions.
+
+# Keyword arguments
+- `population`: initial population size (default: 100)
+- `generations`: number of cull/replenish cycles (default: 10)
+- `burst_iters`: L-BFGS iterations per burst (default: 20)
+- `cull_fraction`: fraction of population to kill each generation (default: 0.5)
+- `random_fraction`: fraction of replacements that are fresh random (default: 0.4)
+- `clause_sign`, `autodiff`, `rng`, `g_abstol`: as in `optimize_angles`
+- `on_generation`: optional callback `(gen, best_value, population_size) -> nothing`
+- `warm_starts`: optional initial angles to seed the population
+"""
+function swarm_optimize(
+    params::TreeParams;
+    clause_sign::Int=default_clause_sign(params.k),
+    population::Int=100,
+    generations::Int=10,
+    burst_iters::Int=20,
+    cull_fraction::Float64=0.5,
+    random_fraction::Float64=0.4,
+    autodiff::Symbol=:adjoint,
+    rng=Random.default_rng(),
+    g_abstol::Float64=DEFAULT_G_ABSTOL,
+    on_generation=nothing,
+    warm_starts::AbstractVector{<:QAOAAngles}=QAOAAngles[],
+)::AngleOptimizationResult
+    p = params.p
+    started_at = time_ns()
+    total_evaluations = 0
+
+    # ── Evaluate a single candidate with a short L-BFGS burst ────────────
+    function burst_optimize(angles::QAOAAngles)
+        result = optimize_angles(
+            params;
+            clause_sign,
+            restarts=0,
+            maxiters=burst_iters,
+            initial_guesses=[angles],
+            initial_guess_kind=:swarm,
+            autodiff,
+            rng,
+            g_abstol,
+        )
+        (result.angles, result.value, result.evaluations, result.converged)
+    end
+
+    # ── Initialize population ─────────────────────────────────────────────
+    candidates = SwarmCandidate[]
+
+    # Seed with warm starts
+    for ws in warm_starts
+        depth(ws) == p || continue
+        val = basso_expectation_normalized(params, ws; clause_sign)
+        push!(candidates, SwarmCandidate(ws, is_valid_qaoa_value(val) ? val : -Inf))
+    end
+
+    # Fill the rest with random starts
+    while length(candidates) < population
+        push!(candidates, SwarmCandidate(random_angles(p; rng), -Inf))
+    end
+
+    best_ever = SwarmCandidate(candidates[1].angles, -Inf)
+    all_trace = OptimizationTraceEntry[]
+
+    for gen in 1:generations
+        # ── Local improvement: short L-BFGS burst on each candidate ───────
+        new_candidates = Vector{SwarmCandidate}(undef, length(candidates))
+        Threads.@threads for i in eachindex(candidates)
+            angles_out, val_out, evals, _ = burst_optimize(candidates[i].angles)
+            if is_valid_qaoa_value(val_out) && val_out > candidates[i].value
+                new_candidates[i] = SwarmCandidate(angles_out, val_out)
+            else
+                # Keep the original if burst didn't improve
+                orig_val = candidates[i].value
+                if orig_val == -Inf
+                    # First evaluation — use burst result even if mediocre
+                    new_candidates[i] = SwarmCandidate(angles_out,
+                        is_valid_qaoa_value(val_out) ? val_out : -Inf)
+                else
+                    new_candidates[i] = candidates[i]
+                end
+            end
+            total_evaluations += evals
+        end
+        candidates = new_candidates
+
+        # Track best
+        for c in candidates
+            if is_valid_qaoa_value(c.value) && c.value > best_ever.value
+                best_ever = c
+            end
+        end
+
+        push!(all_trace, OptimizationTraceEntry(gen, -best_ever.value, 0.0))
+
+        if !isnothing(on_generation)
+            on_generation(gen, best_ever.value, length(candidates))
+        end
+
+        gen == generations && break  # don't cull on the last generation
+
+        # ── Sort by value (descending) and cull ───────────────────────────
+        sort!(candidates, by=c -> -c.value)  # best first
+        n_cull = round(Int, length(candidates) * cull_fraction)
+        survivors = candidates[1:end-n_cull]
+
+        # ── Replenish ─────────────────────────────────────────────────────
+        n_new = n_cull
+        n_random = round(Int, n_new * random_fraction)
+        n_crossover = n_new - n_random
+
+        new_members = SwarmCandidate[]
+
+        # Random fresh starts
+        for _ in 1:n_random
+            push!(new_members, SwarmCandidate(random_angles(p; rng), -Inf))
+        end
+
+        # Midpoint crossovers from top survivors
+        n_top = min(length(survivors), 30)
+        for _ in 1:n_crossover
+            i = rand(rng, 1:n_top)
+            j = rand(rng, 1:n_top)
+            while j == i && n_top > 1
+                j = rand(rng, 1:n_top)
+            end
+            parent_a = angle_vector(survivors[i].angles)
+            parent_b = angle_vector(survivors[j].angles)
+            # Midpoint with small perturbation
+            child_vec = 0.5 .* (parent_a .+ parent_b) .+ 0.1 .* randn(rng, 2p)
+            child = angles_from_vector(child_vec, p) |> canonicalize_angles
+            push!(new_members, SwarmCandidate(child, -Inf))
+        end
+
+        candidates = vcat(survivors, new_members)
+    end
+
+    # ── Package best result ───────────────────────────────────────────────
+    wall_time = (time_ns() - started_at) / 1.0e9
+    best_start_result = AngleOptimizationStartResult(
+        :swarm, best_ever.value, wall_time, total_evaluations,
+        generations * burst_iters, is_valid_qaoa_value(best_ever.value), all_trace,
+    )
+
+    AngleOptimizationResult(
+        best_ever.angles,
+        best_ever.value,
+        wall_time,
+        wall_time,
+        total_evaluations,
+        population * generations,
+        generations * burst_iters,
+        is_valid_qaoa_value(best_ever.value) && best_ever.value > 0.501,
+        0,
+        burst_iters,
+        0,
+        :swarm,
+        g_abstol,
+        [best_start_result],
+    )
+end

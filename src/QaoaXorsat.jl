@@ -39,7 +39,7 @@ include("maxcut_transfer.jl")
 include("optimization.jl")
 export AngleOptimizationResult
 export canonicalize_angles, random_angles, extend_angles
-export optimize_angles, optimize_depth_sequence
+export optimize_angles, optimize_depth_sequence, swarm_optimize
 
 # QAOA evaluation
 include("qaoa.jl")
