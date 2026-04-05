@@ -14,8 +14,22 @@ seed = parse(Int, get(ARGS, 7, "42"))
 
 clause_sign = k == 2 ? -1 : 1
 
-@printf("Swarm chain: k=%d, D=%d, p=1–%d, pop=%d, gens=%d, burst=%d, seed=%d\n",
-    k, D, p_max, pop, gens, burst, seed)
+# Write results to a dedicated file (bypasses stdout buffering entirely)
+results_file = get(ENV, "QAOA_RESULTS_FILE",
+    joinpath(@__DIR__, "..", "results", "swarm-k$(k)d$(D).csv"))
+mkpath(dirname(results_file))
+
+function emit(msg)
+    printstyled(msg, "\n")
+    flush(stdout)
+    open(results_file, "a") do io
+        println(io, msg)
+        flush(io)
+    end
+end
+
+emit("# swarm chain: k=$k, D=$D, p=1-$p_max, pop=$pop, gens=$gens, burst=$burst, seed=$seed")
+emit("k,D,p,ctilde,evals,wall_seconds,gamma,beta")
 
 mutable struct State
     warm::Vector{QAOAAngles}
@@ -37,19 +51,23 @@ for p in 1:p_max
         warm_starts=ws,
         on_generation=(gen, best, npop) -> begin
             if gen == 1 || gen == gens
-                @printf("  gen %2d: best=%.10f  pop=%d\n", gen, best, npop)
+                emit(@sprintf("# gen %2d: best=%.10f  pop=%d", gen, best, npop))
             end
         end,
     )
 
-    @printf("(%d,%d) p=%2d: c̃=%.10f  evals=%d  wall=%.1fs\n",
-        k, D, p, result.value, result.evaluations, result.wall_time_seconds)
-    flush(stdout)
+    gamma_str = join(string.(result.angles.γ), ';')
+    beta_str = join(string.(result.angles.β), ';')
+    emit(@sprintf("%d,%d,%d,%.12f,%d,%.1f,%s,%s",
+        k, D, p, result.value, result.evaluations, result.wall_time_seconds,
+        gamma_str, beta_str))
 
     if QaoaXorsat.is_valid_qaoa_value(result.value) && result.value > 0.501
         state.warm = [result.angles]
     else
-        @printf("  *** chain broken at p=%d — continuing with random starts\n", p)
+        emit(@sprintf("# chain broken at p=%d — continuing with random starts", p))
         state.warm = QAOAAngles[]
     end
 end
+
+emit("# DONE")
