@@ -1,0 +1,10 @@
+k = 6
+D = 8
+p_min = 10
+p_max = 15
+restarts = 2
+maxiters = 1280
+seed = 1234
+preserve = true
+autodiff = "adjoint"
+resume_from = "/Users/johnaz/PhD/qaoa-xorsat/scripts/../experiments/warmstart/ws-k6d8"
