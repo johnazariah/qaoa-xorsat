@@ -84,9 +84,7 @@ for p in p_start:p_max
         rng=MersenneTwister(seed + p),
         warm_starts=ws,
         on_generation=(gen, best, npop) -> begin
-            if gen == 1 || gen == gens
-                emit(@sprintf("# gen %2d: best=%.10f  pop=%d", gen, best, npop))
-            end
+            emit(@sprintf("# p=%d gen %2d: best=%.10f  pop=%d", p, gen, best, npop))
         end,
     )
 
