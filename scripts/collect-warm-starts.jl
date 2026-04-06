@@ -15,6 +15,23 @@ struct BestResult
     source::String
 end
 
+# Prefer highest depth with good value, then highest value at same depth.
+# "Good" means > 0.65 — filters out bad basins (0.5-0.6) that would
+# poison the warm-start chain.
+is_better(new_p, new_v, old::BestResult) = begin
+    new_valid = new_v > 0.65
+    old_valid = old.value > 0.65
+    if new_valid && !old_valid
+        true
+    elseif !new_valid && old_valid
+        false
+    elseif new_valid && old_valid
+        new_p > old.p || (new_p == old.p && new_v > old.value)
+    else
+        false  # both invalid, keep first
+    end
+end
+
 best = Dict{Tuple{Int,Int}, BestResult}()
 
 function ingest_swarm_csv!(best, path, source)
@@ -36,7 +53,7 @@ function ingest_swarm_csv!(best, path, source)
         any(isnothing, beta) && continue
 
         key = (k, D)
-        if !haskey(best, key) || v > best[key].value
+        if !haskey(best, key) || is_better(p, v, best[key])
             best[key] = BestResult(k, D, p, v, Float64.(gamma), Float64.(beta), source)
         end
     end
@@ -60,7 +77,7 @@ function ingest_results_csv!(best, path, source)
         any(isnothing, beta) && continue
 
         key = (k, D)
-        if !haskey(best, key) || v > best[key].value
+        if !haskey(best, key) || is_better(p, v, best[key])
             best[key] = BestResult(k, D, p, v, Float64.(gamma), Float64.(beta), source)
         end
     end
@@ -83,7 +100,7 @@ end
 
 # Fleet branches (via git show)
 try
-    branches = filter(b -> occursin("fleet", b) || occursin("p710", b),
+    branches = filter(b -> occursin("fleet", b) || occursin("p710", b) || occursin("stephen", b),
         strip.(readlines(pipeline(`git branch -r`, stderr=devnull))))
     for branch in branches
         branch = strip(branch)
@@ -104,7 +121,7 @@ try
                 any(isnothing, gamma) && continue
                 any(isnothing, beta) && continue
                 key = (k, D)
-                if !haskey(best, key) || v > best[key].value
+                if !haskey(best, key) || is_better(p, v, best[key])
                     best[key] = BestResult(k, D, p, v, Float64.(gamma), Float64.(beta), branch)
                 end
             end
@@ -131,7 +148,7 @@ try
                     any(isnothing, gamma) && continue
                     any(isnothing, beta) && continue
                     key = (k, D)
-                    if !haskey(best, key) || v > best[key].value
+                    if !haskey(best, key) || is_better(p, v, best[key])
                         best[key] = BestResult(k, D, p, v, Float64.(gamma), Float64.(beta), "$branch:$fname")
                     end
                 end
