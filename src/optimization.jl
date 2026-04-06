@@ -750,6 +750,7 @@ function swarm_optimize(
 
     best_ever = SwarmCandidate(candidates[1].angles, -Inf)
     all_trace = OptimizationTraceEntry[]
+    stagnant_generations = 0
 
     for gen in 1:generations
         # ── Local improvement: short L-BFGS burst on each candidate ───────
@@ -774,6 +775,7 @@ function swarm_optimize(
         candidates = new_candidates
 
         # Track best
+        prev_best = best_ever.value
         for c in candidates
             if is_valid_qaoa_value(c.value) && c.value > best_ever.value
                 best_ever = c
@@ -784,6 +786,22 @@ function swarm_optimize(
 
         if !isnothing(on_generation)
             on_generation(gen, best_ever.value, length(candidates))
+        end
+
+        # ── Early exit: if the swarm isn't improving, stop exploring ──────
+        # and switch to a full L-BFGS polish on the best candidate.
+        if best_ever.value <= prev_best + 1e-10
+            stagnant_generations += 1
+        else
+            stagnant_generations = 0
+        end
+
+        if stagnant_generations >= 3 && gen >= 3
+            # Swarm is wandering — polish the winner and exit
+            if !isnothing(on_generation)
+                on_generation(gen, best_ever.value, -1)  # -1 signals early exit
+            end
+            break
         end
 
         gen == generations && break  # don't cull on the last generation
@@ -822,6 +840,26 @@ function swarm_optimize(
         end
 
         candidates = vcat(survivors, new_members)
+    end
+
+    # ── Polish: run a full L-BFGS on the best candidate found ───────────
+    # The swarm finds the right basin; L-BFGS converges it properly.
+    if is_valid_qaoa_value(best_ever.value) && best_ever.value > 0.501
+        polish_result = optimize_angles(
+            params;
+            clause_sign,
+            restarts=0,
+            maxiters=1280,
+            initial_guesses=[best_ever.angles],
+            initial_guess_kind=:swarm_polish,
+            autodiff,
+            rng,
+            g_abstol,
+        )
+        total_evaluations += polish_result.evaluations
+        if is_valid_qaoa_value(polish_result.value) && polish_result.value > best_ever.value
+            best_ever = SwarmCandidate(polish_result.angles, polish_result.value)
+        end
     end
 
     # ── Package best result ───────────────────────────────────────────────
