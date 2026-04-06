@@ -11,27 +11,36 @@
 using Printf
 using Dates
 
-csv_path = joinpath(@__DIR__, "..", "results", "warm-start-angles.csv")
+csv_path = joinpath(@__DIR__, "..", "results", "composite-all-pairs.csv")
 config_dir = joinpath(@__DIR__, "..", "experiments", "warmstart")
 mkpath(config_dir)
 
-# Parse warm-start CSV
-entries = []
+# Parse composite CSV → pick highest valid depth per (k,D)
+# Format: k,D,p,ctilde,converged,source,gamma,beta
+raw_entries = Dict{Tuple{Int,Int}, NamedTuple}()
 for line in eachline(csv_path)
     startswith(line, '#') && continue
     startswith(line, "k,") && continue
     fields = split(line, ',')
-    length(fields) >= 7 || continue
-    k = parse(Int, fields[1])
-    D = parse(Int, fields[2])
-    p = parse(Int, fields[3])
-    v = parse(Float64, fields[4])
-    gamma = parse.(Float64, split(fields[6], ';'))
-    beta = parse.(Float64, split(fields[7], ';'))
-    push!(entries, (k=k, D=D, p=p, value=v, gamma=gamma, beta=beta))
+    length(fields) >= 8 || continue
+    k = tryparse(Int, fields[1]); k === nothing && continue
+    D = tryparse(Int, fields[2]); D === nothing && continue
+    p = tryparse(Int, fields[3]); p === nothing && continue
+    v = tryparse(Float64, fields[4]); v === nothing && continue
+    v > 0.65 && v < 0.94 || continue  # skip bad basins and overflow
+    gamma = tryparse.(Float64, split(fields[7], ';'))
+    beta = tryparse.(Float64, split(fields[8], ';'))
+    any(isnothing, gamma) && continue
+    any(isnothing, beta) && continue
+    length(gamma) == p && length(beta) == p || continue
+    key = (k, D)
+    if !haskey(raw_entries, key) || p > raw_entries[key].p
+        raw_entries[key] = (k=k, D=D, p=p, value=v, gamma=Float64.(gamma), beta=Float64.(beta))
+    end
 end
+entries = sort(collect(values(raw_entries)); by=e -> (e.k, e.D))
 
-@printf("Loaded %d warm-start entries from %s\n", length(entries), csv_path)
+@printf("Loaded best warm-start for %d pairs from %s\n", length(entries), csv_path)
 
 # Write per-pair TOML configs
 # Each config resumes from the warm-start angles at p_start = best_p + 1
