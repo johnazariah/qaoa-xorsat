@@ -3,8 +3,8 @@
 # Code: https://github.com/johnazariah/qaoa-xorsat (DOI: 10.5281/zenodo.19211958)
 # All values are best-found lower bounds on the true QAOA optimum at indicated depth
 k,D,p_max,ctilde,wall_time_seconds,converged,g_abstol,machine
-3,4,12,0.876904874000,7406.8,true,1.0e-04,m4-mac-studio-64gb
-3,5,11,0.835200723320,4636.2,true,1.0e-05,m4-mac-studio-64gb
+3,4,13,0.880732724898,301751.1,true,1.0e-04,stephen-slurm-cluster
+3,5,13,0.842939019160,108776.0,true,1.0e-04,stephen-slurm-cluster
 3,6,12,0.809495360297,6771.2,true,1.0e-04,azure-fleet3-vm0
 3,7,11,0.778760214189,10293.6,true,1.0e-05,azure-fleet-e8as-v5
 3,8,11,0.767642417811,891.5,true,1.0e-05,m4-mac-studio-64gb
@@ -13,8 +13,8 @@ k,D,p_max,ctilde,wall_time_seconds,converged,g_abstol,machine
 4,7,10,0.805966404455,905.6,true,1.0e-06,azure-fleet-e8as-v5
 4,8,10,0.799629008532,4938.3,true,1.0e-06,azure-fleet-e8as-v5
 5,6,10,0.848753556620,4108.8,true,1.0e-06,azure-fleet-e8as-v5
-5,7,9,0.813383537615,207.7,true,1.0e-06,azure-fleet-e8as-v5
-5,8,9,0.801331449990,213.9,true,1.0e-06,azure-fleet-e8as-v5
-6,7,8,0.819083163318,320.2,true,1.0e-06,azure-fleet-e8as-v5
-6,8,8,0.799232773821,329.0,true,1.0e-06,azure-fleet-e8as-v5
-7,8,8,0.822963047535,66.5,true,1.0e-06,m4-mac-studio-64gb
+5,7,8,0.789305916748,19706.4,true,1.0e-06,p710-swarm
+5,8,7,0.769413063118,6482.0,true,1.0e-06,p710-swarm
+6,7,9,0.838489687992,54932.9,true,1.0e-06,azure-swarm-2
+6,8,8,0.801456559305,24378.4,true,1.0e-06,azure-swarm-2
+7,8,8,0.789462175788,4205.6,true,1.0e-06,azure-swarm-2

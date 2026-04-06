@@ -1,5 +1,106 @@
 # Project Journal
 
+## Entry 28 — Stephen's Cluster p=13 Results + Multi-Machine Campaign (7 April 2026)
+
+### Summary
+
+Stephen ran all 15 pairs on his 50-node SLURM cluster (April 3–6). Key wins:
+**(3,4) p=13 = 0.8807** and **(3,5) p=13 = 0.8429** — both new records. However,
+most k≥4 pairs collapsed to 0.500 at p≥12, confirming the signal loss problem
+affects his cluster too (he ran the pre-normalization code). Still running
+(3,4) and (3,5) toward p=14.
+
+Simultaneously, we ran 5 hard pairs on Azure VM (qaoa-swarm-2, E16as_v5)
+and P710 Xeon workstation using the swarm optimizer:
+
+| Pair | Machine | Best p | c̃ |
+|------|---------|--------|------|
+| (5,7) | P710 | 8 | 0.7893 |
+| (5,8) | P710 | 7 | 0.7694 |
+| (6,7) | Azure | 9 | 0.8385 |
+| (6,8) | Azure | 8 | 0.8015 |
+| (7,8) | Azure | 8 | 0.7895 |
+
+Emailed Stephen instructions to push his results branch and pull the
+normalization + swarm fixes for a warm-started rerun.
+
+---
+
+## Entry 27 — Swarm/Memetic Optimizer for Rugged Landscapes (5–6 April 2026)
+
+### Summary
+
+At high (k,D), the QAOA loss landscape is extremely rugged: most starting
+points see c̃ ≈ 0.5 (flat), and only specific basins carry signal. Standard
+multi-start L-BFGS with warm-starting from p-1 fails at p=3 for (7,8).
+
+Implemented a memetic (evolutionary + local search) optimizer:
+
+1. **Population phase**: 100 random starting points, each gets a short
+   L-BFGS burst (20 iterations)
+2. **Cull**: kill the worst 50%
+3. **Replenish**: 40% fresh random starts + 60% midpoint crossovers
+   from the top 30 survivors (with small perturbation)
+4. **Repeat**: 10 generations
+5. **Early exit**: if 3 consecutive generations show no improvement,
+   stop the population phase and switch to a full 1280-iteration
+   L-BFGS polish on the best candidate
+
+The early exit is critical: at p≥6, the swarm converges in 1–3 generations
+(the warm-started candidate dominates), so the remaining 7–9 generations
+were wasting 100× compute. With early exit, the swarm finds the basin at
+low depths and L-BFGS polishes it at high depths — best of both worlds.
+
+**Results**: (7,8) went from failing at p=3 (standard optimizer) to
+0.776 at p=5 (swarm) to 0.789 at p=8 (swarm + early exit + polish).
+For the first time, all 15 pairs have valid results at depths where
+the standard approach collapsed.
+
+**Resume from CSV**: swarm_chain.jl reads the existing results file on
+startup, finds the last completed depth, and warm-starts from there.
+Survives machine crashes and process restarts.
+
+### Deployment
+
+- Azure VM (qaoa-swarm-2): 16 cores, 3 hard pairs (6,7)(6,8)(7,8)
+- P710 Xeon workstation: 16 cores / 32 threads, 2 pairs (5,7)(5,8)
+- Auto-push to `p710-results` branch every 10 minutes
+
+### Commits
+
+- `95e02b5` feat: swarm/memetic optimizer for rugged landscapes
+- `6b18025` fix: swarm writes results to CSV immediately
+- `6761d81` feat: swarm early-exit + polish + resume from CSV
+- `a166290` fix: log every generation
+
+---
+
+## Entry 26 — Threshold-Based Normalization (4 April 2026)
+
+### Summary
+
+The always-normalize strategy from Entry 25 caused a new problem:
+**signal underflow** at p≥12. Dividing by max-magnitude every step
+crushed the relative magnitude differences between entries that carry
+the physical signal (deviation from c̃ = 0.5).
+
+Fix: only normalize when max-magnitude exceeds 1e30 (threshold chosen
+so that `(1e30)^7 < 1e300`, safe for degree≤7). This preserves Float64
+precision at moderate magnitudes while still preventing overflow.
+
+However, for k≥5, D≥7 at p≥10, the signal genuinely approaches machine
+epsilon — this is catastrophic cancellation, not overflow. The branch
+tensor iteration contracts everything to near-zero, and the residual
+that makes c̃ ≠ 0.5 is below Float64 resolution. This motivated the
+swarm optimizer (Entry 27): finding better basins is more effective than
+higher numerical precision.
+
+### Commits
+
+- `f354eb1` fix: threshold-based normalization preserves signal at high depth
+
+---
+
 ## Entry 25 — Normalized Evaluator Fixes Float64 Overflow (2 April 2026)
 
 ### Summary
