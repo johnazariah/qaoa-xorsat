@@ -1,6 +1,6 @@
 k = 3
 D = 8
-p_min = 12
+p_min = 13
 p_max = 15
 restarts = 2
 maxiters = 1280

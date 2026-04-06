@@ -19,10 +19,10 @@ CONFIGS=(
     "experiments/warmstart/k3-d4.toml"  # 1: k=3 D=4 from p=14
     "experiments/warmstart/k3-d5.toml"  # 2: k=3 D=5 from p=14
     "experiments/warmstart/k3-d6.toml"  # 3: k=3 D=6 from p=15
-    "experiments/warmstart/k3-d7.toml"  # 4: k=3 D=7 from p=12
-    "experiments/warmstart/k3-d8.toml"  # 5: k=3 D=8 from p=12
+    "experiments/warmstart/k3-d7.toml"  # 4: k=3 D=7 from p=14
+    "experiments/warmstart/k3-d8.toml"  # 5: k=3 D=8 from p=13
     "experiments/warmstart/k4-d5.toml"  # 6: k=4 D=5 from p=14
-    "experiments/warmstart/k4-d6.toml"  # 7: k=4 D=6 from p=13
+    "experiments/warmstart/k4-d6.toml"  # 7: k=4 D=6 from p=12
     "experiments/warmstart/k4-d7.toml"  # 8: k=4 D=7 from p=12
     "experiments/warmstart/k4-d8.toml"  # 9: k=4 D=8 from p=12
     "experiments/warmstart/k5-d6.toml"  # 10: k=5 D=6 from p=12
