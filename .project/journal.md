@@ -1,5 +1,100 @@
 # Project Journal
 
+## Algorithmic Innovation Summary (for future methods paper)
+
+This section threads the key algorithmic innovations in the order they
+emerged, as a narrative arc suitable for a standalone methods paper.
+
+### 1. WHT Factorisation (March 22–23)
+
+The Basso-Farhi branch tensor recurrence involves a k-body constraint fold —
+a sum over 2^{(2p+1)} configurations that elementarily costs O(4^{kp}).  We
+recognised this as an XOR convolution on Z₂^{2p+1}, which the Walsh-Hadamard
+transform diagonalises.  Result: O(p²·4^p) for any k.  At k=3, p=8 this is
+65,000× faster.  This is the single insight that makes exact evaluation
+feasible at depths beyond p=5.
+
+### 2. Manual Adjoint Differentiation (March 23–24)
+
+ForwardDiff.jl (dual numbers) scales as O(p) per gradient evaluation.  We
+hand-derived the reverse-mode (adjoint) gradient through the full WHT-based
+pipeline.  Key insight: the WHT is self-adjoint, and β-gradients use a
+log-derivative trick.  Cost: ~1.6× a single forward evaluation, independent
+of p.  At p=8 this is 12× faster than ForwardDiff.
+
+### 3. Generic Fold Engine / Cost Algebra (March 22)
+
+The Basso-Farhi contraction is a catamorphism over the light-cone tree,
+parametrised by a "cost algebra" that specifies only the constraint kernel
+and root observable.  MaxCut and Max-k-XORSAT are different instantiations
+of the same interface.  This allowed us to validate against Farhi et al.
+(2025) MaxCut results with zero code changes, then immediately produce the
+first exact finite-D XORSAT numbers.
+
+### 4. Plateau Detection with Circular Buffer (March 27–31)
+
+At high depth (p≥10), L-BFGS evaluations take minutes each.  Standard
+iteration-count convergence wastes hours when the optimizer has already
+converged but g_norm hovers above the tolerance.  We implemented a per-
+iteration Optim.jl callback with a circular buffer of the last 30 objective
+values.  If max − min < g_abstol, the optimizer stops immediately.  At p=12,
+this reduced wall time from 2+ hours to ~40 minutes.
+
+### 5. Normalised Branch Tensor Recurrence (April 2)
+
+At high (k, D, p), the branch tensor entries grow exponentially through
+repeated `^(k-1)` and `^(D-1)` operations, overflowing Float64 at (7,8)
+p≈9.  We introduced threshold-based normalisation: before each power
+operation, if max-magnitude exceeds 1e30, divide by it and track the
+accumulated scale in log space.  The final answer is reconstructed via
+exp(log_total_scale) at the end.  The backward pass operates entirely on
+normalised intermediates (magnitude ≤ 1), with scale factors detached from
+the gradient — negligible error since ∂(max|x|)/∂θ is a sparse selection
+operator.
+
+The initial implementation (always-normalise) caused signal underflow at
+p≥12 — crushing the relative magnitude differences that carry the physical
+signal.  The threshold approach preserves Float64 precision at moderate
+magnitudes while preventing overflow at extreme ones.
+
+### 6. Swarm/Memetic Optimizer (April 5–6)
+
+At high (k, D), the QAOA loss landscape is extremely rugged: most starting
+points see c̃ ≈ 0.5 (flat), and only specific basins carry signal.  Standard
+multi-start L-BFGS with warm-starting from p−1 fails at p=3 for (7,8).
+
+We implemented a memetic (evolutionary + local search) optimizer:
+- 100 random candidates, short L-BFGS bursts (20 iterations each)
+- Cull worst 50%, replenish with random starts + midpoint crossovers
+- Early exit: if 3 consecutive generations show no improvement, stop the
+  swarm and run a full 1280-iteration L-BFGS polish on the best candidate
+- Resume from CSV: survives machine crashes
+
+The early exit is the key insight: at p≥6, the swarm converges in 1–3
+generations (the warm-started candidate dominates), so the remaining 7–9
+generations were wasting 100× compute.  The swarm finds the basin at low
+depths; L-BFGS polishes at high depths.
+
+Result: (7,8) went from failing at p=3 (standard optimizer) to 0.789 at
+p=8 (swarm).  For the first time, all 15 (k,D) pairs have valid results
+at depths where the standard approach collapsed.
+
+### 7. Multi-Machine Orchestration (April 1–7)
+
+Five compute environments coordinated via git branches:
+- Mac Studio M4 (64 GB): primary development + p=1-12 for k=3 family
+- Azure E8as_v5 fleet (5×64 GB): parallel sweep of all 15 pairs
+- Azure E16as_v5 swarm VM: hard (k≥5) pairs with memetic optimizer
+- P710 Xeon workstation (128 GB): (5,7) and (5,8) swarm chains
+- Stephen's SLURM cluster (50×2.7 TB): p=13–15 production runs
+
+Results aggregated via `collect-all-results.jl` with monotonicity filtering,
+overflow detection, and provenance tracking.  The warm-start package
+(`prepare-cluster-run.jl`) generates ready-to-submit SLURM configs from the
+composite best angles across all machines.
+
+---
+
 ## Entry 28 — Stephen's Cluster p=13 Results + Multi-Machine Campaign (7 April 2026)
 
 ### Summary
