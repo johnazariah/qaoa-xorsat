@@ -14,7 +14,7 @@ k,D,p_max,ctilde,wall_time_seconds,converged,g_abstol,machine
 4,8,10,0.799629008532,4938.3,true,1.0e-06,azure-fleet-e8as-v5
 5,6,10,0.848753556620,4108.8,true,1.0e-06,azure-fleet-e8as-v5
 5,7,8,0.789305916748,19706.4,true,1.0e-06,p710-swarm
-5,8,7,0.769413063118,6482.0,true,1.0e-06,p710-swarm
+5,8,9,0.799612729939,93067.0,true,1.0e-06,p710-swarm
 6,7,9,0.838489687992,54932.9,true,1.0e-06,azure-swarm-2
 6,8,8,0.801456559305,24378.4,true,1.0e-06,azure-swarm-2
 7,8,8,0.789462175788,4205.6,true,1.0e-06,azure-swarm-2
