@@ -1,47 +1,39 @@
-# Instructions for Stephen — April 8, 2026
+# Instructions for Stephen — April 8, 2026 (updated)
 
-The dashboard you ran is showing stale Mac results from March 31, not your cluster data. Ignore those numbers.
+## What's working
 
-## Check if jobs are already running
+Tasks 1, 2, 4, 6 — (3,4), (3,5), (3,7), (4,5) — are producing good results at p=14. **Don't touch these.**
 
-If you already ran `sbatch scripts/qaoa_warmstart_sweep.sh` yesterday, the jobs may be in progress or finished:
+## What's stuck
 
-    squeue -u $USER
-    sacct -u $USER --starttime=2026-04-07 --format=JobID,JobName,State,Elapsed
+The other pairs show 0.500 because the warm-start angles came from pre-normalization runs. Those angles were in overflow-adjacent basins that evaluate to 0.500 with the corrected code. No amount of L-BFGS will fix them — they need new basins found from scratch.
 
-If you see `qaoa-ws` jobs, they're the warm-start sweep — no need to resubmit.
-
-## If jobs haven't been submitted yet
+## Fix: run the swarm optimizer on the stuck pairs
 
     cd ~/qaoa-xorsat
     git pull origin main
-    sbatch scripts/qaoa_warmstart_sweep.sh
+    sbatch scripts/qaoa_swarm_sweep.sh
 
-That submits a 15-task SLURM array. Each task warm-starts from the best angles we've found across all machines (including your p=13 results for (3,4) and (3,5)). The code has the threshold-based normalization fix so the 0.500 collapses won't happen again.
+This submits 10 SLURM tasks — one for each stuck pair:
 
-## What each task does
+    (3,8) (4,6) (4,7) (4,8) (5,6) (5,7) (5,8) (6,7) (6,8) (7,8)
 
-- Tasks 1–2: (3,4) and (3,5) resume from your p=13, run p=14–15
-- Tasks 3–5: rest of k=3 family, resume from p=11–14
-- Tasks 6–9: k=4 family, resume from p=11–13
-- Tasks 10–15: k≥5 pairs, resume from p=9–11
+Each task runs the swarm/memetic optimizer from p=1 through p=15:
+- 100 random candidates per generation
+- Short L-BFGS bursts, cull worst 50%, crossover from survivors
+- Early exit when the population stops improving, then full L-BFGS polish
+- No dependency on old angles — finds basins from scratch
+
+Results appear immediately in `results/swarm-k{K}d{D}.csv` as each depth completes.
 
 ## Monitoring
 
-Once jobs are running:
-
     squeue -u $USER
+    cat results/swarm-k7d8.csv    # check a specific pair
 
-Check for completed results:
+## When ready
 
-    ls -t .project/results/optimization/runs/ | head -20
-    cat .project/results/optimization/index.csv | awk -F',' 'NR>1 {printf "k=%s D=%s p=%s val=%s\n", $8, $9, $10, $15}' | sort -t= -k2,2n -k4,4n -k6,6n
-
-Results appear in `.project/results/optimization/runs/` as each depth completes.
-
-## Push results when ready
-
-    git checkout -b stephen-apr8-results
-    git add -A .project/results/
-    git commit -m "Stephen: cluster results Apr 8"
-    git push origin stephen-apr8-results
+    git checkout -b stephen-swarm-results
+    git add -f results/swarm-*.csv
+    git commit -m "Stephen: swarm results"
+    git push origin stephen-swarm-results
