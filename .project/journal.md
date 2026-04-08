@@ -95,6 +95,49 @@ composite best angles across all machines.
 
 ---
 
+## Entry 29 — P710 Delivers p=8/9, Fleet Decommissioned (6–7 April 2026)
+
+### Summary
+
+The dual-Xeon P710 workstation (32 threads, 128GB, Windows) ran the swarm
+optimizer on (5,7) and (5,8) in parallel. Key results:
+
+- **(5,7) p=8 = 0.7893** — new best (wall: 5.5 hr)
+- **(5,8) p=8 = 0.7798** — new best (wall: 3.5 hr)
+- **(5,8) p=9 = 0.7996** — new best, beats DQI+BP (0.788) → **12 of 15 pairs**
+- (5,7) p=9 = 0.7785 — dropped below p=8 (bad basin at p=9)
+
+Azure fleet (qaoa-swarm-2) completed (6,7) p=9 = 0.8385 and was
+decommissioned. Resource group `qaoa-fleet-5` deleted. Total Azure spend
+for the campaign: ~$50.
+
+Stephen's cluster dashboard showed stale Mac results — the monitor script
+reads `.project/results/optimization/runs/` which had old data from March 31.
+Sent updated instructions (`STEPHEN-INSTRUCTIONS.md`) for the warm-start
+sweep.
+
+### Scorecard: 12 of 15 pairs beat DQI+BP
+
+| (k,D) | Best p | c̃ | Source |
+|-------|--------|------|--------|
+| (3,4) | 13 | 0.881 | Stephen cluster |
+| (3,5) | 13 | 0.843 | Stephen cluster |
+| (3,6) | 12 | 0.809 | Azure fleet |
+| (3,7) | 11 | 0.779 | Azure fleet |
+| (3,8) | 11 | 0.768 | Mac |
+| (4,5) | 11 | 0.861 | Azure fleet |
+| (4,6) | 11 | 0.830 | Azure fleet |
+| (4,7) | 10 | 0.806 | Azure fleet |
+| (4,8) | 10 | 0.800 | Azure fleet |
+| (5,6) | 10 | 0.849 | Azure fleet |
+| (5,7) | 8 | 0.789 | P710 swarm |
+| (5,8) | 9 | 0.800 | P710 swarm |
+| (6,7) | 9 | 0.838 | Azure swarm |
+| (6,8) | 8 | 0.801 | Azure swarm |
+| (7,8) | 8 | 0.789 | Azure swarm |
+
+---
+
 ## Entry 28 — Stephen's Cluster p=13 Results + Multi-Machine Campaign (7 April 2026)
 
 ### Summary
