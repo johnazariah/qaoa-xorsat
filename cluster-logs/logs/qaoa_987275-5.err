@@ -1,0 +1,509 @@
+[2026-03-31T23:30:18] Task 5: k=3, D=8, p=1–15
+[2026-03-31T23:30:18] Command: julia --project=. -t 28 scripts/optimize_qaoa.jl 3 8 1 15 2 320 1234 true adjoint
+[2026-03-31T23:30:18] Threads: 28, RAM available: 2835 GB
+preserved run_id=20260331T233020-k3-d8-p1-15-r2-i320-s1234
+preserved directory=/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260331T233020-k3-d8-p1-15-r2-i320-s1234
+┌ Warning: Assignment to `best_checkpoint_value` in soft scope is ambiguous because a global variable by the same name exists: `best_checkpoint_value` will be treated as a new local. Disambiguate by using `local best_checkpoint_value` to suppress this warning or `global best_checkpoint_value` to assign to the existing global variable.
+└ @ ~/qaoa-xorsat/scripts/optimize_qaoa.jl:496
+┌ Warning: skipping corrupted checkpoint
+│   path = "/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260331T232833-k3-d4-p1-15-r2-i320-s1234/checkpoint-p1.csv"
+│   exception =
+│    UndefVarError: `best_checkpoint_value` not defined in local scope
+│    Suggestion: check for an assignment to a local variable that shadows a global of the same name.
+└ @ Main ~/qaoa-xorsat/scripts/optimize_qaoa.jl:500
+┌ Warning: skipping corrupted checkpoint
+│   path = "/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260331T232833-k3-d5-p1-15-r2-i320-s1234/checkpoint-p1.csv"
+│   exception =
+│    UndefVarError: `best_checkpoint_value` not defined in local scope
+│    Suggestion: check for an assignment to a local variable that shadows a global of the same name.
+└ @ Main ~/qaoa-xorsat/scripts/optimize_qaoa.jl:500
+┌ Warning: skipping corrupted checkpoint
+│   path = "/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260331T232833-k3-d6-p1-15-r2-i320-s1234/checkpoint-p1.csv"
+│   exception =
+│    UndefVarError: `best_checkpoint_value` not defined in local scope
+│    Suggestion: check for an assignment to a local variable that shadows a global of the same name.
+└ @ Main ~/qaoa-xorsat/scripts/optimize_qaoa.jl:500
+┌ Warning: skipping corrupted checkpoint
+│   path = "/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260331T232833-k3-d7-p1-15-r2-i320-s1234/checkpoint-p1.csv"
+│   exception =
+│    UndefVarError: `best_checkpoint_value` not defined in local scope
+│    Suggestion: check for an assignment to a local variable that shadows a global of the same name.
+└ @ Main ~/qaoa-xorsat/scripts/optimize_qaoa.jl:500
+┌ Warning: skipping corrupted checkpoint
+│   path = "/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260331T232833-k4-d5-p1-15-r2-i320-s1234/checkpoint-p1.csv"
+│   exception =
+│    UndefVarError: `best_checkpoint_value` not defined in local scope
+│    Suggestion: check for an assignment to a local variable that shadows a global of the same name.
+└ @ Main ~/qaoa-xorsat/scripts/optimize_qaoa.jl:500
+┌ Warning: skipping corrupted checkpoint
+│   path = "/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260331T232833-k4-d6-p1-15-r2-i320-s1234/checkpoint-p1.csv"
+│   exception =
+│    UndefVarError: `best_checkpoint_value` not defined in local scope
+│    Suggestion: check for an assignment to a local variable that shadows a global of the same name.
+└ @ Main ~/qaoa-xorsat/scripts/optimize_qaoa.jl:500
+┌ Warning: skipping corrupted checkpoint
+│   path = "/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260331T232833-k4-d7-p1-15-r2-i320-s1234/checkpoint-p1.csv"
+│   exception =
+│    UndefVarError: `best_checkpoint_value` not defined in local scope
+│    Suggestion: check for an assignment to a local variable that shadows a global of the same name.
+└ @ Main ~/qaoa-xorsat/scripts/optimize_qaoa.jl:500
+┌ Warning: skipping corrupted checkpoint
+│   path = "/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260331T232833-k4-d8-p1-15-r2-i320-s1234/checkpoint-p1.csv"
+│   exception =
+│    UndefVarError: `best_checkpoint_value` not defined in local scope
+│    Suggestion: check for an assignment to a local variable that shadows a global of the same name.
+└ @ Main ~/qaoa-xorsat/scripts/optimize_qaoa.jl:500
+┌ Warning: skipping corrupted checkpoint
+│   path = "/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260331T232833-k5-d6-p1-15-r2-i320-s1234/checkpoint-p1.csv"
+│   exception =
+│    UndefVarError: `best_checkpoint_value` not defined in local scope
+│    Suggestion: check for an assignment to a local variable that shadows a global of the same name.
+└ @ Main ~/qaoa-xorsat/scripts/optimize_qaoa.jl:500
+┌ Warning: skipping corrupted checkpoint
+│   path = "/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260331T232833-k5-d7-p1-15-r2-i320-s1234/checkpoint-p1.csv"
+│   exception =
+│    UndefVarError: `best_checkpoint_value` not defined in local scope
+│    Suggestion: check for an assignment to a local variable that shadows a global of the same name.
+└ @ Main ~/qaoa-xorsat/scripts/optimize_qaoa.jl:500
+┌ Warning: skipping corrupted checkpoint
+│   path = "/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260331T232833-k5-d8-p1-15-r2-i320-s1234/checkpoint-p1.csv"
+│   exception =
+│    UndefVarError: `best_checkpoint_value` not defined in local scope
+│    Suggestion: check for an assignment to a local variable that shadows a global of the same name.
+└ @ Main ~/qaoa-xorsat/scripts/optimize_qaoa.jl:500
+┌ Warning: skipping corrupted checkpoint
+│   path = "/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260331T232833-k6-d8-p1-15-r2-i320-s1234/checkpoint-p1.csv"
+│   exception =
+│    UndefVarError: `best_checkpoint_value` not defined in local scope
+│    Suggestion: check for an assignment to a local variable that shadows a global of the same name.
+└ @ Main ~/qaoa-xorsat/scripts/optimize_qaoa.jl:500
+┌ Warning: skipping corrupted checkpoint
+│   path = "/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260331T232833-k7-d8-p1-15-r2-i320-s1234/checkpoint-p1.csv"
+│   exception =
+│    UndefVarError: `best_checkpoint_value` not defined in local scope
+│    Suggestion: check for an assignment to a local variable that shadows a global of the same name.
+└ @ Main ~/qaoa-xorsat/scripts/optimize_qaoa.jl:500
+[ Info: JIT warmup...
+[ Info: JIT warmup complete, starting sweep
+  p=8 start 1: 145 evals, 30.1s elapsed, c̃=0.7508935887, g_norm=5.48e-06
+  p=8 start 2: 143 evals, 30.1s elapsed, c̃=0.7158229320, g_norm=3.53e-02
+  p=8 start 3: 144 evals, 30.1s elapsed, c̃=0.7085077812, g_norm=1.47e-01
+  p=8 start 2: 295 evals, 60.2s elapsed, c̃=0.7161353115, g_norm=6.23e-06
+  p=8 start 3: 296 evals, 60.3s elapsed, c̃=0.7151254077, g_norm=2.02e-05
+  p=9 start 3: 32 evals, 30.0s elapsed, c̃=0.5202274034, g_norm=4.55e-02
+  p=9 start 2: 32 evals, 30.3s elapsed, c̃=0.5134108881, g_norm=2.26e-01
+  p=9 start 1: 32 evals, 30.3s elapsed, c̃=0.7567993464, g_norm=1.09e-03
+  p=9 start 3: 63 evals, 60.2s elapsed, c̃=0.5460984851, g_norm=1.99e-01
+  p=9 start 1: 63 evals, 60.6s elapsed, c̃=0.7567947437, g_norm=1.35e-03
+  p=9 start 2: 64 evals, 61.4s elapsed, c̃=0.5517165597, g_norm=2.52e-01
+  p=9 start 3: 94 evals, 90.7s elapsed, c̃=0.5000000316, g_norm=9.42e-07
+  p=9 start 1: 94 evals, 91.1s elapsed, c̃=0.7568051796, g_norm=6.32e-04
+  p=9 start 2: 95 evals, 91.5s elapsed, c̃=0.6931364801, g_norm=3.18e-02
+  p=9 start 3: 125 evals, 121.2s elapsed, c̃=0.6671329580, g_norm=3.10e-02
+  p=9 start 1: 125 evals, 121.7s elapsed, c̃=0.7568026206, g_norm=5.55e-04
+  p=9 start 2: 126 evals, 122.3s elapsed, c̃=0.6984791896, g_norm=2.03e-02
+  p=9 start 3: 156 evals, 151.9s elapsed, c̃=0.6713122509, g_norm=1.12e-02
+  p=9 start 1: 156 evals, 152.4s elapsed, c̃=0.7567971809, g_norm=3.80e-04
+  p=9 start 2: 157 evals, 153.0s elapsed, c̃=0.7017129941, g_norm=7.38e-03
+  p=9 start 3: 187 evals, 182.3s elapsed, c̃=0.6728147245, g_norm=1.49e-03
+  p=9 start 1: 187 evals, 183.1s elapsed, c̃=0.7567998998, g_norm=3.49e-04
+  p=9 start 2: 188 evals, 183.8s elapsed, c̃=0.7031019663, g_norm=1.25e-02
+  p=9 start 3: 218 evals, 212.6s elapsed, c̃=0.6730804773, g_norm=1.31e-02
+  p=9 start 1: 218 evals, 213.5s elapsed, c̃=0.7568017425, g_norm=2.85e-04
+  p=9 start 2: 219 evals, 214.2s elapsed, c̃=0.7106301696, g_norm=2.15e-02
+  p=9 start 3: 249 evals, 242.8s elapsed, c̃=0.6731392991, g_norm=1.66e-03
+  p=9 start 1: 249 evals, 243.7s elapsed, c̃=0.7568006611, g_norm=2.29e-04
+  p=9 start 2: 250 evals, 244.7s elapsed, c̃=0.7144927649, g_norm=1.76e-02
+  p=9 start 3: 280 evals, 272.9s elapsed, c̃=0.6731490209, g_norm=2.88e-03
+  p=9 start 1: 280 evals, 274.0s elapsed, c̃=0.7568045433, g_norm=2.31e-04
+  p=9 start 2: 281 evals, 275.0s elapsed, c̃=0.7146286586, g_norm=1.52e-03
+  p=9 start 3: 311 evals, 303.0s elapsed, c̃=0.6745528203, g_norm=1.07e-01
+  p=9 start 1: 311 evals, 304.1s elapsed, c̃=0.7568007679, g_norm=5.42e-04
+  p=9 start 2: 313 evals, 306.0s elapsed, c̃=0.7146245356, g_norm=1.50e-03
+  p=9 start 3: 342 evals, 333.0s elapsed, c̃=0.6806221677, g_norm=8.22e-02
+  p=9 start 1: 342 evals, 334.1s elapsed, c̃=0.7567964268, g_norm=1.93e-04
+  p=9 start 2: 344 evals, 336.0s elapsed, c̃=0.7146276543, g_norm=1.18e-03
+  p=9 start 3: 373 evals, 363.4s elapsed, c̃=0.6956085837, g_norm=3.66e-02
+  p=9 start 1: 373 evals, 364.3s elapsed, c̃=0.7568041869, g_norm=3.68e-04
+  p=9 start 2: 375 evals, 366.5s elapsed, c̃=0.7146544085, g_norm=5.33e-03
+  p=9 start 3: 404 evals, 394.1s elapsed, c̃=0.7002363910, g_norm=1.53e-02
+  p=9 start 1: 404 evals, 394.8s elapsed, c̃=0.7568033466, g_norm=5.16e-04
+  p=9 start 2: 406 evals, 397.1s elapsed, c̃=0.7146779152, g_norm=1.98e-03
+  p=9 start 3: 435 evals, 424.5s elapsed, c̃=0.7038486017, g_norm=4.49e-02
+  p=9 start 1: 435 evals, 425.0s elapsed, c̃=0.7568029242, g_norm=4.82e-04
+  p=9 start 2: 437 evals, 427.6s elapsed, c̃=0.7146833590, g_norm=1.99e-03
+  p=9 start 1: 466 evals, 455.4s elapsed, c̃=0.7568119748, g_norm=3.26e-04
+  p=9 start 3: 466 evals, 455.3s elapsed, c̃=0.7072030663, g_norm=8.42e-02
+  p=9 start 2: 468 evals, 458.3s elapsed, c̃=0.7146792146, g_norm=1.65e-03
+  p=9 start 3: 497 evals, 485.4s elapsed, c̃=0.7098855297, g_norm=2.82e-02
+  p=9 start 1: 497 evals, 485.5s elapsed, c̃=0.7568032874, g_norm=1.56e-04
+  p=9 start 2: 500 evals, 489.2s elapsed, c̃=0.7146801096, g_norm=9.56e-04
+  p=9 start 1: 529 evals, 516.3s elapsed, c̃=0.7568134123, g_norm=2.09e-04
+  p=9 start 3: 529 evals, 516.3s elapsed, c̃=0.7103425394, g_norm=1.40e-03
+  p=9 start 2: 532 evals, 520.1s elapsed, c̃=0.7146825248, g_norm=9.56e-04
+  p=9 start 3: 561 evals, 547.0s elapsed, c̃=0.7103424433, g_norm=1.40e-03
+  p=9 start 2: 564 evals, 550.3s elapsed, c̃=0.7146909019, g_norm=9.11e-04
+  p=9 start 3: 598 evals, 577.3s elapsed, c̃=0.7103439571, g_norm=1.32e-03
+  p=9 start 2: 600 evals, 580.4s elapsed, c̃=0.7146835439, g_norm=9.20e-04
+  p=9 start 3: 635 evals, 607.8s elapsed, c̃=0.7103473622, g_norm=1.76e-03
+  p=9 start 2: 637 evals, 611.1s elapsed, c̃=0.7146848692, g_norm=6.02e-04
+  p=9 start 3: 672 evals, 638.4s elapsed, c̃=0.7103486782, g_norm=1.11e-03
+  p=9 start 2: 674 evals, 641.8s elapsed, c̃=0.7146855503, g_norm=3.91e-04
+  p=9 start 3: 709 evals, 668.9s elapsed, c̃=0.7103521020, g_norm=8.49e-04
+  p=9 start 2: 711 evals, 672.2s elapsed, c̃=0.7146840687, g_norm=1.23e-03
+  p=9 start 3: 746 evals, 699.3s elapsed, c̃=0.7103511172, g_norm=6.77e-04
+  p=9 start 2: 748 evals, 702.6s elapsed, c̃=0.7146857189, g_norm=3.73e-04
+  p=9 start 3: 783 evals, 729.9s elapsed, c̃=0.7103539137, g_norm=6.25e-04
+  p=9 start 2: 785 evals, 733.1s elapsed, c̃=0.7146912813, g_norm=2.96e-04
+  p=9 start 3: 820 evals, 760.3s elapsed, c̃=0.7103549341, g_norm=5.59e-04
+  p=9 start 2: 822 evals, 763.6s elapsed, c̃=0.7146874250, g_norm=2.81e-04
+  p=9 start 3: 857 evals, 790.8s elapsed, c̃=0.7103531522, g_norm=7.05e-04
+  p=9 start 2: 859 evals, 794.1s elapsed, c̃=0.7146850868, g_norm=2.79e-04
+  p=9 start 3: 894 evals, 821.1s elapsed, c̃=0.7103539352, g_norm=6.28e-04
+  p=9 start 2: 896 evals, 824.4s elapsed, c̃=0.7146892985, g_norm=2.64e-04
+  p=9 start 3: 931 evals, 851.6s elapsed, c̃=0.7103524741, g_norm=8.32e-04
+  p=9 start 2: 933 evals, 854.8s elapsed, c̃=0.7146849129, g_norm=5.29e-04
+  p=9 start 3: 968 evals, 882.0s elapsed, c̃=0.7103495127, g_norm=5.79e-04
+  p=9 start 2: 970 evals, 885.3s elapsed, c̃=0.7146855804, g_norm=5.37e-04
+  p=9 start 3: 1005 evals, 912.2s elapsed, c̃=0.7103462882, g_norm=4.35e-04
+  p=9 start 2: 1007 evals, 915.6s elapsed, c̃=0.7146799803, g_norm=6.23e-04
+  p=9 start 3: 1042 evals, 942.7s elapsed, c̃=0.7103571562, g_norm=3.29e-04
+  p=9 start 2: 1044 evals, 946.1s elapsed, c̃=0.7146797160, g_norm=5.12e-04
+  p=9 start 3: 1079 evals, 973.3s elapsed, c̃=0.7103498620, g_norm=3.59e-04
+  p=9 start 2: 1081 evals, 976.4s elapsed, c̃=0.7146869922, g_norm=5.59e-04
+  p=9 start 3: 1115 evals, 1003.5s elapsed, c̃=0.7103571924, g_norm=4.00e-04
+  p=9 start 2: 1117 evals, 1006.6s elapsed, c̃=0.7146918018, g_norm=4.08e-04
+  p=9 start 3: 1151 evals, 1033.8s elapsed, c̃=0.7103448263, g_norm=4.29e-04
+  p=9 start 2: 1153 evals, 1036.7s elapsed, c̃=0.7146808233, g_norm=4.93e-04
+  p=9 start 3: 1187 evals, 1063.9s elapsed, c̃=0.7103517612, g_norm=5.02e-04
+  p=9 start 2: 1189 evals, 1066.9s elapsed, c̃=0.7146830397, g_norm=4.08e-04
+  p=9 start 3: 1223 evals, 1094.1s elapsed, c̃=0.7103473408, g_norm=3.77e-04
+  p=9 start 2: 1225 evals, 1097.1s elapsed, c̃=0.7146839857, g_norm=6.28e-04
+  p=9 start 3: 1260 evals, 1124.7s elapsed, c̃=0.7103526519, g_norm=5.23e-04
+  p=9 start 2: 1262 evals, 1127.9s elapsed, c̃=0.7146859788, g_norm=4.00e-04
+  p=9 start 3: 1297 evals, 1154.9s elapsed, c̃=0.7103506610, g_norm=4.14e-04
+  p=9 start 2: 1299 evals, 1158.3s elapsed, c̃=0.7146804724, g_norm=5.02e-04
+  p=9 start 3: 1334 evals, 1185.3s elapsed, c̃=0.7103563821, g_norm=5.25e-04
+  p=9 start 2: 1336 evals, 1188.9s elapsed, c̃=0.7146855295, g_norm=3.53e-04
+  p=9 start 3: 1371 evals, 1216.1s elapsed, c̃=0.7103458815, g_norm=3.83e-04
+  p=9 start 2: 1373 evals, 1219.5s elapsed, c̃=0.7146810968, g_norm=5.37e-04
+  p=9 start 3: 1408 evals, 1246.5s elapsed, c̃=0.7103545760, g_norm=3.90e-04
+  p=9 start 2: 1410 evals, 1249.8s elapsed, c̃=0.7146872874, g_norm=5.58e-04
+  p=9 start 3: 1445 evals, 1276.9s elapsed, c̃=0.7103523066, g_norm=5.91e-04
+  p=9 start 2: 1447 evals, 1280.3s elapsed, c̃=0.7146892491, g_norm=4.76e-04
+  p=9 start 3: 1482 evals, 1307.4s elapsed, c̃=0.7103504636, g_norm=6.39e-04
+  p=9 start 2: 1484 evals, 1310.7s elapsed, c̃=0.7146814317, g_norm=8.26e-04
+  p=9 start 3: 1519 evals, 1337.5s elapsed, c̃=0.7103461682, g_norm=6.32e-04
+  p=9 start 2: 1521 evals, 1340.9s elapsed, c̃=0.7146785119, g_norm=3.60e-04
+  p=9 start 3: 1556 evals, 1368.1s elapsed, c̃=0.7103532607, g_norm=5.93e-04
+  p=9 start 2: 1558 evals, 1371.4s elapsed, c̃=0.7146844586, g_norm=3.64e-04
+  p=9 start 3: 1593 evals, 1398.7s elapsed, c̃=0.7103533384, g_norm=4.08e-04
+  p=9 start 2: 1595 evals, 1401.7s elapsed, c̃=0.7146906392, g_norm=3.68e-04
+  p=9 start 3: 1630 evals, 1429.5s elapsed, c̃=0.7103561741, g_norm=3.27e-04
+  p=9 start 2: 1631 evals, 1431.8s elapsed, c̃=0.7146893134, g_norm=1.33e-03
+  p=9 start 3: 1666 evals, 1459.9s elapsed, c̃=0.7103566280, g_norm=3.18e-04
+  p=9 start 2: 1667 evals, 1462.1s elapsed, c̃=0.7146958889, g_norm=1.45e-03
+  p=9 start 3: 1702 evals, 1490.1s elapsed, c̃=0.7103474884, g_norm=3.55e-04
+  p=9 start 2: 1703 evals, 1492.4s elapsed, c̃=0.7146887559, g_norm=1.66e-03
+  p=9 start 3: 1739 evals, 1520.6s elapsed, c̃=0.7103514201, g_norm=3.06e-04
+  p=9 start 2: 1740 evals, 1523.0s elapsed, c̃=0.7146840723, g_norm=1.39e-03
+  p=9 start 3: 1776 evals, 1551.0s elapsed, c̃=0.7103560615, g_norm=2.96e-04
+  p=9 start 2: 1777 evals, 1553.4s elapsed, c̃=0.7146929380, g_norm=1.62e-03
+  p=9 start 3: 1813 evals, 1581.4s elapsed, c̃=0.7103593369, g_norm=3.34e-04
+  p=9 start 2: 1814 evals, 1584.0s elapsed, c̃=0.7146836067, g_norm=1.57e-03
+  p=9 start 3: 1850 evals, 1611.9s elapsed, c̃=0.7103458363, g_norm=2.93e-04
+  p=9 start 2: 1851 evals, 1614.3s elapsed, c̃=0.7146987820, g_norm=1.48e-03
+  p=9 start 3: 1887 evals, 1642.5s elapsed, c̃=0.7103557165, g_norm=1.64e-03
+  p=9 start 2: 1888 evals, 1644.7s elapsed, c̃=0.7146874778, g_norm=1.44e-03
+  p=9 start 3: 1923 evals, 1672.8s elapsed, c̃=0.7103497547, g_norm=5.23e-04
+  p=9 start 2: 1924 evals, 1675.0s elapsed, c̃=0.7146985465, g_norm=1.62e-03
+  p=9 start 3: 1959 evals, 1703.2s elapsed, c̃=0.7103618645, g_norm=5.24e-04
+  p=9 start 2: 1960 evals, 1705.4s elapsed, c̃=0.7146886222, g_norm=1.42e-03
+  p=9 start 3: 1995 evals, 1733.7s elapsed, c̃=0.7103509661, g_norm=5.19e-04
+  p=9 start 2: 1996 evals, 1735.9s elapsed, c̃=0.7146994033, g_norm=1.58e-03
+  p=9 start 3: 2031 evals, 1764.0s elapsed, c̃=0.7103468215, g_norm=5.18e-04
+  p=9 start 2: 2032 evals, 1766.1s elapsed, c̃=0.7146924417, g_norm=1.67e-03
+  p=9 start 3: 2067 evals, 1794.3s elapsed, c̃=0.7103548399, g_norm=5.23e-04
+  p=9 start 2: 2069 evals, 1796.9s elapsed, c̃=0.7146911170, g_norm=1.64e-03
+  p=9 start 3: 2104 evals, 1825.1s elapsed, c̃=0.7103506599, g_norm=4.51e-04
+  p=9 start 2: 2106 evals, 1827.4s elapsed, c̃=0.7146964028, g_norm=1.44e-03
+  p=9 start 3: 2141 evals, 1855.6s elapsed, c̃=0.7103613058, g_norm=5.20e-04
+  p=9 start 2: 2143 evals, 1858.3s elapsed, c̃=0.7146889762, g_norm=1.50e-03
+  p=9 start 3: 2178 evals, 1886.2s elapsed, c̃=0.7103610277, g_norm=5.13e-04
+  p=9 start 2: 2180 evals, 1888.8s elapsed, c̃=0.7146950927, g_norm=1.61e-03
+  p=9 start 3: 2215 evals, 1916.7s elapsed, c̃=0.7103607745, g_norm=5.12e-04
+  p=9 start 2: 2217 evals, 1919.2s elapsed, c̃=0.7146917142, g_norm=1.40e-03
+  p=9 start 3: 2252 evals, 1947.2s elapsed, c̃=0.7103571918, g_norm=5.20e-04
+  p=9 start 2: 2254 evals, 1949.6s elapsed, c̃=0.7146830982, g_norm=1.52e-03
+  p=9 start 3: 2289 evals, 1977.6s elapsed, c̃=0.7103614524, g_norm=5.09e-04
+  p=9 start 2: 2291 evals, 1980.2s elapsed, c̃=0.7146939969, g_norm=1.68e-03
+  p=9 start 3: 2326 evals, 2007.9s elapsed, c̃=0.7103504564, g_norm=5.31e-04
+  p=9 start 2: 2328 evals, 2010.5s elapsed, c̃=0.7146911948, g_norm=1.49e-03
+  p=9 start 3: 2363 evals, 2038.3s elapsed, c̃=0.7103516498, g_norm=5.37e-04
+  p=9 start 2: 2364 evals, 2040.6s elapsed, c̃=0.7146940459, g_norm=1.55e-03
+  p=9 start 3: 2399 evals, 2068.5s elapsed, c̃=0.7103518394, g_norm=5.20e-04
+  p=9 start 2: 2400 evals, 2070.6s elapsed, c̃=0.7146911267, g_norm=1.54e-03
+  p=9 start 3: 2435 evals, 2098.7s elapsed, c̃=0.7103419413, g_norm=5.16e-04
+  p=9 start 2: 2436 evals, 2101.3s elapsed, c̃=0.7146879503, g_norm=1.56e-03
+  p=9 start 3: 2472 evals, 2129.2s elapsed, c̃=0.7103546067, g_norm=4.95e-04
+  p=9 start 2: 2473 evals, 2131.6s elapsed, c̃=0.7146930627, g_norm=1.51e-03
+  p=9 start 3: 2509 evals, 2159.6s elapsed, c̃=0.7103600974, g_norm=5.15e-04
+  p=9 start 2: 2510 evals, 2162.1s elapsed, c̃=0.7146974849, g_norm=1.58e-03
+  p=9 start 3: 2546 evals, 2189.7s elapsed, c̃=0.7103591066, g_norm=5.40e-04
+  p=9 start 2: 2547 evals, 2192.3s elapsed, c̃=0.7146883355, g_norm=1.65e-03
+  p=9 start 3: 2583 evals, 2220.4s elapsed, c̃=0.7103591346, g_norm=5.38e-04
+  p=9 start 2: 2584 evals, 2222.8s elapsed, c̃=0.7146957796, g_norm=1.73e-03
+  p=9 start 3: 2620 evals, 2250.8s elapsed, c̃=0.7103582323, g_norm=5.18e-04
+  p=9 start 2: 2621 evals, 2253.4s elapsed, c̃=0.7146899995, g_norm=1.58e-03
+  p=9 start 3: 2657 evals, 2281.4s elapsed, c̃=0.7103496896, g_norm=5.40e-04
+  p=9 start 2: 2657 evals, 2283.5s elapsed, c̃=0.7146951405, g_norm=1.29e-03
+  p=9 start 3: 2693 evals, 2311.6s elapsed, c̃=0.7103575031, g_norm=5.15e-04
+  p=9 start 2: 2693 evals, 2313.7s elapsed, c̃=0.7146846502, g_norm=1.41e-03
+  p=9 start 3: 2729 evals, 2341.8s elapsed, c̃=0.7103515402, g_norm=5.30e-04
+  p=9 start 2: 2729 evals, 2344.0s elapsed, c̃=0.7147022285, g_norm=1.42e-03
+  p=9 start 3: 2765 evals, 2372.3s elapsed, c̃=0.7103590744, g_norm=4.95e-04
+  p=9 start 2: 2765 evals, 2374.5s elapsed, c̃=0.7146939666, g_norm=1.40e-03
+  p=9 start 3: 2802 evals, 2402.6s elapsed, c̃=0.7103499191, g_norm=4.67e-04
+  p=9 start 2: 2802 evals, 2405.1s elapsed, c̃=0.7146880097, g_norm=1.29e-03
+  p=9 start 3: 2839 evals, 2433.1s elapsed, c̃=0.7103504236, g_norm=4.76e-04
+  p=9 start 2: 2839 evals, 2435.7s elapsed, c̃=0.7146925721, g_norm=1.21e-03
+  p=9 start 3: 2876 evals, 2463.7s elapsed, c̃=0.7103503678, g_norm=2.88e-04
+  p=9 start 2: 2876 evals, 2466.1s elapsed, c̃=0.7146891000, g_norm=1.29e-03
+  p=9 start 3: 2913 evals, 2494.1s elapsed, c̃=0.7103473583, g_norm=2.45e-04
+  p=9 start 2: 2913 evals, 2496.6s elapsed, c̃=0.7146833693, g_norm=4.21e-04
+  p=9 start 3: 2950 evals, 2524.5s elapsed, c̃=0.7103517833, g_norm=6.64e-04
+  p=9 start 2: 2950 evals, 2527.0s elapsed, c̃=0.7146984550, g_norm=1.04e-03
+  p=9 start 3: 2987 evals, 2555.1s elapsed, c̃=0.7103590980, g_norm=4.78e-04
+  p=9 start 2: 2987 evals, 2557.6s elapsed, c̃=0.7146901688, g_norm=9.79e-04
+  p=9 start 3: 3024 evals, 2585.5s elapsed, c̃=0.7103545935, g_norm=4.95e-04
+  p=9 start 2: 3024 evals, 2588.1s elapsed, c̃=0.7146927175, g_norm=8.84e-04
+  p=9 start 3: 3061 evals, 2616.0s elapsed, c̃=0.7103571635, g_norm=6.18e-04
+  p=9 start 2: 3061 evals, 2618.5s elapsed, c̃=0.7146916269, g_norm=9.27e-04
+  p=9 start 3: 3098 evals, 2646.6s elapsed, c̃=0.7103575685, g_norm=4.64e-04
+  p=9 start 2: 3098 evals, 2649.0s elapsed, c̃=0.7146939561, g_norm=4.71e-04
+  p=9 start 3: 3135 evals, 2676.8s elapsed, c̃=0.7103495862, g_norm=5.53e-04
+  p=9 start 2: 3135 evals, 2679.4s elapsed, c̃=0.7146929726, g_norm=4.57e-04
+  p=9 start 3: 3172 evals, 2707.3s elapsed, c̃=0.7103589860, g_norm=5.13e-04
+  p=9 start 2: 3172 evals, 2709.8s elapsed, c̃=0.7146933184, g_norm=3.51e-04
+  p=9 start 3: 3209 evals, 2737.7s elapsed, c̃=0.7103578210, g_norm=5.02e-04
+  p=9 start 2: 3209 evals, 2740.4s elapsed, c̃=0.7146972787, g_norm=3.33e-04
+  p=9 start 3: 3246 evals, 2768.5s elapsed, c̃=0.7103539650, g_norm=4.98e-04
+  p=9 start 2: 3246 evals, 2771.0s elapsed, c̃=0.7146918146, g_norm=3.85e-04
+  p=9 start 3: 3283 evals, 2799.4s elapsed, c̃=0.7103562095, g_norm=5.02e-04
+  p=9 start 2: 3283 evals, 2801.6s elapsed, c̃=0.7146915209, g_norm=5.67e-04
+  p=9 start 3: 3319 evals, 2829.4s elapsed, c̃=0.7103555477, g_norm=5.06e-04
+  p=9 start 2: 3320 evals, 2832.4s elapsed, c̃=0.7146868795, g_norm=3.90e-04
+  p=9 start 3: 3355 evals, 2859.6s elapsed, c̃=0.7103534188, g_norm=2.64e-04
+  p=9 start 2: 3356 evals, 2862.7s elapsed, c̃=0.7146947255, g_norm=3.85e-04
+  p=9 start 3: 3392 evals, 2890.0s elapsed, c̃=0.7103486576, g_norm=3.40e-04
+  p=9 start 2: 3393 evals, 2893.3s elapsed, c̃=0.7146854913, g_norm=4.08e-04
+  p=9 start 3: 3429 evals, 2920.6s elapsed, c̃=0.7103521965, g_norm=4.47e-04
+  p=9 start 2: 3430 evals, 2923.9s elapsed, c̃=0.7146832220, g_norm=2.90e-04
+  p=9 start 3: 3466 evals, 2951.2s elapsed, c̃=0.7103497771, g_norm=3.06e-04
+  p=9 start 2: 3467 evals, 2954.4s elapsed, c̃=0.7146959001, g_norm=3.29e-04
+  p=9 start 3: 3502 evals, 2981.7s elapsed, c̃=0.7103472229, g_norm=3.04e-04
+  p=9 start 2: 3503 evals, 2984.7s elapsed, c̃=0.7146914586, g_norm=2.62e-04
+  p=9 start 3: 3538 evals, 3012.0s elapsed, c̃=0.7103511853, g_norm=2.53e-04
+  p=9 start 2: 3539 evals, 3015.0s elapsed, c̃=0.7146899983, g_norm=3.56e-04
+  p=9 start 3: 3574 evals, 3042.3s elapsed, c̃=0.7103530679, g_norm=2.50e-04
+  p=9 start 2: 3575 evals, 3045.2s elapsed, c̃=0.7146961976, g_norm=3.76e-04
+  p=9 start 3: 3610 evals, 3072.7s elapsed, c̃=0.7103505860, g_norm=4.20e-04
+  p=9 start 2: 3611 evals, 3075.6s elapsed, c̃=0.7146926284, g_norm=3.20e-04
+  p=9 start 3: 3647 evals, 3103.3s elapsed, c̃=0.7103547063, g_norm=2.34e-04
+  p=9 start 2: 3647 evals, 3105.8s elapsed, c̃=0.7146871655, g_norm=3.66e-04
+  p=9 start 3: 3684 evals, 3133.8s elapsed, c̃=0.7103508082, g_norm=3.15e-04
+  p=9 start 2: 3684 evals, 3136.4s elapsed, c̃=0.7146970868, g_norm=3.61e-04
+  p=9 start 3: 3721 evals, 3164.2s elapsed, c̃=0.7103497802, g_norm=4.68e-04
+  p=9 start 2: 3721 evals, 3166.6s elapsed, c̃=0.7146902555, g_norm=3.59e-04
+  p=9 start 3: 3758 evals, 3194.5s elapsed, c̃=0.7103567825, g_norm=4.64e-04
+  p=9 start 2: 3758 evals, 3197.0s elapsed, c̃=0.7146947987, g_norm=3.13e-04
+  p=9 start 3: 3795 evals, 3225.4s elapsed, c̃=0.7103526302, g_norm=4.77e-04
+  p=9 start 2: 3795 evals, 3227.5s elapsed, c̃=0.7146895835, g_norm=4.78e-04
+  p=9 start 3: 3831 evals, 3255.6s elapsed, c̃=0.7103503487, g_norm=5.55e-04
+  p=9 start 2: 3831 evals, 3257.8s elapsed, c̃=0.7146908383, g_norm=4.18e-04
+  p=9 start 3: 3867 evals, 3286.0s elapsed, c̃=0.7103482708, g_norm=3.42e-04
+  p=9 start 2: 3867 evals, 3288.1s elapsed, c̃=0.7146943152, g_norm=4.66e-04
+  p=9 start 3: 3903 evals, 3316.1s elapsed, c̃=0.7103482016, g_norm=2.75e-04
+  p=9 start 2: 3904 evals, 3318.6s elapsed, c̃=0.7146888255, g_norm=5.47e-04
+  p=9 start 3: 3940 evals, 3346.6s elapsed, c̃=0.7103541098, g_norm=3.59e-04
+  p=9 start 2: 3941 evals, 3349.1s elapsed, c̃=0.7146944141, g_norm=3.36e-04
+  p=9 start 3: 3977 evals, 3377.0s elapsed, c̃=0.7103535285, g_norm=3.69e-04
+  p=9 start 2: 3978 evals, 3379.4s elapsed, c̃=0.7146906286, g_norm=3.91e-04
+  p=9 start 3: 4014 evals, 3407.2s elapsed, c̃=0.7103520453, g_norm=4.06e-04
+  p=9 start 2: 4015 evals, 3409.5s elapsed, c̃=0.7146951719, g_norm=3.94e-04
+  p=9 start 3: 4051 evals, 3437.9s elapsed, c̃=0.7103485755, g_norm=3.91e-04
+  p=9 start 2: 4052 evals, 3440.4s elapsed, c̃=0.7146973962, g_norm=4.08e-04
+  p=9 start 3: 4088 evals, 3468.5s elapsed, c̃=0.7103497469, g_norm=3.33e-04
+  p=9 start 2: 4089 evals, 3471.0s elapsed, c̃=0.7146912299, g_norm=4.12e-04
+  p=9 start 3: 4125 evals, 3498.9s elapsed, c̃=0.7103588662, g_norm=3.84e-04
+  p=9 start 2: 4126 evals, 3501.3s elapsed, c̃=0.7146978710, g_norm=4.19e-04
+  p=9 start 3: 4162 evals, 3529.1s elapsed, c̃=0.7103518131, g_norm=3.86e-04
+  p=9 start 2: 4163 evals, 3531.8s elapsed, c̃=0.7146965866, g_norm=4.85e-04
+  p=9 start 3: 4199 evals, 3559.7s elapsed, c̃=0.7103570437, g_norm=4.73e-04
+  p=9 start 2: 4200 evals, 3562.2s elapsed, c̃=0.7147007603, g_norm=3.20e-04
+  p=9 start 3: 4236 evals, 3589.7s elapsed, c̃=0.7103555142, g_norm=3.23e-04
+  p=9 start 2: 4237 evals, 3592.2s elapsed, c̃=0.7146908012, g_norm=4.44e-04
+  p=9 start 3: 4273 evals, 3620.0s elapsed, c̃=0.7103558206, g_norm=3.21e-04
+  p=9 start 2: 4274 evals, 3622.5s elapsed, c̃=0.7146897993, g_norm=2.42e-04
+  p=9 start 3: 4310 evals, 3650.2s elapsed, c̃=0.7103497468, g_norm=3.51e-04
+  p=9 start 2: 4311 evals, 3652.6s elapsed, c̃=0.7146906507, g_norm=4.99e-04
+  p=9 start 3: 4347 evals, 3680.6s elapsed, c̃=0.7103490565, g_norm=3.26e-04
+  p=9 start 2: 4348 evals, 3683.0s elapsed, c̃=0.7146975375, g_norm=3.77e-04
+  p=9 start 3: 4384 evals, 3711.3s elapsed, c̃=0.7103509555, g_norm=3.13e-04
+  p=9 start 2: 4385 evals, 3713.8s elapsed, c̃=0.7146992966, g_norm=3.46e-04
+  p=9 start 3: 4421 evals, 3741.5s elapsed, c̃=0.7103568211, g_norm=3.44e-04
+  p=9 start 2: 4422 evals, 3744.1s elapsed, c̃=0.7146908482, g_norm=3.20e-04
+  p=9 start 3: 4458 evals, 3771.9s elapsed, c̃=0.7103506548, g_norm=2.59e-04
+  p=9 start 2: 4459 evals, 3774.4s elapsed, c̃=0.7146954471, g_norm=4.22e-04
+  p=9 start 3: 4495 evals, 3802.4s elapsed, c̃=0.7103570464, g_norm=4.81e-04
+  p=9 start 2: 4496 evals, 3804.9s elapsed, c̃=0.7146902654, g_norm=2.55e-04
+  p=9 start 3: 4532 evals, 3833.0s elapsed, c̃=0.7103467640, g_norm=5.51e-04
+  p=9 start 2: 4533 evals, 3835.5s elapsed, c̃=0.7146931763, g_norm=2.63e-04
+  p=9 start 3: 4569 evals, 3863.3s elapsed, c̃=0.7103586997, g_norm=6.39e-04
+  p=9 start 2: 4570 evals, 3866.2s elapsed, c̃=0.7146870310, g_norm=4.01e-04
+  p=9 start 3: 4605 evals, 3893.5s elapsed, c̃=0.7103560700, g_norm=5.95e-04
+  p=9 start 2: 4606 evals, 3896.4s elapsed, c̃=0.7146948210, g_norm=2.77e-04
+  p=9 start 3: 4641 evals, 3923.6s elapsed, c̃=0.7103521888, g_norm=8.15e-04
+  p=9 start 3: 4684 evals, 3953.8s elapsed, c̃=0.7103528152, g_norm=5.68e-04
+  p=9 start 3: 4727 evals, 3984.2s elapsed, c̃=0.7103531949, g_norm=4.79e-04
+  p=9 start 3: 4770 evals, 4014.2s elapsed, c̃=0.7103557666, g_norm=4.00e-04
+  p=9 start 3: 4813 evals, 4044.4s elapsed, c̃=0.7103531859, g_norm=6.90e-04
+  p=9 start 3: 4856 evals, 4074.4s elapsed, c̃=0.7103564205, g_norm=4.98e-04
+  p=9 start 3: 4899 evals, 4104.6s elapsed, c̃=0.7103530658, g_norm=4.76e-04
+  p=9 start 3: 4942 evals, 4134.7s elapsed, c̃=0.7103520285, g_norm=2.48e-04
+  p=9 start 3: 4985 evals, 4164.8s elapsed, c̃=0.7103576704, g_norm=3.81e-04
+  p=9 start 3: 5028 evals, 4195.1s elapsed, c̃=0.7103589273, g_norm=3.99e-04
+  p=9 start 3: 5071 evals, 4225.3s elapsed, c̃=0.7103538413, g_norm=6.60e-04
+  p=9 start 3: 5115 evals, 4255.9s elapsed, c̃=0.7103563927, g_norm=4.02e-04
+  p=9 start 3: 5158 evals, 4286.1s elapsed, c̃=0.7103532266, g_norm=4.91e-04
+  p=9 start 3: 5201 evals, 4316.3s elapsed, c̃=0.7103574861, g_norm=4.12e-04
+  p=9 start 3: 5244 evals, 4346.3s elapsed, c̃=0.7103581483, g_norm=5.44e-04
+  p=9 start 3: 5287 evals, 4376.3s elapsed, c̃=0.7103472165, g_norm=4.47e-04
+  p=9 start 3: 5330 evals, 4406.5s elapsed, c̃=0.7103529567, g_norm=4.12e-04
+  p=9 start 3: 5374 evals, 4437.1s elapsed, c̃=0.7103606760, g_norm=6.69e-04
+  p=9 start 3: 5417 evals, 4467.5s elapsed, c̃=0.7103549113, g_norm=4.54e-04
+  p=9 start 3: 5461 evals, 4497.9s elapsed, c̃=0.7103628286, g_norm=3.23e-04
+  p=9 start 3: 5505 evals, 4528.7s elapsed, c̃=0.7103572791, g_norm=6.96e-04
+  p=9 start 3: 5549 evals, 4559.3s elapsed, c̃=0.7103535071, g_norm=4.37e-04
+  p=9 start 3: 5592 evals, 4589.5s elapsed, c̃=0.7103536549, g_norm=1.92e-04
+  p=9 start 3: 5635 evals, 4619.6s elapsed, c̃=0.7103494334, g_norm=1.36e-04
+  p=9 start 3: 5678 evals, 4649.6s elapsed, c̃=0.7103523823, g_norm=2.38e-04
+  p=9 start 3: 5722 evals, 4680.1s elapsed, c̃=0.7103573507, g_norm=2.01e-04
+  p=9 start 3: 5765 evals, 4710.3s elapsed, c̃=0.7103617221, g_norm=4.45e-04
+  p=9 start 3: 5808 evals, 4740.5s elapsed, c̃=0.7103563866, g_norm=3.83e-04
+  p=9 start 3: 5851 evals, 4770.7s elapsed, c̃=0.7103537085, g_norm=3.93e-04
+  p=9 start 3: 5894 evals, 4800.9s elapsed, c̃=0.7103526095, g_norm=3.38e-04
+  p=9 start 3: 5938 evals, 4831.5s elapsed, c̃=0.7103624271, g_norm=3.89e-04
+  p=9 start 3: 5981 evals, 4861.5s elapsed, c̃=0.7103524314, g_norm=3.01e-04
+  p=9 start 1: 45 evals, 30.4s elapsed, c̃=0.7567984313, g_norm=1.67e-04
+  p=10 start 3: 9 evals, 31.4s elapsed, c̃=0.5000609749, g_norm=4.58e-04
+  p=10 start 1: 9 evals, 31.6s elapsed, c̃=0.7608827819, g_norm=2.32e-02
+  p=10 start 3: 17 evals, 61.7s elapsed, c̃=0.5000022054, g_norm=2.72e-05
+  p=10 start 1: 18 evals, 65.4s elapsed, c̃=0.7615614618, g_norm=1.67e-02
+  p=10 start 3: 26 evals, 95.4s elapsed, c̃=0.5250643284, g_norm=1.47e-01
+  p=10 start 1: 27 evals, 99.0s elapsed, c̃=0.7617860917, g_norm=8.62e-03
+  p=10 start 3: 34 evals, 125.4s elapsed, c̃=0.5000000011, g_norm=3.55e-08
+  p=10 start 1: 35 evals, 129.0s elapsed, c̃=0.7617810601, g_norm=5.40e-03
+  p=10 start 3: 43 evals, 159.2s elapsed, c̃=0.5838042666, g_norm=3.01e-01
+  p=10 start 1: 44 evals, 162.8s elapsed, c̃=0.7618877639, g_norm=9.28e-03
+  p=10 start 3: 51 evals, 189.5s elapsed, c̃=0.5327478266, g_norm=1.26e-01
+  p=10 start 1: 52 evals, 192.9s elapsed, c̃=0.7618074964, g_norm=7.01e-03
+  p=10 start 3: 59 evals, 219.6s elapsed, c̃=0.6700623593, g_norm=9.01e-02
+  p=10 start 1: 60 evals, 223.1s elapsed, c̃=0.7618213386, g_norm=5.17e-03
+  p=10 start 3: 68 evals, 253.0s elapsed, c̃=0.6581844884, g_norm=3.65e-01
+  p=10 start 1: 68 evals, 253.2s elapsed, c̃=0.7617440895, g_norm=7.28e-03
+  p=10 start 1: 77 evals, 286.6s elapsed, c̃=0.7618724365, g_norm=7.27e-03
+  p=10 start 3: 77 evals, 286.7s elapsed, c̃=0.6531472524, g_norm=4.41e-01
+  p=10 start 1: 85 evals, 316.6s elapsed, c̃=0.7618965487, g_norm=8.98e-03
+  p=10 start 3: 85 evals, 316.8s elapsed, c̃=0.7093454000, g_norm=5.70e-02
+  p=10 start 1: 93 evals, 346.8s elapsed, c̃=0.7618965487, g_norm=8.98e-03
+  p=10 start 3: 93 evals, 346.9s elapsed, c̃=0.7128097547, g_norm=4.18e-02
+  p=10 start 1: 101 evals, 376.9s elapsed, c̃=0.7617943386, g_norm=8.55e-03
+  p=10 start 3: 101 evals, 377.0s elapsed, c̃=0.7169077964, g_norm=5.10e-02
+  p=10 start 1: 109 evals, 407.2s elapsed, c̃=0.7618782917, g_norm=7.22e-03
+  p=10 start 3: 110 evals, 410.7s elapsed, c̃=0.7208572950, g_norm=2.80e-02
+  p=10 start 1: 117 evals, 437.4s elapsed, c̃=0.7617225277, g_norm=9.12e-03
+  p=10 start 3: 118 evals, 441.0s elapsed, c̃=0.7037220959, g_norm=1.72e-01
+  p=10 start 1: 125 evals, 467.5s elapsed, c̃=0.7618174789, g_norm=9.20e-03
+  p=10 start 3: 126 evals, 471.0s elapsed, c̃=0.6882508870, g_norm=2.51e-01
+  p=10 start 1: 134 evals, 501.1s elapsed, c̃=0.7618325955, g_norm=7.74e-03
+  p=10 start 3: 134 evals, 501.3s elapsed, c̃=0.7235011353, g_norm=1.24e-01
+  p=10 start 1: 142 evals, 531.5s elapsed, c̃=0.7617947830, g_norm=6.36e-03
+  p=10 start 3: 142 evals, 531.7s elapsed, c̃=0.7289934400, g_norm=9.16e-03
+  p=10 start 1: 151 evals, 565.1s elapsed, c̃=0.7618827638, g_norm=7.17e-03
+  p=10 start 3: 151 evals, 565.3s elapsed, c̃=0.7288986476, g_norm=9.16e-03
+  p=10 start 1: 159 evals, 595.4s elapsed, c̃=0.7618209722, g_norm=3.76e-03
+  p=10 start 3: 159 evals, 595.6s elapsed, c̃=0.7289210949, g_norm=9.00e-03
+  p=10 start 1: 168 evals, 629.0s elapsed, c̃=0.7619231314, g_norm=4.78e-03
+  p=10 start 3: 168 evals, 629.2s elapsed, c̃=0.7288075191, g_norm=9.06e-03
+  p=10 start 1: 176 evals, 659.1s elapsed, c̃=0.7617611008, g_norm=3.19e-03
+  p=10 start 3: 176 evals, 659.2s elapsed, c̃=0.7289299067, g_norm=9.08e-03
+  p=10 start 3: 184 evals, 689.6s elapsed, c̃=0.7289759483, g_norm=9.11e-03
+  p=10 start 1: 184 evals, 689.9s elapsed, c̃=0.7618522562, g_norm=3.38e-03
+  p=10 start 3: 192 evals, 720.0s elapsed, c̃=0.7289605526, g_norm=9.15e-03
+  p=10 start 1: 193 evals, 723.5s elapsed, c̃=0.7617710174, g_norm=4.31e-03
+  p=10 start 1: 201 evals, 753.7s elapsed, c̃=0.7618711537, g_norm=3.00e-03
+  p=10 start 3: 201 evals, 753.7s elapsed, c̃=0.7290142063, g_norm=9.21e-03
+  p=10 start 3: 209 evals, 783.9s elapsed, c̃=0.7290142063, g_norm=9.21e-03
+  p=10 start 1: 209 evals, 784.0s elapsed, c̃=0.7618809591, g_norm=8.18e-03
+  p=10 start 1: 217 evals, 814.2s elapsed, c̃=0.7618245642, g_norm=3.01e-03
+  p=10 start 3: 217 evals, 814.3s elapsed, c̃=0.6893284899, g_norm=3.05e-01
+  p=10 start 1: 225 evals, 844.3s elapsed, c̃=0.7617845876, g_norm=3.51e-03
+  p=10 start 3: 225 evals, 844.4s elapsed, c̃=0.7299827593, g_norm=4.08e-02
+  p=10 start 1: 233 evals, 874.3s elapsed, c̃=0.7618581347, g_norm=6.42e-03
+  p=10 start 3: 233 evals, 874.5s elapsed, c̃=0.7313871688, g_norm=6.67e-02
+  p=10 start 3: 242 evals, 908.1s elapsed, c̃=0.7333850692, g_norm=3.03e-02
+  p=10 start 1: 242 evals, 908.2s elapsed, c̃=0.7618366337, g_norm=3.59e-03
+  p=10 start 1: 250 evals, 938.3s elapsed, c̃=0.7618082384, g_norm=5.84e-03
+  p=10 start 3: 250 evals, 938.5s elapsed, c̃=0.7342090155, g_norm=7.05e-03
+  p=10 start 1: 258 evals, 968.4s elapsed, c̃=0.7619395987, g_norm=3.92e-03
+  p=10 start 3: 258 evals, 968.6s elapsed, c̃=0.7339772939, g_norm=7.14e-03
+  p=10 start 3: 266 evals, 998.6s elapsed, c̃=0.7339391784, g_norm=7.04e-03
+  p=10 start 1: 266 evals, 998.8s elapsed, c̃=0.7619404399, g_norm=3.60e-03
+  p=10 start 3: 274 evals, 1028.8s elapsed, c̃=0.7340966414, g_norm=7.08e-03
+  p=10 start 1: 274 evals, 1029.0s elapsed, c̃=0.7619404399, g_norm=3.60e-03
+  p=10 start 3: 282 evals, 1059.1s elapsed, c̃=0.7341507406, g_norm=7.10e-03
+  p=10 start 1: 282 evals, 1059.3s elapsed, c̃=0.7619404399, g_norm=3.60e-03
+  p=10 start 3: 290 evals, 1089.2s elapsed, c̃=0.7340344807, g_norm=6.97e-03
+  p=10 start 1: 290 evals, 1089.5s elapsed, c̃=0.7618847411, g_norm=4.40e-03
+  p=10 start 3: 298 evals, 1119.6s elapsed, c̃=0.7341161138, g_norm=7.21e-03
+  p=10 start 1: 299 evals, 1123.4s elapsed, c̃=0.7618225408, g_norm=8.87e-03
+  p=10 start 3: 306 evals, 1149.7s elapsed, c̃=0.7339738060, g_norm=6.39e-03
+  p=10 start 1: 307 evals, 1153.8s elapsed, c̃=0.7619034245, g_norm=3.35e-03
+  p=10 start 3: 314 evals, 1179.9s elapsed, c̃=0.7341478925, g_norm=7.24e-03
+  p=10 start 1: 316 evals, 1187.6s elapsed, c̃=0.7619106698, g_norm=5.94e-03
+  p=10 start 3: 322 evals, 1210.0s elapsed, c̃=0.7341183008, g_norm=7.16e-03
+  p=10 start 1: 324 evals, 1217.7s elapsed, c̃=0.7617401324, g_norm=4.77e-03
+  p=10 start 3: 330 evals, 1240.2s elapsed, c̃=0.7339709202, g_norm=6.86e-03
+  p=10 start 1: 332 evals, 1247.7s elapsed, c̃=0.7619326347, g_norm=3.63e-03
+  p=10 start 3: 338 evals, 1270.5s elapsed, c̃=0.7341264085, g_norm=7.26e-03
+  p=10 start 1: 340 evals, 1278.0s elapsed, c̃=0.7619326347, g_norm=3.63e-03
+  p=10 start 3: 346 evals, 1300.7s elapsed, c̃=0.7340862001, g_norm=6.87e-03
+  p=10 start 1: 348 evals, 1308.2s elapsed, c̃=0.7618090659, g_norm=8.70e-03
+  p=10 start 3: 354 evals, 1330.9s elapsed, c̃=0.7341672768, g_norm=7.00e-03
+  p=10 start 1: 356 evals, 1338.7s elapsed, c̃=0.7618324284, g_norm=4.35e-03
+  p=10 start 3: 362 evals, 1361.1s elapsed, c̃=0.7341672768, g_norm=7.00e-03
+  p=10 start 1: 365 evals, 1372.3s elapsed, c̃=0.7619676249, g_norm=3.79e-03
+  p=10 start 3: 370 evals, 1391.2s elapsed, c̃=0.7341672768, g_norm=7.00e-03
+  p=10 start 1: 373 evals, 1402.5s elapsed, c̃=0.7618546618, g_norm=3.77e-03
+  p=10 start 3: 378 evals, 1421.3s elapsed, c̃=0.7341672768, g_norm=7.00e-03
+  p=10 start 1: 381 evals, 1432.5s elapsed, c̃=0.7619269197, g_norm=6.49e-03
+  p=10 start 3: 387 evals, 1455.0s elapsed, c̃=0.7341099687, g_norm=6.80e-03
+  p=10 start 1: 389 evals, 1462.7s elapsed, c̃=0.7616621520, g_norm=5.60e-03
+  p=10 start 3: 395 evals, 1485.2s elapsed, c̃=0.7341498905, g_norm=7.13e-03
+  p=10 start 1: 397 evals, 1492.7s elapsed, c̃=0.7619699484, g_norm=3.70e-03
+  p=10 start 3: 403 evals, 1515.4s elapsed, c̃=0.7339752351, g_norm=7.06e-03
+  p=10 start 1: 405 evals, 1523.0s elapsed, c̃=0.7619699484, g_norm=3.70e-03
+  p=10 start 3: 411 evals, 1545.8s elapsed, c̃=0.7341564158, g_norm=6.90e-03
+  p=10 start 1: 413 evals, 1553.3s elapsed, c̃=0.7619699484, g_norm=3.70e-03
+  p=10 start 3: 419 evals, 1576.0s elapsed, c̃=0.7340171663, g_norm=7.10e-03
+  p=10 start 1: 421 evals, 1583.5s elapsed, c̃=0.7619699484, g_norm=3.70e-03
+  p=10 start 3: 427 evals, 1606.0s elapsed, c̃=0.7341359481, g_norm=6.92e-03
+  p=10 start 3: 437 evals, 1637.7s elapsed, c̃=0.7341882659, g_norm=6.80e-03
+  p=10 start 3: 447 evals, 1668.2s elapsed, c̃=0.7341882659, g_norm=6.80e-03
+  p=10 start 3: 457 evals, 1698.3s elapsed, c̃=0.7341882659, g_norm=6.80e-03
+  p=10 start 3: 467 evals, 1728.7s elapsed, c̃=0.7341032340, g_norm=7.35e-03
+  p=10 start 3: 477 evals, 1758.9s elapsed, c̃=0.7340360059, g_norm=5.26e-03
+  p=10 start 3: 487 evals, 1789.3s elapsed, c̃=0.7341492740, g_norm=5.19e-03
+  p=10 start 3: 497 evals, 1819.6s elapsed, c̃=0.7340200186, g_norm=5.21e-03
+  p=10 start 3: 507 evals, 1850.2s elapsed, c̃=0.7341833601, g_norm=5.17e-03

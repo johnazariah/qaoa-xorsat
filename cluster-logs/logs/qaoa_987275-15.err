@@ -1,0 +1,53 @@
+[2026-03-31T23:28:30] Task 15: k=7, D=8, p=1–15
+[2026-03-31T23:28:30] Command: julia --project=. -t 28 scripts/optimize_qaoa.jl 7 8 1 15 2 320 1234 true adjoint
+[2026-03-31T23:28:30] Threads: 28, RAM available: 2835 GB
+preserved run_id=20260331T232833-k7-d8-p1-15-r2-i320-s1234
+preserved directory=/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260331T232833-k7-d8-p1-15-r2-i320-s1234
+┌ Warning: Assignment to `best_checkpoint_value` in soft scope is ambiguous because a global variable by the same name exists: `best_checkpoint_value` will be treated as a new local. Disambiguate by using `local best_checkpoint_value` to suppress this warning or `global best_checkpoint_value` to assign to the existing global variable.
+└ @ ~/qaoa-xorsat/scripts/optimize_qaoa.jl:496
+[ Info: JIT warmup...
+[ Info: JIT warmup complete, starting sweep
+  p=6 start 3: 4328 evals, 30.0s elapsed, c̃=0.6694657038, g_norm=3.04e-04
+  p=7 start 1: 884 evals, 30.0s elapsed, c̃=0.7997730942, g_norm=1.35e-02
+  p=8 start 2: 144 evals, 30.0s elapsed, c̃=0.7172869112, g_norm=8.98e-02
+  p=8 start 3: 146 evals, 30.2s elapsed, c̃=0.7297165254, g_norm=9.97e-02
+  p=8 start 2: 304 evals, 60.0s elapsed, c̃=0.7160911803, g_norm=1.79e-01
+  p=8 start 3: 307 evals, 60.2s elapsed, c̃=0.7552466207, g_norm=1.10e-01
+  p=8 start 2: 467 evals, 90.1s elapsed, c̃=0.7178909232, g_norm=1.69e-01
+  p=8 start 3: 470 evals, 90.2s elapsed, c̃=0.7492758942, g_norm=1.39e-01
+  p=8 start 2: 627 evals, 120.2s elapsed, c̃=0.7144491461, g_norm=1.56e-01
+  p=8 start 3: 632 evals, 120.3s elapsed, c̃=0.7603443953, g_norm=1.11e-01
+  p=8 start 2: 789 evals, 150.3s elapsed, c̃=0.7222195468, g_norm=1.70e-01
+  p=8 start 3: 795 evals, 150.5s elapsed, c̃=0.7609264192, g_norm=1.29e-01
+  p=8 start 2: 953 evals, 180.4s elapsed, c̃=0.7190086411, g_norm=1.30e-01
+  p=8 start 3: 959 evals, 180.7s elapsed, c̃=0.7609264192, g_norm=1.29e-01
+  p=8 start 2: 1151 evals, 210.4s elapsed, c̃=0.7197067575, g_norm=1.69e-01
+  p=9 start 2: 37 evals, 30.3s elapsed, c̃=0.5000426481, g_norm=2.57e-03
+  p=9 start 1: 37 evals, 30.3s elapsed, c̃=0.7021094773, g_norm=1.08e+00
+  p=9 start 1: 73 evals, 60.5s elapsed, c̃=0.6326652724, g_norm=4.59e-01
+  p=9 start 2: 73 evals, 60.5s elapsed, c̃=0.5006819339, g_norm=4.32e-02
+  p=9 start 1: 109 evals, 91.1s elapsed, c̃=1.5222986002, g_norm=2.23e+00
+  p=9 start 2: 109 evals, 91.1s elapsed, c̃=0.5009849854, g_norm=9.14e-03
+  p=9 start 2: 145 evals, 121.6s elapsed, c̃=0.5022988845, g_norm=3.57e-02
+  p=9 start 1: 145 evals, 121.6s elapsed, c̃=2.2259633244, g_norm=5.50e+00
+  p=9 start 2: 186 evals, 151.7s elapsed, c̃=0.5015752069, g_norm=3.91e-02
+  p=9 start 2: 228 evals, 182.4s elapsed, c̃=0.5089060607, g_norm=1.09e-01
+  p=9 start 2: 270 evals, 212.6s elapsed, c̃=0.5038076425, g_norm=7.43e-02
+  p=9 start 2: 312 evals, 243.3s elapsed, c̃=0.5041050221, g_norm=9.00e-02
+  p=9 start 2: 354 evals, 274.0s elapsed, c̃=0.5029516963, g_norm=5.58e-02
+  p=9 start 2: 396 evals, 304.2s elapsed, c̃=0.5185921871, g_norm=4.42e-01
+  p=9 start 2: 438 evals, 334.5s elapsed, c̃=0.5021886252, g_norm=3.97e-02
+  p=9 start 2: 480 evals, 365.0s elapsed, c̃=0.5187265217, g_norm=3.93e-01
+  p=9 start 2: 522 evals, 395.4s elapsed, c̃=0.5169439212, g_norm=2.81e-01
+  p=9 start 2: 564 evals, 425.9s elapsed, c̃=0.4999888453, g_norm=1.51e-04
+  p=9 start 2: 606 evals, 456.5s elapsed, c̃=0.5217888089, g_norm=4.25e-01
+  p=9 start 2: 648 evals, 486.9s elapsed, c̃=0.5351358875, g_norm=5.82e-01
+  p=9 start 2: 690 evals, 517.3s elapsed, c̃=0.5362196969, g_norm=2.41e-01
+  p=9 start 2: 732 evals, 547.7s elapsed, c̃=0.5334058329, g_norm=2.57e-01
+  p=9 start 2: 774 evals, 578.3s elapsed, c̃=0.5160983729, g_norm=9.92e-02
+  p=9 start 2: 816 evals, 608.7s elapsed, c̃=0.5580146623, g_norm=2.66e-01
+  p=9 start 2: 858 evals, 639.3s elapsed, c̃=0.5832854468, g_norm=8.67e-01
+  p=9 start 2: 899 evals, 669.5s elapsed, c̃=0.5003963969, g_norm=4.46e-03
+  p=9 start 2: 941 evals, 700.0s elapsed, c̃=0.5705056691, g_norm=5.24e-01
+  p=9 start 2: 983 evals, 730.5s elapsed, c̃=0.7140002337, g_norm=2.01e+00
+  p=10 start 1: 10 evals, 32.9s elapsed
