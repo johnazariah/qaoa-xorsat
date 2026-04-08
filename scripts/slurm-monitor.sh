@@ -95,6 +95,8 @@ for task_id in $(seq 1 15); do
 
     # Search all run directories for results matching this (k,D)
     for dir in $(ls -d "$RUNS_DIR"/*/ 2>/dev/null | sort -r); do
+        # Skip warm-start seed directories (not real results)
+        [[ "$(basename "$dir")" == ws-* ]] && continue
         results_csv="$dir/results.csv"
         [[ -f "$results_csv" ]] || continue
 
