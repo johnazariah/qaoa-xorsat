@@ -77,7 +77,7 @@ for e in entries
         println(io, "seed = 1234")
         println(io, "preserve = true")
         println(io, "autodiff = \"adjoint\"")
-        println(io, "resume_from = \"$(ws_dir)\"")
+        println(io, "resume_from = \"experiments/warmstart/ws-k$(e.k)d$(e.D)\"")
     end
 
     push!(configs, (k=e.k, D=e.D, p_start=p_start, p_max=p_max, value=e.value, fname=fname))

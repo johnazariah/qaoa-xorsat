@@ -7,4 +7,4 @@ maxiters = 1280
 seed = 1234
 preserve = true
 autodiff = "adjoint"
-resume_from = "/Users/johnaz/PhD/qaoa-xorsat/scripts/../experiments/warmstart/ws-k3d7"
+resume_from = "experiments/warmstart/ws-k3d7"

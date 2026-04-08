@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# SLURM warm-start sweep — generated 2026-04-07
+# SLURM warm-start sweep — generated 2026-04-08
 # Each task runs one (k,D) pair from its warm-start depth through p=15.
 #
 #SBATCH --job-name=qaoa-ws
