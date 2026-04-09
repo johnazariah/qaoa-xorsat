@@ -39,14 +39,14 @@ Best-found QAOA satisfaction fractions at finite D, computed on Apple M4 Mac Stu
 
 | (k,D) | p | c̃ | (k,D) | p | c̃ | (k,D) | p | c̃ |
 |-------|---|------|-------|---|------|-------|---|------|
-| (3,4) | 13 | 0.881 | (4,5) | 11 | 0.861 | (5,6) | 10 | 0.849 |
-| (3,5) | 13 | 0.843 | (4,6) | 11 | 0.830 | (5,7) | 8 | 0.789 |
-| (3,6) | 12 | 0.809 | (4,7) | 10 | 0.806 | (5,8) | 9 | 0.800 |
-| (3,7) | 11 | 0.779 | (4,8) | 10 | 0.800 | (6,7) | 9 | 0.838 |
-| (3,8) | 11 | 0.768 | | | | (6,8) | 8 | 0.801 |
-| | | | | | | (7,8) | 8 | 0.789 |
+| (3,4) | 13 | 0.881 | (4,5) | 11 | 0.861 | (5,6) | 9 | 0.838 |
+| (3,5) | 13 | 0.843 | (4,6) | 9 | 0.821 | (5,7) | 9 | 0.808 |
+| (3,6) | 12 | 0.809 | (4,7) | 9 | 0.798 | (5,8) | 9 | 0.805 |
+| (3,7) | 11 | 0.779 | (4,8) | 9 | 0.780 | (6,7) | 9 | 0.855 |
+| (3,8) | 11 | 0.768 | | | | (6,8) | 8 | 0.802 |
+| | | | | | | (7,8) | 8 | 0.819 |
 
-QAOA surpasses DQI+BP for 12 of 15 pairs. At five pairs — (3,5), (3,6), (3,7), (3,8), (4,8) — QAOA also exceeds Regev+FGUM. To our knowledge, no prior exact finite-D QAOA evaluation has been performed for k ≥ 3.
+QAOA surpasses DQI+BP for 13 of 15 pairs. To our knowledge, no prior exact finite-D QAOA evaluation has been performed for k ≥ 3.
 
 ## Technical Contributions
 
