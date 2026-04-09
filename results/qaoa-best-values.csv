@@ -9,7 +9,7 @@ k,D,p_max,ctilde,wall_time_seconds,converged,g_abstol,machine
 3,7,11,0.778760214189,10293.6,true,1.0e-05,azure-fleet-e8as-v5
 3,8,11,0.767642417811,891.5,true,1.0e-05,m4-mac-studio-64gb
 4,5,11,0.860527841387,11718.2,true,1.0e-05,azure-fleet-e8as-v5
-4,6,9,0.820603831892,13857.6,true,1.0e-06,stephen-swarm
+4,6,10,0.826908423652,77796.2,true,1.0e-06,stephen-swarm
 4,7,9,0.797792909185,18456.6,true,1.0e-06,stephen-swarm
 4,8,9,0.779504870278,21633.7,true,1.0e-06,stephen-swarm
 5,6,9,0.837542087855,16612.4,true,1.0e-06,stephen-swarm
