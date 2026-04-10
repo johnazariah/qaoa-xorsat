@@ -1,0 +1,228 @@
+[2026-03-31T23:30:18] Task 13: k=6, D=7, p=1–15
+[2026-03-31T23:30:18] Command: julia --project=. -t 28 scripts/optimize_qaoa.jl 6 7 1 15 2 320 1234 true adjoint
+[2026-03-31T23:30:18] Threads: 28, RAM available: 2835 GB
+preserved run_id=20260331T233021-k6-d7-p1-15-r2-i320-s1234
+preserved directory=/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260331T233021-k6-d7-p1-15-r2-i320-s1234
+┌ Warning: Assignment to `best_checkpoint_value` in soft scope is ambiguous because a global variable by the same name exists: `best_checkpoint_value` will be treated as a new local. Disambiguate by using `local best_checkpoint_value` to suppress this warning or `global best_checkpoint_value` to assign to the existing global variable.
+└ @ ~/qaoa-xorsat/scripts/optimize_qaoa.jl:496
+┌ Warning: skipping corrupted checkpoint
+│   path = "/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260331T232833-k3-d4-p1-15-r2-i320-s1234/checkpoint-p1.csv"
+│   exception =
+│    UndefVarError: `best_checkpoint_value` not defined in local scope
+│    Suggestion: check for an assignment to a local variable that shadows a global of the same name.
+└ @ Main ~/qaoa-xorsat/scripts/optimize_qaoa.jl:500
+┌ Warning: skipping corrupted checkpoint
+│   path = "/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260331T232833-k3-d5-p1-15-r2-i320-s1234/checkpoint-p1.csv"
+│   exception =
+│    UndefVarError: `best_checkpoint_value` not defined in local scope
+│    Suggestion: check for an assignment to a local variable that shadows a global of the same name.
+└ @ Main ~/qaoa-xorsat/scripts/optimize_qaoa.jl:500
+┌ Warning: skipping corrupted checkpoint
+│   path = "/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260331T232833-k3-d6-p1-15-r2-i320-s1234/checkpoint-p1.csv"
+│   exception =
+│    UndefVarError: `best_checkpoint_value` not defined in local scope
+│    Suggestion: check for an assignment to a local variable that shadows a global of the same name.
+└ @ Main ~/qaoa-xorsat/scripts/optimize_qaoa.jl:500
+┌ Warning: skipping corrupted checkpoint
+│   path = "/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260331T232833-k3-d7-p1-15-r2-i320-s1234/checkpoint-p1.csv"
+│   exception =
+│    UndefVarError: `best_checkpoint_value` not defined in local scope
+│    Suggestion: check for an assignment to a local variable that shadows a global of the same name.
+└ @ Main ~/qaoa-xorsat/scripts/optimize_qaoa.jl:500
+┌ Warning: skipping corrupted checkpoint
+│   path = "/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260331T232833-k4-d5-p1-15-r2-i320-s1234/checkpoint-p1.csv"
+│   exception =
+│    UndefVarError: `best_checkpoint_value` not defined in local scope
+│    Suggestion: check for an assignment to a local variable that shadows a global of the same name.
+└ @ Main ~/qaoa-xorsat/scripts/optimize_qaoa.jl:500
+┌ Warning: skipping corrupted checkpoint
+│   path = "/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260331T232833-k4-d6-p1-15-r2-i320-s1234/checkpoint-p1.csv"
+│   exception =
+│    UndefVarError: `best_checkpoint_value` not defined in local scope
+│    Suggestion: check for an assignment to a local variable that shadows a global of the same name.
+└ @ Main ~/qaoa-xorsat/scripts/optimize_qaoa.jl:500
+┌ Warning: skipping corrupted checkpoint
+│   path = "/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260331T232833-k4-d7-p1-15-r2-i320-s1234/checkpoint-p1.csv"
+│   exception =
+│    UndefVarError: `best_checkpoint_value` not defined in local scope
+│    Suggestion: check for an assignment to a local variable that shadows a global of the same name.
+└ @ Main ~/qaoa-xorsat/scripts/optimize_qaoa.jl:500
+┌ Warning: skipping corrupted checkpoint
+│   path = "/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260331T232833-k4-d8-p1-15-r2-i320-s1234/checkpoint-p1.csv"
+│   exception =
+│    UndefVarError: `best_checkpoint_value` not defined in local scope
+│    Suggestion: check for an assignment to a local variable that shadows a global of the same name.
+└ @ Main ~/qaoa-xorsat/scripts/optimize_qaoa.jl:500
+┌ Warning: skipping corrupted checkpoint
+│   path = "/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260331T232833-k5-d6-p1-15-r2-i320-s1234/checkpoint-p1.csv"
+│   exception =
+│    UndefVarError: `best_checkpoint_value` not defined in local scope
+│    Suggestion: check for an assignment to a local variable that shadows a global of the same name.
+└ @ Main ~/qaoa-xorsat/scripts/optimize_qaoa.jl:500
+┌ Warning: skipping corrupted checkpoint
+│   path = "/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260331T232833-k5-d7-p1-15-r2-i320-s1234/checkpoint-p1.csv"
+│   exception =
+│    UndefVarError: `best_checkpoint_value` not defined in local scope
+│    Suggestion: check for an assignment to a local variable that shadows a global of the same name.
+└ @ Main ~/qaoa-xorsat/scripts/optimize_qaoa.jl:500
+┌ Warning: skipping corrupted checkpoint
+│   path = "/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260331T232833-k5-d8-p1-15-r2-i320-s1234/checkpoint-p1.csv"
+│   exception =
+│    UndefVarError: `best_checkpoint_value` not defined in local scope
+│    Suggestion: check for an assignment to a local variable that shadows a global of the same name.
+└ @ Main ~/qaoa-xorsat/scripts/optimize_qaoa.jl:500
+┌ Warning: skipping corrupted checkpoint
+│   path = "/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260331T232833-k6-d8-p1-15-r2-i320-s1234/checkpoint-p1.csv"
+│   exception =
+│    UndefVarError: `best_checkpoint_value` not defined in local scope
+│    Suggestion: check for an assignment to a local variable that shadows a global of the same name.
+└ @ Main ~/qaoa-xorsat/scripts/optimize_qaoa.jl:500
+┌ Warning: skipping corrupted checkpoint
+│   path = "/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260331T232833-k7-d8-p1-15-r2-i320-s1234/checkpoint-p1.csv"
+│   exception =
+│    UndefVarError: `best_checkpoint_value` not defined in local scope
+│    Suggestion: check for an assignment to a local variable that shadows a global of the same name.
+└ @ Main ~/qaoa-xorsat/scripts/optimize_qaoa.jl:500
+[ Info: JIT warmup...
+[ Info: JIT warmup complete, starting sweep
+  p=7 start 2: 804 evals, 30.0s elapsed, c̃=0.7684604746, g_norm=3.51e-03
+  p=8 start 3: 141 evals, 30.0s elapsed, c̃=0.6940271768, g_norm=2.88e-02
+  p=8 start 1: 141 evals, 30.1s elapsed, c̃=0.8166214501, g_norm=6.98e-02
+  p=8 start 2: 140 evals, 30.2s elapsed, c̃=0.7381012549, g_norm=3.74e-02
+  p=8 start 1: 284 evals, 60.2s elapsed, c̃=0.8180813022, g_norm=1.07e-02
+  p=8 start 3: 282 evals, 60.2s elapsed, c̃=0.6986087350, g_norm=2.17e-01
+  p=8 start 2: 283 evals, 60.3s elapsed, c̃=0.7384357661, g_norm=3.83e-02
+  p=8 start 1: 425 evals, 90.3s elapsed, c̃=0.8184313806, g_norm=6.99e-03
+  p=8 start 3: 425 evals, 90.3s elapsed, c̃=0.7122461656, g_norm=1.35e-02
+  p=8 start 2: 426 evals, 90.5s elapsed, c̃=0.7383697594, g_norm=3.84e-02
+  p=8 start 3: 570 evals, 120.4s elapsed, c̃=0.7122176457, g_norm=1.30e-02
+  p=8 start 1: 569 evals, 120.4s elapsed, c̃=0.8189789448, g_norm=1.17e-02
+  p=8 start 2: 574 evals, 120.6s elapsed, c̃=0.7384797359, g_norm=3.95e-02
+  p=8 start 3: 715 evals, 150.4s elapsed, c̃=0.7115535483, g_norm=1.28e-02
+  p=8 start 1: 717 evals, 150.5s elapsed, c̃=0.8188530500, g_norm=1.71e-02
+  p=8 start 2: 720 evals, 150.6s elapsed, c̃=0.7386957975, g_norm=3.58e-02
+  p=8 start 3: 862 evals, 180.5s elapsed, c̃=0.7115116396, g_norm=1.53e-02
+  p=8 start 1: 865 evals, 180.6s elapsed, c̃=0.8191275838, g_norm=5.66e-03
+  p=8 start 2: 865 evals, 180.8s elapsed, c̃=0.7391469236, g_norm=4.72e-02
+  p=8 start 3: 1006 evals, 210.5s elapsed, c̃=0.7121597044, g_norm=1.34e-02
+  p=8 start 1: 1011 evals, 210.6s elapsed, c̃=0.8180801892, g_norm=6.29e-03
+  p=8 start 2: 1010 evals, 210.9s elapsed, c̃=0.7387231360, g_norm=4.42e-02
+  p=8 start 1: 1175 evals, 240.6s elapsed, c̃=0.8189959615, g_norm=7.17e-03
+  p=8 start 2: 1173 evals, 241.0s elapsed, c̃=0.7389007607, g_norm=3.65e-02
+  p=8 start 1: 1345 evals, 270.8s elapsed, c̃=0.8187619394, g_norm=8.42e-03
+  p=8 start 2: 1351 evals, 271.1s elapsed, c̃=0.7386177016, g_norm=3.54e-02
+  p=8 start 2: 1527 evals, 301.2s elapsed, c̃=0.7392683577, g_norm=3.40e-02
+  p=9 start 2: 37 evals, 30.3s elapsed, c̃=0.5071302552, g_norm=1.07e-01
+  p=9 start 1: 37 evals, 30.3s elapsed, c̃=0.8021521660, g_norm=2.34e-01
+  p=9 start 1: 73 evals, 60.8s elapsed, c̃=0.8091605203, g_norm=2.15e-01
+  p=9 start 2: 73 evals, 60.8s elapsed, c̃=0.6449681904, g_norm=2.98e-01
+  p=9 start 1: 109 evals, 90.9s elapsed, c̃=0.8285598556, g_norm=3.32e-01
+  p=9 start 2: 109 evals, 90.9s elapsed, c̃=0.7318891552, g_norm=9.77e-02
+  p=9 start 1: 145 evals, 121.2s elapsed, c̃=0.8268068647, g_norm=2.50e-01
+  p=9 start 2: 145 evals, 121.3s elapsed, c̃=0.7347337755, g_norm=1.47e-01
+  p=9 start 1: 181 evals, 151.8s elapsed, c̃=0.8458400785, g_norm=1.85e-01
+  p=9 start 2: 181 evals, 151.8s elapsed, c̃=0.7230153861, g_norm=1.42e-01
+  p=9 start 1: 217 evals, 181.9s elapsed, c̃=0.8066866544, g_norm=1.97e-01
+  p=9 start 2: 217 evals, 182.2s elapsed, c̃=0.7427713604, g_norm=1.22e-01
+  p=9 start 1: 253 evals, 212.7s elapsed, c̃=0.8460144213, g_norm=2.90e-01
+  p=9 start 2: 253 evals, 212.7s elapsed, c̃=0.7425496657, g_norm=1.51e-01
+  p=9 start 1: 289 evals, 243.1s elapsed, c̃=0.8110694192, g_norm=2.74e-01
+  p=9 start 2: 289 evals, 243.3s elapsed, c̃=0.7466133177, g_norm=2.15e-01
+  p=9 start 1: 325 evals, 273.3s elapsed, c̃=0.8476702730, g_norm=1.60e-01
+  p=9 start 2: 326 evals, 274.1s elapsed, c̃=0.7601360913, g_norm=1.70e-01
+  p=9 start 1: 361 evals, 303.5s elapsed, c̃=0.8193764794, g_norm=2.94e-01
+  p=9 start 2: 362 evals, 304.3s elapsed, c̃=0.7473434123, g_norm=1.55e-01
+  p=9 start 1: 398 evals, 334.1s elapsed, c̃=0.8452811127, g_norm=2.31e-01
+  p=9 start 2: 399 evals, 334.9s elapsed, c̃=0.7649131390, g_norm=1.40e-01
+  p=9 start 1: 434 evals, 364.4s elapsed, c̃=0.8111289985, g_norm=1.61e-01
+  p=9 start 2: 435 evals, 365.2s elapsed, c̃=0.7596447069, g_norm=1.71e-01
+  p=9 start 1: 470 evals, 394.7s elapsed, c̃=0.8368264807, g_norm=1.80e-01
+  p=9 start 2: 471 evals, 395.6s elapsed, c̃=0.7781362462, g_norm=1.52e-01
+  p=9 start 1: 506 evals, 424.8s elapsed, c̃=0.8067975186, g_norm=1.94e-01
+  p=9 start 2: 507 evals, 425.7s elapsed, c̃=0.7420096473, g_norm=1.47e-01
+  p=9 start 1: 542 evals, 455.2s elapsed, c̃=0.8468117562, g_norm=1.75e-01
+  p=9 start 2: 543 evals, 456.0s elapsed, c̃=0.7782757469, g_norm=1.50e-01
+  p=9 start 1: 578 evals, 485.5s elapsed, c̃=0.8484567178, g_norm=1.97e-01
+  p=9 start 2: 579 evals, 486.2s elapsed, c̃=0.7482525618, g_norm=1.72e-01
+  p=9 start 1: 614 evals, 516.0s elapsed, c̃=0.8466865987, g_norm=2.52e-01
+  p=9 start 2: 615 evals, 516.8s elapsed, c̃=0.7738119212, g_norm=1.33e-01
+  p=10 start 1: 10 evals, 31.5s elapsed, c̃=0.4861445840, g_norm=2.23e-01
+  p=10 start 1: 20 evals, 62.2s elapsed, c̃=0.8203462125, g_norm=1.01e+01
+  p=10 start 1: 30 evals, 92.9s elapsed, c̃=1.0328166935, g_norm=9.47e+00
+  p=10 start 1: 40 evals, 124.2s elapsed, c̃=0.5474948964, g_norm=4.02e-01
+  p=10 start 1: 50 evals, 155.0s elapsed, c̃=0.7966583540, g_norm=3.34e+00
+  p=10 start 1: 60 evals, 185.7s elapsed, c̃=0.7003870368, g_norm=3.25e+00
+  p=10 start 1: 70 evals, 216.4s elapsed, c̃=0.6447690592, g_norm=7.19e+00
+  p=10 start 1: 80 evals, 247.0s elapsed, c̃=0.6439252978, g_norm=1.66e+00
+  p=10 start 1: 90 evals, 277.5s elapsed, c̃=1.5950609023, g_norm=7.88e+00
+  p=10 start 1: 100 evals, 308.1s elapsed, c̃=2.6719104318, g_norm=5.16e+01
+  p=10 start 1: 110 evals, 339.1s elapsed, c̃=0.8268981888, g_norm=3.59e+00
+  p=10 start 1: 120 evals, 369.9s elapsed, c̃=0.6408984537, g_norm=8.27e+00
+  p=10 start 1: 130 evals, 400.6s elapsed, c̃=2.3156970287, g_norm=1.95e+01
+  p=10 start 1: 140 evals, 431.5s elapsed, c̃=3.4299319701, g_norm=3.35e+01
+  p=10 start 1: 150 evals, 462.5s elapsed, c̃=6.9452998672, g_norm=7.45e+01
+  p=10 start 1: 160 evals, 493.1s elapsed, c̃=7.0008471820, g_norm=1.28e+02
+  p=10 start 1: 170 evals, 523.9s elapsed, c̃=7.0008471820, g_norm=1.28e+02
+  p=10 start 1: 11 evals, 31.1s elapsed, c̃=0.4999999824, g_norm=6.73e-07
+  p=10 start 1: 21 evals, 62.0s elapsed, c̃=0.5185469118, g_norm=2.03e-01
+  p=10 start 1: 31 evals, 92.6s elapsed, c̃=0.5919240772, g_norm=9.22e-01
+  p=10 start 1: 41 evals, 123.2s elapsed, c̃=0.9470266694, g_norm=3.84e+00
+  p=10 start 1: 51 evals, 153.8s elapsed, c̃=0.8263469847, g_norm=1.88e+00
+  p=10 start 1: 61 evals, 184.7s elapsed, c̃=0.7366406521, g_norm=8.28e-01
+  p=10 start 1: 71 evals, 215.6s elapsed, c̃=1.1580977636, g_norm=4.50e+00
+  p=10 start 1: 81 evals, 246.7s elapsed, c̃=0.5716414351, g_norm=2.09e+00
+  p=10 start 1: 91 evals, 277.5s elapsed, c̃=1.9608604902, g_norm=1.07e+01
+  p=10 start 1: 101 evals, 308.4s elapsed, c̃=2.0849290347, g_norm=2.62e+01
+  p=10 start 1: 111 evals, 339.4s elapsed, c̃=3.5078260371, g_norm=6.28e+01
+  p=10 start 1: 121 evals, 370.1s elapsed, c̃=3.5078260371, g_norm=6.28e+01
+  p=10 start 1: 131 evals, 401.3s elapsed, c̃=6.6590740318, g_norm=1.36e+02
+  p=10 start 1: 141 evals, 432.0s elapsed, c̃=6.9452998672, g_norm=7.45e+01
+  p=10 start 1: 151 evals, 462.9s elapsed, c̃=6.9452998672, g_norm=7.45e+01
+  p=10 start 1: 161 evals, 493.6s elapsed, c̃=6.9452998672, g_norm=7.45e+01
+  p=11 start 1: 4 evals, 44.0s elapsed, c̃=0.5000000000, g_norm=1.16e-10
+  p=11 start 1: 7 evals, 88.3s elapsed, c̃=0.5000000000, g_norm=1.11e-18
+  p=11 start 1: 10 evals, 133.0s elapsed, c̃=1227.5627493694, g_norm=1.54e+06
+  p=11 start 1: 12 evals, 163.0s elapsed, c̃=0.5000000000, g_norm=1.51e-16
+ERROR: LoadError: TaskFailedException
+
+    nested task error: AssertionError: isfinite(phi_c) && isfinite(dphi_c)
+    Stacktrace:
+      [1] secant2!(ϕdϕ::LineSearches.var"#ϕdϕ#make_ϕdϕ##0"{Optim.ManifoldObjective{Optim.Flat, NLSolversBase.OnceDifferentiable{Float64, Vector{Float64}, Float64, Vector{Float64}}}, Vector{Float64}, Vector{Float64}, Vector{Float64}}, alphas::Vector{Float64}, values::Vector{Float64}, slopes::Vector{Float64}, ia::Int64, ib::Int64, phi_lim::Float64, delta::Float64, sigma::Float64, display::Int64)
+        @ LineSearches ~/.julia/packages/LineSearches/lihz0/src/hagerzhang.jl:377
+      [2] (::LineSearches.HagerZhang{Float64, Base.RefValue{Bool}})(ϕ::Function, ϕdϕ::LineSearches.var"#ϕdϕ#make_ϕdϕ##0"{Optim.ManifoldObjective{Optim.Flat, NLSolversBase.OnceDifferentiable{Float64, Vector{Float64}, Float64, Vector{Float64}}}, Vector{Float64}, Vector{Float64}, Vector{Float64}}, c::Float64, phi_0::Float64, dphi_0::Float64)
+        @ LineSearches ~/.julia/packages/LineSearches/lihz0/src/hagerzhang.jl:277
+      [3] perform_linesearch!(state::Optim.LBFGSState{Vector{Float64}, Vector{Vector{Float64}}, Vector{Vector{Float64}}, Float64, Vector{Float64}}, method::Optim.LBFGS{Nothing, LineSearches.InitialStatic{Float64}, LineSearches.HagerZhang{Float64, Base.RefValue{Bool}}, Returns{Nothing}}, d::Optim.ManifoldObjective{Optim.Flat, NLSolversBase.OnceDifferentiable{Float64, Vector{Float64}, Float64, Vector{Float64}}})
+        @ Optim ~/.julia/packages/Optim/DtV5C/src/utilities/perform_linesearch.jl:38
+      [4] update_state!(d::NLSolversBase.OnceDifferentiable{Float64, Vector{Float64}, Float64, Vector{Float64}}, state::Optim.LBFGSState{Vector{Float64}, Vector{Vector{Float64}}, Vector{Vector{Float64}}, Float64, Vector{Float64}}, method::Optim.LBFGS{Nothing, LineSearches.InitialStatic{Float64}, LineSearches.HagerZhang{Float64, Base.RefValue{Bool}}, Returns{Nothing}})
+        @ Optim ~/.julia/packages/Optim/DtV5C/src/multivariate/solvers/first_order/l_bfgs.jl:225
+      [5] optimize(d::NLSolversBase.OnceDifferentiable{Float64, Vector{Float64}, Float64, Vector{Float64}}, initial_x::Vector{Float64}, method::Optim.LBFGS{Nothing, LineSearches.InitialStatic{Float64}, LineSearches.HagerZhang{Float64, Base.RefValue{Bool}}, Returns{Nothing}}, options::Optim.Options{Float64, QaoaXorsat.var"#plateau_callback#66"{Int64, Base.RefValue{Int64}, Vector{Float64}, Vector{QaoaXorsat.OptimizationTraceEntry}, Float64, typeof(chunk_callback)}}, state::Optim.LBFGSState{Vector{Float64}, Vector{Vector{Float64}}, Vector{Vector{Float64}}, Float64, Vector{Float64}})
+        @ Optim ~/.julia/packages/Optim/DtV5C/src/multivariate/optimize/optimize.jl:79
+      [6] optimize(d::NLSolversBase.OnceDifferentiable{Float64, Vector{Float64}, Float64, Vector{Float64}}, initial_x::Vector{Float64}, method::Optim.LBFGS{Nothing, LineSearches.InitialStatic{Float64}, LineSearches.HagerZhang{Float64, Base.RefValue{Bool}}, Returns{Nothing}}, options::Optim.Options{Float64, QaoaXorsat.var"#plateau_callback#66"{Int64, Base.RefValue{Int64}, Vector{Float64}, Vector{QaoaXorsat.OptimizationTraceEntry}, Float64, typeof(chunk_callback)}})
+        @ Optim ~/.julia/packages/Optim/DtV5C/src/multivariate/optimize/optimize.jl:45
+      [7] macro expansion
+        @ ~/qaoa-xorsat/src/optimization.jl:389 [inlined]
+      [8] (::QaoaXorsat.var"#58#59"{QaoaXorsat.var"#60#61"{Int64, Int64, Symbol, Float64, typeof(progress_callback), typeof(chunk_callback), TreeParams, Vector{Tuple{QAOAAngles, Float64, QaoaXorsat.AngleOptimizationStartResult}}, Vector{QaoaXorsat.AngleOptimizationStartSpec}, Base.OneTo{Int64}}})(tid::Int64; onethread::Bool)
+        @ QaoaXorsat ./threadingconstructs.jl:276
+      [9] #58
+        @ ./threadingconstructs.jl:243 [inlined]
+     [10] (::Base.Threads.var"#threading_run##0#threading_run##1"{QaoaXorsat.var"#58#59"{QaoaXorsat.var"#60#61"{Int64, Int64, Symbol, Float64, typeof(progress_callback), typeof(chunk_callback), TreeParams, Vector{Tuple{QAOAAngles, Float64, QaoaXorsat.AngleOptimizationStartResult}}, Vector{QaoaXorsat.AngleOptimizationStartSpec}, Base.OneTo{Int64}}}, Int64})()
+        @ Base.Threads ./threadingconstructs.jl:177
+Stacktrace:
+ [1] threading_run(fun::QaoaXorsat.var"#58#59"{QaoaXorsat.var"#60#61"{Int64, Int64, Symbol, Float64, typeof(progress_callback), typeof(chunk_callback), TreeParams, Vector{Tuple{QAOAAngles, Float64, QaoaXorsat.AngleOptimizationStartResult}}, Vector{QaoaXorsat.AngleOptimizationStartSpec}, Base.OneTo{Int64}}}, static::Bool)
+   @ Base.Threads ./threadingconstructs.jl:196
+ [2] macro expansion
+   @ ./threadingconstructs.jl:213 [inlined]
+ [3] optimize_angles(params::TreeParams; clause_sign::Int64, restarts::Int64, maxiters::Int64, initial_guesses::Vector{QAOAAngles{Float64}}, initial_guess_kind::Symbol, autodiff::Symbol, rng::MersenneTwister, g_abstol::Float64, on_evaluation::typeof(progress_callback), on_chunk::typeof(chunk_callback))
+   @ QaoaXorsat ~/qaoa-xorsat/src/optimization.jl:277
+ [4] optimize_depth_sequence(k::Int64, D::Int64, p_values::Vector{Int64}; clause_sign::Int64, restarts::Int64, maxiters::Int64, autodiff::Symbol, rng::MersenneTwister, on_result::typeof(result_callback), on_evaluation::Function, on_chunk::Function, warm_start::Nothing)
+   @ QaoaXorsat ~/qaoa-xorsat/src/optimization.jl:534
+ [5] top-level scope
+   @ ~/qaoa-xorsat/scripts/optimize_qaoa.jl:597
+ [6] include(mod::Module, _path::String)
+   @ Base ./Base.jl:306
+ [7] exec_options(opts::Base.JLOptions)
+   @ Base ./client.jl:317
+ [8] _start()
+   @ Base ./client.jl:550
+in expression starting at /home/stephenjordan_google_com/qaoa-xorsat/scripts/optimize_qaoa.jl:597
+srun: error: swift-c3dnodeset-15: task 0: Exited with exit code 1

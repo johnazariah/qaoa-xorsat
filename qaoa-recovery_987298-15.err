@@ -1,0 +1,25 @@
+Precompiling packages...
+    QaoaXorsat Being precompiled by another process (pid: 0, pidfile: /home/stephenjordan_google_com/.julia/compiled/v1.12/QaoaXorsat/qgVWo_H0iNu.ji.pidfile)
+ 131668.5 ms  ✓ QaoaXorsat
+  1 dependency successfully precompiled in 137 seconds. 52 already precompiled.
+preserved run_id=20260401T022716-k7-d8-p9-15-r2-i320-s1234
+preserved directory=/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260401T022716-k7-d8-p9-15-r2-i320-s1234
+resuming from: /home/stephenjordan_google_com/qaoa-xorsat/.project/results/optimization/runs/20260331T232833-k7-d8-p1-15-r2-i320-s1234
+warm-start from p=8: c̃=0.817282355859
+[ Info: JIT warmup...
+[ Info: JIT warmup complete, starting sweep
+  p=9 start 2: 38 evals, 30.7s elapsed, c̃=0.5011266295, g_norm=1.60e-02
+  p=9 start 2: 76 evals, 60.8s elapsed, c̃=0.5066048748, g_norm=1.17e-01
+  p=9 start 2: 114 evals, 91.0s elapsed, c̃=0.5026300903, g_norm=3.28e-02
+  p=9 start 2: 152 evals, 121.5s elapsed, c̃=0.5035518960, g_norm=6.80e-02
+  p=9 start 2: 190 evals, 151.8s elapsed, c̃=0.5026133759, g_norm=7.76e-02
+  p=9 start 2: 228 evals, 182.1s elapsed, c̃=0.5019214114, g_norm=6.26e-02
+  p=9 start 2: 267 evals, 212.8s elapsed, c̃=0.5114211456, g_norm=2.04e-01
+  p=9 start 2: 305 evals, 242.9s elapsed, c̃=0.5113106668, g_norm=1.88e-01
+  p=9 start 2: 343 evals, 273.2s elapsed, c̃=0.5289896360, g_norm=6.95e-01
+  p=9 start 2: 382 evals, 303.9s elapsed, c̃=0.5843969210, g_norm=8.72e-01
+  p=9 start 2: 420 evals, 334.1s elapsed, c̃=0.5272968711, g_norm=2.86e-01
+  p=9 start 2: 459 evals, 364.8s elapsed, c̃=0.5098735325, g_norm=1.25e-01
+  p=9 start 2: 497 evals, 395.2s elapsed, c̃=0.5804965911, g_norm=1.02e+00
+  p=9 start 2: 535 evals, 425.7s elapsed, c̃=0.5031902553, g_norm=4.88e-02
+  p=9 start 2: 573 evals, 456.2s elapsed, c̃=0.5804965911, g_norm=1.02e+00

@@ -1,0 +1,29 @@
+preserved run_id=20260403T033822-k7-d8-p9-15-r2-i320-s1234
+preserved directory=/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260403T033822-k7-d8-p9-15-r2-i320-s1234
+resuming from: /home/stephenjordan_google_com/qaoa-xorsat/.project/results/optimization/runs/20260331T232833-k7-d8-p1-15-r2-i320-s1234
+warm-start from p=8: c̃=0.817282355859
+[ Info: JIT warmup...
+[ Info: JIT warmup complete, starting sweep
+  p=9 start 2: 30 evals, 30.1s elapsed, c̃=0.5000121572, g_norm=3.67e-04
+  p=9 start 1: 30 evals, 30.6s elapsed, c̃=0.6900317191, g_norm=6.25e-01
+  p=9 start 2: 60 evals, 61.0s elapsed, c̃=0.4999997918, g_norm=1.06e-05
+  p=9 start 1: 60 evals, 61.4s elapsed, c̃=0.6800263067, g_norm=5.75e-01
+  p=9 start 2: 89 evals, 91.0s elapsed, c̃=0.5003971831, g_norm=8.24e-03
+  p=9 start 1: 89 evals, 91.5s elapsed, c̃=0.5804108394, g_norm=3.32e-01
+  p=9 start 2: 117 evals, 121.4s elapsed, c̃=0.5004331591, g_norm=9.21e-03
+  p=9 start 1: 117 evals, 121.7s elapsed, c̃=0.6794049926, g_norm=7.05e-01
+  p=9 start 2: 146 evals, 152.0s elapsed, c̃=0.5009230963, g_norm=1.08e-02
+  p=9 start 1: 146 evals, 152.7s elapsed, c̃=0.6125316317, g_norm=2.72e-01
+  p=9 start 2: 175 evals, 182.2s elapsed, c̃=0.5005906974, g_norm=1.46e-02
+  p=9 start 1: 176 evals, 183.7s elapsed, c̃=0.7676323561, g_norm=7.50e-01
+  p=9 start 2: 206 evals, 212.9s elapsed, c̃=0.5018006692, g_norm=4.74e-02
+  p=9 start 2: 241 evals, 243.8s elapsed, c̃=0.5004863048, g_norm=6.79e-03
+  p=9 start 2: 275 evals, 274.4s elapsed, c̃=0.5004827285, g_norm=4.16e-03
+  p=9 start 2: 308 evals, 304.7s elapsed, c̃=0.5017603989, g_norm=3.99e-02
+  p=9 start 2: 342 evals, 334.8s elapsed, c̃=0.5004146933, g_norm=5.10e-03
+  p=9 start 2: 376 evals, 364.9s elapsed, c̃=0.5003671114, g_norm=1.11e-02
+  p=9 start 2: 410 evals, 395.7s elapsed, c̃=0.5019222277, g_norm=2.14e-02
+  p=9 start 2: 444 evals, 426.0s elapsed, c̃=0.5016769181, g_norm=3.23e-02
+  p=9 start 2: 478 evals, 456.6s elapsed, c̃=0.5016769181, g_norm=3.23e-02
+/var/spool/slurmd/job992631/slurm_script: line 52: 11542 Killed                  julia --project=. -t "$THREADS" scripts/optimize_qaoa.jl "$CONFIG"
+slurmstepd: error: Detected 1 oom_kill event in StepId=992631.batch. Some of the step tasks have been OOM Killed.

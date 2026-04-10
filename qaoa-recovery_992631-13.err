@@ -1,0 +1,6 @@
+preserved run_id=20260403T033822-k6-d7-p12-15-r2-i320-s1234
+preserved directory=/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260403T033822-k6-d7-p12-15-r2-i320-s1234
+resuming from: /home/stephenjordan_google_com/qaoa-xorsat/.project/results/optimization/runs/20260401T031011-k6-d7-p1-11-r2-i320-s1234
+warm-start from p=11: c̃=0.500000000000
+/var/spool/slurmd/job992644/slurm_script: line 52:  8998 Killed                  julia --project=. -t "$THREADS" scripts/optimize_qaoa.jl "$CONFIG"
+slurmstepd: error: Detected 1 oom_kill event in StepId=992644.batch. Some of the step tasks have been OOM Killed.

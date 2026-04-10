@@ -1,0 +1,10 @@
+k = 5
+D = 7
+p_min = 11
+p_max = 15
+restarts = 2
+maxiters = 320
+seed = 1234
+preserve = true
+autodiff = "adjoint"
+resume_from = "/home/stephenjordan_google_com/qaoa-xorsat/.project/results/optimization/runs/20260331T232833-k5-d7-p1-15-r2-i320-s1234"
