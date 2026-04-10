@@ -4,6 +4,36 @@
 # Uses Double64 arithmetic to avoid Float64 precision loss at high (k,D).
 # With 55 nodes, all 15 pairs run simultaneously.
 #
+# ── CLEAN START INSTRUCTIONS ──────────────────────────────────────
+#
+# On the login node, run these steps IN ORDER before sbatch:
+#
+#   1. Kill all running jobs:
+#        scancel -u $USER
+#
+#   2. Wait for CG-state jobs to clear (check with squeue -u $USER).
+#      If stuck, ask admin to clear them.
+#
+#   3. Pull latest code:
+#        cd ~/qaoa-xorsat
+#        git pull origin main
+#
+#   4. Remove ALL old result files (critical — resume logic reads these):
+#        rm -f results/swarm-d64-k*.csv
+#
+#   5. Precompile ONCE on the login node (avoids 15-way race):
+#        julia --project=. -e 'using DoubleFloats, QaoaXorsat; println("Ready")'
+#
+#   6. Submit:
+#        sbatch scripts/qaoa_d64_sweep.sh
+#
+#   7. Push results periodically:
+#        git add -A results/
+#        git commit -m "Stephen: pure D64 swarm results"
+#        git push origin HEAD:stephen-d64-results
+#
+# ──────────────────────────────────────────────────────────────────
+#
 #SBATCH --job-name=qaoa-d64
 #SBATCH --array=1-15
 #SBATCH --partition=c3d
