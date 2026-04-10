@@ -40,7 +40,7 @@
 #SBATCH --time=48:00:00
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=28
-#SBATCH --mem=2700G
+#SBATCH --mem=1448G
 #SBATCH --requeue
 #SBATCH --comment="maintain_node"
 #SBATCH --output=qaoa-d64_%A-%a.out
