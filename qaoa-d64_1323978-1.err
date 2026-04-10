@@ -1,0 +1,5 @@
+
+[9666] signal 15: Terminated
+in expression starting at /home/stephenjordan_google_com/qaoa-xorsat/scripts/swarm_chain_d64.jl:99
+unknown function (ip: 0x73859fa98d6f) at /lib/x86_64-linux-gnu/libc.so.6
+pthread_cond_wait at /lib/x86_64-linux-gnu/libc.so.6 (unknown line)
