@@ -62,8 +62,8 @@ echo ""
 if [[ ! "$JOBID" =~ ^[0-9]+$ ]]; then
     echo "ERROR: sbatch failed. Output was: $JOBID"
     echo ""
-    echo "--- sbatch error details ---"
-    sbatch scripts/qaoa_d64_sweep.sh 2>&1
+    echo "To debug, try running manually:"
+    echo "  sbatch scripts/qaoa_d64_sweep.sh"
     exit 1
 fi
 

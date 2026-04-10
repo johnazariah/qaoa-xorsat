@@ -24,22 +24,30 @@ function/gradient call promotes angles to D64 before evaluation.
 
 From the `.err` logs you pushed (thank you!):
 
-**Three job submissions** (1323963, 1323978, 1323993):
-- Job 1323963: All tasks CANCELLED at 03:09:56 (by the `scancel` in run-d64-sweep.sh when you re-ran the script)
-- Job 1323978: Tasks CANCELLED at 03:21:25 (same — you re-ran the script again)
-- Job 1323993: The third attempt. This one ran.
+**Three job IDs** (1323963, 1323978, 1323993) from what was likely a
+single run of `run-d64-sweep.sh`:
 
-**Job 1323993 (the run that produced results):**
-- Tasks 1=(3,4), 3=(3,6), 4=(3,7), 6=(4,5): SIGTERM (signal 15)
-  while running at swarm_chain_d64.jl:99. They finished p=7-8 then
-  got killed. Likely from running run-d64-sweep.sh again or manual scancel.
-- Tasks 2=(3,5), 5=(3,8): No .err file at all — may not have been
-  allocated nodes, or their .err was written elsewhere.
-- Tasks 7-15: Empty .err = ran without errors. These produced data
-  through p=9-10 before the monitoring script stopped pushing at 19:44 UTC.
+There's a bug in `run-d64-sweep.sh`: if `sbatch --parsable` returns
+anything unexpected (a warning, extra whitespace, etc.), the error
+handling path runs `sbatch` a SECOND time to "show the error details"
+— accidentally submitting a duplicate job. So:
 
-**All 15 pairs DID produce CSV data** through p=7-9, so no tasks "failed
-to start" — they just got killed mid-run by subsequent scancel calls.
+- Job 1323963: First submission (from `sbatch --parsable`)
+- Job 1323978: Second submission (from the error-handler's `sbatch`)
+- Script exits with error
+- Job 1323993: You likely ran `sbatch` manually after the script failed
+
+Two overlapping array jobs on the same nodes causes resource contention.
+Tasks 1=(3,4), 3=(3,6), 4=(3,7), 6=(4,5) got SIGTERM (signal 15) —
+probably evicted by the scheduler to make room, or you manually
+cancelled the stray jobs. Tasks 2=(3,5) and 5=(3,8) have no .err file
+at all — they may not have been allocated nodes.
+
+**All 15 pairs DID produce CSV data** through p=7-9. The bug has been
+fixed: the error handler now prints a message instead of re-submitting.
+
+**Bottom line:** Nothing is wrong with the compute code. The SLURM
+submission script had a double-submit bug that caused chaos.
 
 ## Action: pull new code and restart from scratch
 
