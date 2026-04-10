@@ -2,16 +2,34 @@
 
 Quick guide for running on a SLURM cluster with high-memory nodes.
 
-## What's new (April 2, 2026)
+## What's new (April 10, 2026)
 
-**The overflow problem is fixed.** Previous runs produced impossible values
-(c̃ > 1, NaN, -1e+88) at high (k,D,p) because the branch tensor recurrence
-raised complex arrays to `^(k-1)` and `^(D-1)` at each step, compounding
-magnitudes exponentially until Float64 overflowed (~1.8e+308).
+### Double64 precision for k≥6 pairs
 
-The fix has two layers:
+At k≥6, D≥7, p≥10, Float64 (15 digits) suffers catastrophic cancellation
+in the 2^{2p+1}-element sums. The evaluator returns correct but meaningless
+values (c̃ > 1). This is NOT overflow — intermediates stay near magnitude 1.
 
-### 1. Normalized evaluator (prevents overflow at the source)
+Fix: `swarm_chain_d64.jl` uses DoubleFloats.jl (~31 digits). The swarm
+runs in Float64 for speed; only the evaluation and gradient use Double64.
+Overhead: 3-5×. Submit all 15 pairs via:
+
+    sbatch scripts/qaoa_d64_sweep.sh
+
+Or use the all-in-one script that also monitors and auto-pushes results:
+
+    bash scripts/run-d64-sweep.sh 2>&1 | tee /tmp/qaoa-d64-run.log
+
+### Swarm/memetic optimizer (April 5)
+
+At high (k,D), standard L-BFGS with warm-starting fails — the landscape
+is flat (c̃ ≈ 0.5) at most starting points. The swarm finds basins that
+warm-starting misses: 100 random candidates, short L-BFGS bursts,
+cull/crossover, early exit + polish. Submit via:
+
+    sbatch scripts/qaoa_swarm_sweep.sh
+
+### Normalized evaluator (April 2)
 
 Before each power operation, vectors are divided by their max magnitude.
 Scale factors are tracked in log space and applied once at the end:

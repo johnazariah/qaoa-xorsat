@@ -93,6 +93,76 @@ overflow detection, and provenance tracking.  The warm-start package
 (`prepare-cluster-run.jl`) generates ready-to-submit SLURM configs from the
 composite best angles across all machines.
 
+### 8. Double64 Precision (April 10)
+
+At k≥6, D≥7, p≥10, the branch tensor recurrence suffers catastrophic
+cancellation: ~2M complex terms nearly cancel, and the physical signal
+lives below Float64's 15-digit precision.  The evaluator returns correct
+but meaningless values (S > 1, giving c̃ > 1).
+
+Fix: DoubleFloats.jl provides Double64 (~31 digits) via double-double
+arithmetic.  The pipeline is already generic over element type T, so
+`QAOAAngles(Double64.(γ), Double64.(β))` propagates through the entire
+evaluation and gradient.  Measured overhead: 3-5× (not 10-100× as
+initially feared).  The swarm optimizer runs in Float64 for speed; only
+the final evaluation and gradient are computed in Double64.
+
+Validated: (6,7) p=10 returns 3.23 in Float64 (broken) vs 0.813 in
+Double64 (valid).
+
+---
+
+## Entry 31 — Double64 Precision Fix + Final Sweep (10 April 2026)
+
+### Summary
+
+Diagnosed the k≥6 precision wall: NOT overflow (magnitudes stay < 1.5)
+but catastrophic cancellation in the 2^{2p+1}-element sums.  Float64's
+15 digits insufficient when (k-1)(D-1) ≥ 30.
+
+Implemented `swarm_chain_d64.jl` — runs the swarm in Float64 (fast
+basin discovery) and re-evaluates the winner in Double64 (correct value).
+Added `qaoa_d64_sweep.sh` SLURM script for all 15 pairs.
+
+Built `run-d64-sweep.sh` — all-in-one script that diagnoses, submits,
+monitors every 5 minutes, and auto-pushes results to git every 10 minutes.
+Stephen ran it on 55 nodes; all 15 pairs running from p=1 with D64.
+
+Key validation: at (6,7) p=10, Float64 returns c̃ = 3.23 (broken),
+Double64 returns c̃ = 0.813 (valid).  Both evaluators agree to 1e-9 at
+low (k,D) where Float64 has sufficient precision.
+
+### Commits
+
+- `30e18fb` feat: Double64 swarm for all 15 pairs
+- `9d0d8e6` feat: all-in-one D64 sweep — diagnose, submit, monitor, push
+- `635e591` fix: integer expression bug in monitor loop
+
+---
+
+## Entry 30 — Warm-Start Path Bug + Swarm on Stephen's Cluster (8 April 2026)
+
+### Summary
+
+The warm-start TOML configs had absolute Mac paths (`/Users/johnaz/...`)
+that didn't exist on Stephen's cluster.  Fixed to relative paths.
+Stephen submitted but many pairs collapsed to 0.500 because the
+warm-start angles came from pre-normalization runs (overflow-adjacent
+basins that evaluate to 0.5 with the corrected code).
+
+Solution: deployed the swarm optimizer on Stephen's cluster via
+`qaoa_swarm_sweep.sh`.  The swarm finds real basins from p=1.  Results:
+13 of 15 pairs beat DQI+BP.  The remaining two ((5,6) and (6,8))
+within 5 basis points.
+
+For k≥6, the swarm found valid basins through p=8-9 but hit the
+Float64 precision wall at p≥10.  This led to the Double64 fix (Entry 31).
+
+### Commits
+
+- `76e3e19` fix: use relative paths in warm-start configs
+- `da3d2ac` feat: SLURM swarm sweep for stuck pairs
+
 ---
 
 ## Entry 29 — P710 Delivers p=8/9, Fleet Decommissioned (6–7 April 2026)

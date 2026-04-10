@@ -54,9 +54,13 @@ QAOA surpasses DQI+BP for 13 of 15 pairs. To our knowledge, no prior exact finit
 
 2. **Manual adjoint differentiation**: Reverse-mode gradients through the full evaluation pipeline at ~1.6× a single forward evaluation, independent of p. The WHT is self-adjoint; β gradients use a log-derivative trick. 12× faster than forward-mode AD at p=8.
 
-3. **Normalized branch tensor recurrence**: Per-step normalization prevents Float64 overflow at high (k,D,p) by tracking scale in log space. Enables exact evaluation at all 15 pairs through p=15 on high-memory nodes.
+3. **Normalized branch tensor recurrence**: Threshold-based normalization prevents Float64 overflow at high (k,D,p) by tracking scale in log space. For k≥6 where Float64 precision is insufficient, Double64 arithmetic (~31 digits) is used via DoubleFloats.jl with ~3-5× overhead.
 
-3. **Generic fold engine**: The Basso-Farhi branch-tensor contraction is a catamorphism over the light-cone tree, parametrised by a cost algebra. MaxCut and Max-k-XORSAT are different instantiations of the same interface — validated by reproducing Farhi et al. (2025) MaxCut results with no code changes.
+4. **Generic fold engine**: The Basso-Farhi branch-tensor contraction is a catamorphism over the light-cone tree, parametrised by a cost algebra. MaxCut and Max-k-XORSAT are different instantiations of the same interface — validated by reproducing Farhi et al. (2025) MaxCut results with no code changes.
+
+5. **Plateau detection**: Per-iteration Optim.jl callback with a 30-value circular buffer. Stops the optimizer when the objective range plateaus below g_abstol, reducing p=12 wall time from 2+ hours to ~40 minutes.
+
+6. **Swarm/memetic optimizer**: Population-based basin discovery for rugged landscapes at high (k,D). 100 random candidates, short L-BFGS bursts, cull/crossover, early exit when stagnant, full L-BFGS polish on winner. Finds basins that standard multi-start L-BFGS misses — (7,8) went from failing at p=3 to valid results at p=8+.
 
 ## Quick Start
 
