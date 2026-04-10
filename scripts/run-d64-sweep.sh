@@ -75,9 +75,14 @@ while true; do
     NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
     # Check job status
-    RUNNING=$(squeue -j $JOBID --noheader 2>/dev/null | wc -l | tr -d ' ')
-    COMPLETED=$(sacct -j $JOBID --format=State --noheader 2>/dev/null | grep -c "COMPLETED" || echo 0)
-    FAILED=$(sacct -j $JOBID --format=State --noheader 2>/dev/null | grep -cE "FAILED|CANCELLED|TIMEOUT" || echo 0)
+    RUNNING=$(squeue -j $JOBID --noheader 2>/dev/null | wc -l | tr -d '[:space:]')
+    COMPLETED=$(sacct -j $JOBID --format=State --noheader 2>/dev/null | grep -c "COMPLETED" || true)
+    FAILED=$(sacct -j $JOBID --format=State --noheader 2>/dev/null | grep -cE "FAILED|CANCELLED|TIMEOUT" || true)
+
+    # Default to 0 if empty
+    RUNNING=${RUNNING:-0}
+    COMPLETED=${COMPLETED:-0}
+    FAILED=${FAILED:-0}
 
     echo "[$NOW] Running: $RUNNING  Completed: $COMPLETED  Failed: $FAILED"
 
