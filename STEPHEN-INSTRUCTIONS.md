@@ -1,182 +1,133 @@
-# Status Update for Stephen — April 10, 2026
+# Status Update for Stephen — April 11, 2026
 
-## The good news: 13 of 15 pairs beat DQI+BP
+## CRITICAL: Previous D64 results are garbage — must restart
 
-The swarm optimizer on your cluster is working. Here's the current scorecard:
+We discovered overnight that the previous `swarm_chain_d64.jl` was
+running the optimizer in Float64 and only re-evaluating the winner in
+Double64. This means:
 
-    k=3 family (warm-start sweep, your cluster):
-      (3,4) p=13  c̃=0.881  beats DQI+BP, Prange
-      (3,5) p=13  c̃=0.843  beats DQI+BP, Prange, Regev+FGUM
-      (3,6) p=12  c̃=0.809  beats DQI+BP, Prange, Regev+FGUM
-      (3,7) p=11  c̃=0.779  beats DQI+BP, Prange, Regev+FGUM
-      (3,8) p=11  c̃=0.768  beats DQI+BP, Prange, Regev+FGUM
+- The L-BFGS was following Float64 gradients (corrupted at high k,D,p)
+- It converged to angles that minimize Float64 noise, not the real objective
+- Re-evaluating garbage angles in D64 gives you the true value of garbage
 
-    k=4 family (swarm, your cluster):
-      (4,5) p=11  c̃=0.861  beats DQI+BP, Prange
-      (4,6) p=10  c̃=0.827  beats DQI+BP
-      (4,7) p=9   c̃=0.798  beats DQI+BP, Prange
-      (4,8) p=9   c̃=0.780  beats DQI+BP, Prange
+**Evidence:**
+- (6,7) p=9: F64 optimized → c̃=0.855, D64 re-eval → 0.814, pure D64 → TBD
+- (7,8) p=9: F64 optimized → c̃=0.999, D64 re-eval → 0.629 (worse than p=7!)
+- (6,8) p=9: F64 optimized → c̃=0.948, D64 re-eval → 0.798
 
-    k=5 family (swarm, your cluster):
-      (5,6) p=9   c̃=0.838  trailing DQI+BP (0.843)
-      (5,7) p=9   c̃=0.808  trailing DQI+BP (0.814)
-      (5,8) p=9   c̃=0.805  beats DQI+BP (0.788)
+The fix (now pushed to main): `eval_eltype=Double64` parameter that makes
+the optimizer evaluate f and ∇f in Double64 throughout. The L-BFGS still
+operates on Float64 parameter vectors (Optim.jl requirement), but every
+function/gradient call promotes angles to D64 before evaluation.
 
-    k=6,7 (swarm, your cluster):
-      (6,7) p=9   c̃=0.855  beats DQI+BP (0.828)
-      (6,8) p=8   c̃=0.802  trailing DQI+BP (0.803)
-      (7,8) p=8   c̃=0.819  beats DQI+BP (0.813)
+## What happened to the cluster jobs
 
-13 of 15 beat DQI+BP. The two trailing pairs — (5,6) and (6,8) — are
-within 5-6 basis points and would likely cross at one more depth.
+From the `.err` logs you pushed (thank you!):
 
-## The bad news: precision wall at k>=6, p>=10
+**Three job submissions** (1323963, 1323978, 1323993):
+- Job 1323963: All tasks CANCELLED at 03:09:56 (by the `scancel` in run-d64-sweep.sh when you re-ran the script)
+- Job 1323978: Tasks CANCELLED at 03:21:25 (same — you re-ran the script again)
+- Job 1323993: The third attempt. This one ran.
 
-The 0.5 and 0.99 values at higher depths for k>=6 are NOT overflow.
-I verified locally: all three independent evaluators (normalized,
-un-normalized, and qaoa_expectation) agree on the bad values. The
-evaluator is computing correctly — the problem is that Float64
-precision isn't sufficient.
+**Job 1323993 (the run that produced results):**
+- Tasks 1=(3,4), 3=(3,6), 4=(3,7), 6=(4,5): SIGTERM (signal 15)
+  while running at swarm_chain_d64.jl:99. They finished p=7-8 then
+  got killed. Likely from running run-d64-sweep.sh again or manual scancel.
+- Tasks 2=(3,5), 5=(3,8): No .err file at all — may not have been
+  allocated nodes, or their .err was written elsewhere.
+- Tasks 7-15: Empty .err = ran without errors. These produced data
+  through p=9-10 before the monitoring script stopped pushing at 19:44 UTC.
 
-### What's happening
+**All 15 pairs DID produce CSV data** through p=7-9, so no tasks "failed
+to start" — they just got killed mid-run by subsequent scancel calls.
 
-The Basso recurrence sums ~2^{2p+1} complex terms that nearly cancel.
-At (6,7) p=10, that's 2 million terms. The physical signal (the
-deviation from c̃ = 0.5) lives in the last few digits of precision.
-After 10 steps of ^5 and ^6, the accumulated floating-point error
-exceeds the signal.
+## Action: pull new code and restart from scratch
 
-The symptom: S = Re(sum of root_kernel * iWHT(msg_hat^k)) comes
-out as 5.45 instead of ~0.71. The individual intermediates never
-exceed magnitude ~1.5 — no Float64 overflow, no normalization needed.
-The error is pure cancellation noise.
+The code on `main` now has the pure D64 fix. **You must restart from
+p=1** because all existing D64 results were optimised with corrupted
+Float64 gradients.
 
-This is fundamentally different from the k=3,4,5 cases where the
-evaluator works fine through p=13. The (k-1)(D-1) = 30 or 42
-exponent at each step amplifies precision loss much faster than
-the (k-1)(D-1) = 6 at k=3.
-
-### Affected pairs
-
-    (6,7): valid through p=9, bad at p>=10
-    (6,8): valid through p=8, bad at p>=9
-    (7,8): valid through p=8, bad at p>=9
-
-All other pairs are fine at their current depths.
-
-## Potential fix: Double64 arithmetic
-
-Julia has DoubleFloats.jl which provides Double64 — ~31 digits of
-precision (vs Float64's ~15). The Basso pipeline is already generic
-over the element type T via QAOAAngles{T}, so in principle:
-
-    using DoubleFloats
-    angles = QAOAAngles(Double64.(gamma), Double64.(beta))
-    val = basso_expectation_normalized(params, angles; clause_sign=1)
-
-The question is performance. I haven't benchmarked it yet. Double64
-uses two Float64s to represent each number (double-double arithmetic).
-The theoretical overhead is:
-- Addition: ~2x (error-free transformation)
-- Multiplication: ~4x (Dekker's algorithm)
-- The WHT butterfly is add-heavy, so maybe 2-3x overall
-- The power operations are multiply-heavy, so maybe 4-5x
-
-So a rough estimate is 3-4x slower, not 10-100x. The WHT itself
-might even vectorize reasonably since Double64 is still 128 bits.
-This is worth trying if you want k>=6 at p>=10.
-
-I can implement and test this quickly if you want to try it on
-the cluster.
-
-## Action: kill everything and run Double64 sweep
-
-The Double64 swarm is ready. It runs ALL 15 pairs from p=1 with
-31-digit precision. Your 55 nodes will run them all simultaneously.
-
-Step 1 — kill all existing jobs:
+Step 1 — kill everything:
 
     scancel -u $USER
 
-Step 2 — pull and install the new dependency:
+Step 2 — pull and rebuild:
 
     cd ~/qaoa-xorsat
     git pull origin main
     julia --project=. -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'
 
-Step 3 — submit:
+Step 3 — delete old (garbage) results:
+
+    rm -f results/swarm-d64-k*.csv
+
+Step 4 — submit directly (don't use run-d64-sweep.sh to avoid the scancel issue):
 
     sbatch scripts/qaoa_d64_sweep.sh
 
-That's it. 15 SLURM tasks, one per (k,D) pair, each from p=1 to p=15.
-Results go to `results/swarm-d64-k{K}d{D}.csv`, written per depth.
+Step 5 — monitor (optional, in a separate terminal):
 
-Step 4 — push when done:
+    watch -n 300 'for f in results/swarm-d64-k*.csv; do [ -f "$f" ] || continue; tail -1 "$f" | grep "^[0-9]"; done'
 
-    git add -f results/swarm-d64-*.csv
-    git commit -m "Stephen: Double64 swarm results"
-    git push origin stephen-d64-results
+Step 6 — push results periodically:
 
-## Best values with angles (for the paper)
+    git add -f results/swarm-d64-k*.csv
+    git commit -m "Stephen: pure D64 swarm results"
+    git push origin HEAD:stephen-d64-results
 
-Format: k, D, p, c̃, gamma (semicolon-separated), beta (semicolon-separated)
+**Important:** Use `git push origin HEAD:stephen-d64-results` (not
+`git push origin stephen-d64-results`) — the latter fails with
+"src refspec does not match" because there's no local branch with
+that name; HEAD:remote-branch is the correct syntax.
 
-    3,4,13,0.880732724898
-      gamma: 2.9259240447541752;0.4063401256928396;0.4513417506583604;0.47274681062141793;0.48161656854148177;0.48674832574684057;0.49372631571338044;0.5014696778091581;0.511630003989789;0.5310145803831907;0.5782399718531627;0.6510096305686411;0.7529080023751171
-      beta:  1.9509369783464787;0.3091208329827633;0.2868451526519101;0.27977384718906523;0.2761445353676687;0.27466681388171077;0.27337828819697624;0.26917572429081366;0.2615467055727334;0.24748930718256765;0.2194996827237565;0.17667322880083194;0.08214330466175507
+## What's different in the new code
 
-    3,5,13,0.842939019160
-      gamma: 3.338850450956096;3.5110132157807294;3.542575718532385;3.557134413791582;3.5666026764264207;3.572884679813694;3.5803022044023063;3.5982089762153193;3.622213140401806;3.6776704909807036;3.7520314606139746;3.833221139741797;3.8377856788298432
-      beta:  2.756638887585415;0.31477667288583533;2.8533889504781107;0.2816697813168935;2.867380920371862;0.2687098421374101;2.877774749505637;0.24399983491020524;2.925598733042194;0.18775585982988435;2.992566348731548;0.11069510031860297;3.0821494034848937
+1. `src/optimization.jl`: Added `eval_eltype` keyword to `optimize_angles()`
+   and `swarm_optimize()`. When set to `Double64`, all f/∇f evaluations
+   promote angles to Double64 before calling the evaluator. Gradients
+   are computed in D64 and converted back to Float64 for L-BFGS.
 
-    3,6,12,0.809495360297
-      gamma: 0.1826459779445191;0.33423994671810153;0.3602940379694145;0.3769926639423632;0.3840156240209217;0.3909721954475506;0.40517800836871143;0.4269573917417847;0.4620776174403527;0.513503955643417;0.5807215057218688;0.5841744007839946
-      beta:  0.3833148610997568;0.30941643518642137;0.28867883687802626;0.28247428858421864;0.275522284270304;0.271220257092476;0.2639424023779199;0.24446989138621583;0.21126527270270923;0.16599781054588442;0.10571808257500072;0.04583441383584888
+2. `scripts/swarm_chain_d64.jl`: Now passes `eval_eltype=Double64` to
+   `swarm_optimize`. No more "optimize in F64, re-evaluate in D64" hack.
 
-    3,7,11,0.778760214189
-      gamma: 3.2580077324995864;3.437855166773294;2.7932523577991484;3.032245176194622;0.4898594120412064;5.922187888101452;5.91186841943535;5.897219238516073;5.869548679103173;5.814303196565583;5.7568138604461065
-      beta:  2.5175212106351843;1.225124449769308;2.099428380105147;0.1769770929664053;1.2883505198997414;2.863567046995858;2.875750809041636;2.8949361502254147;2.924667898184309;2.9748929500031767;3.059884512000634
+3. `scripts/run-d64-sweep.sh`: Added cleanup of old CSV files. But I
+   recommend NOT using this script (see Step 4 above) — its `scancel -u`
+   is what killed your previous runs.
 
-    3,8,11,0.767642417811
-      gamma: 2.980161460888664;0.28865444302895915;0.314357442311905;0.3241407184588411;0.3281789374436612;0.33184277035818777;0.3530380461529652;0.3781337331660862;0.41992530379996285;0.47391464309100984;0.4826063005711482
-      beta:  1.9549712574919396;0.3155483559355014;0.29111887521277224;0.27735723441612625;0.2625213259384555;0.2564268399235414;0.2409556241801624;0.21110946362805205;0.16962388864966865;0.10962722269933566;0.05156220693412435
+## Expected timing
 
-    4,5,11,0.860527841387
-      gamma: 6.0483348392145775;5.886517750776545;5.860860753476075;5.849161272155168;5.84373630427307;5.837680928777936;5.826820156581388;5.800910154807641;5.748067210053085;5.6792125138466885;5.649440497615468
-      beta:  1.3001526217028019;1.3463077430091834;1.3562802047427958;1.3592662103786852;1.360811676133799;1.363175444396211;1.3668175917046042;1.3772228388433672;1.402017443600281;1.4547899233848265;1.5283695942439384
+Pure D64 is ~3-5× slower than Float64 per evaluation. Rough estimates
+per depth (wall time for one (k,D) pair with 28 threads, pop=100):
 
-    4,6,10,0.826908423652
-      gamma: 3.3558099769210976;0.3580361600378153;0.3828215775779125;0.3910894885364235;0.3937487054952405;0.4006966724553502;0.4186072481100627;0.4454553600910009;0.49571311502635623;0.5579784346769782
-      beta:  0.27416346431007405;1.7977379974334686;1.7864899663601266;1.7847284355630324;1.7842389053088026;1.7829525431703332;1.7778128208297088;1.7581583881088043;1.7210104987595773;1.6432337654422269
+    p=1-5:  minutes
+    p=6-8:  1-4 hours
+    p=9:    5-20 hours (varies by k,D)
+    p=10:   1-3 days
+    p=11+:  days to week
 
-    4,7,9,0.797792909185
-      gamma: 2.9402036995675536;2.811488384325891;2.7925611098591663;2.783691431652503;2.77960965123617;2.771873592906175;2.7547349917306523;2.7100856010252796;2.6514369958973796
-      beta:  1.845570017328073;1.34595483654163;0.2144130819914235;1.3595868567157077;1.7793142642179827;1.3699625933044999;1.7562184772075389;1.41601981803393;1.6501773296872817
+With 55 nodes running all 15 pairs simultaneously, you should have
+p=9 for all pairs within ~24 hours and p=10+ within a few days.
 
-    4,8,9,0.779504870278
-      gamma: 3.329358819325344;0.3071731133731652;3.465464087793778;3.473763918466827;3.477339998821908;3.483041565764412;3.4982990941403713;3.541902267444925;3.5943783764884767
-      beta:  1.8461253328725955;1.7969623471150518;1.7853513818759628;0.21245992006273307;0.20793672748337766;0.19905336690742223;0.1837554337973091;0.15195030869563733;0.07793558484061096
+## Best values (what we can trust from Float64 runs)
 
-    5,6,9,0.837542087855
-      gamma: 6.041714645066912;2.76068225649772;2.743671583159628;2.740151514815171;2.7371406284045023;2.7265127305455974;2.7064512105066756;2.666725778158285;2.597056816370173
-      beta:  2.9246742719596;2.960388996911199;2.9649612734661193;2.9639879539069773;2.960815260260092;2.9609141742706613;2.9716875986089253;2.996305512389693;3.0673512077626284
+These values from the PREVIOUS Float64 runs are still valid because
+they're below the precision wall:
 
-    5,7,9,0.808222785373
-      gamma: 2.908994110807174;5.92169130598208;0.5355658272424374;6.16639675635152;0.39074757623025164;0.39340970835634753;0.4241511120013379;0.47631406000315546;0.4878353463649694
-      beta:  2.9200891064343972;1.3827819991197847;0.09899609971753376;2.842589769133546;2.967977405685721;2.971676585888564;2.987440160777211;3.032343461976512;3.089398990848089
+    (3,4) p=13 c̃=0.881   ← F64 reliable through p=13
+    (3,5) p=13 c̃=0.843
+    (3,6) p=11 c̃=0.807
+    (3,7) p=11 c̃=0.779
+    (3,8) p=11 c̃=0.768
+    (4,5) p=11 c̃=0.861
+    (4,6) p=10 c̃=0.827
+    (4,7) p=10 c̃=0.806   ← from local runs, not swarm
+    (4,8) p=9  c̃=0.779
+    (5,6) p=9  c̃=0.838
+    (5,7) p=9  c̃=0.815   ← from warm-start, not swarm
+    (5,8) p=9  c̃=0.805
+    (6,7) p=8  c̃=0.819   ← p=9 was garbage (F64 said 0.855)
+    (6,8) p=8  c̃=0.802
+    (7,8) p=7  c̃=0.800   ← p=8 was inflated (0.819 F64 vs 0.803 D64)
 
-    5,8,9,0.804543438157
-      gamma: 2.9313355767260276;3.4677688363671733;5.941446714113626;5.940407060305394;5.937461490681156;5.926390197789383;5.894778181573398;5.84760632298507;5.837514329681935
-      beta:  1.3539367958968054;1.386600058988872;2.964332418265869;2.966102889524705;2.967897742183249;2.9770826093633307;2.997888001929685;3.0354005618591917;3.09647479332798
-
-    6,7,9,0.854921083243
-      gamma: 2.8945539980101347;2.766233283727975;2.764145737919397;2.7655801105888784;2.759140718735379;2.747555302447043;2.7189333148962223;2.652365742373578;2.6530669496039585
-      beta:  0.18415206249075708;2.986101610927351;1.7201767669058976;1.4234550217213928;1.7295081185789374;1.4213865401546097;1.7049791929754168;1.5254309091319855;1.5628927579217093
-
-    6,8,8,0.801781554139
-      gamma: 3.372226990994066;0.34182577468780523;0.34684731027091004;0.34625742058774844;0.34932785351720946;0.35981935005950844;0.3882684588709456;0.44026457422839427
-      beta:  0.1830885300049441;1.7267139367738078;1.7221831469737403;1.7260507273799175;1.7269110592682246;1.719038891156741;1.7035926547818225;1.6420725810873638
-
-    7,8,8,0.818880676573
-      gamma: 3.390803763440559;3.4979355479695937;3.500231409819785;3.4999871586910425;3.502994409921466;3.5270331042453744;3.5740945019517003;3.578556804355331
-      beta:  0.15420235343861327;0.13619813769093894;0.13503636664985086;0.13699324177260586;0.13449541518446148;0.11976947752469704;0.09439752892219644;0.047476546832853204
+The D64 sweep should match or exceed these at the same depths,
+then push higher.

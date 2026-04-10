@@ -265,7 +265,13 @@ Keyword arguments:
 - `g_abstol`: gradient absolute tolerance for convergence (default: `DEFAULT_G_ABSTOL`)
 - `on_evaluation`: optional callback `(start_index, evaluations, elapsed_seconds, value, g_norm) -> nothing` throttled to at most once per 30 seconds per start
 - `on_chunk`: optional callback `(start_index, iterations, trace_entries, current_angles_vector) -> nothing` called after each plateau-detection chunk for incremental trace flushing
+- `eval_eltype`: element type for evaluation arithmetic (default: `Float64`; use `Double64` for k≥6)
 """
+# Promote angles to a different precision for evaluation.
+# Optim.jl works in Float64; this promotes to e.g. Double64 for the evaluator.
+_promote_angles(a::QAOAAngles, ::Type{Float64}) = a
+_promote_angles(a::QAOAAngles, ::Type{T}) where T<:Real = QAOAAngles(T.(a.γ), T.(a.β))
+
 function optimize_angles(
     params::TreeParams;
     clause_sign::Int=default_clause_sign(params.k),
@@ -278,6 +284,7 @@ function optimize_angles(
     g_abstol::Float64=DEFAULT_G_ABSTOL,
     on_evaluation=nothing,
     on_chunk=nothing,
+    eval_eltype::Type=Float64,
 )::AngleOptimizationResult
     validate_clause_sign(clause_sign)
     maxiters ≥ 1 || throw(ArgumentError("maxiters must be ≥ 1, got $maxiters"))
@@ -328,8 +335,8 @@ function optimize_angles(
             function f_adjoint(values)
                 local_evaluations[] += 1
                 maybe_report_progress!()
-                candidate = angles_from_vector(values, params.p)
-                val = qaoa_expectation(params, candidate; clause_sign)
+                candidate = _promote_angles(angles_from_vector(values, params.p), eval_eltype)
+                val = Float64(basso_expectation_normalized(params, candidate; clause_sign))
                 if !is_valid_qaoa_value(val)
                     return 1.0e6  # overflow — large but finite so Optim doesn't choke
                 end
@@ -337,33 +344,34 @@ function optimize_angles(
             end
 
             function g_adjoint!(G, values)
-                candidate = angles_from_vector(values, params.p)
+                candidate = _promote_angles(angles_from_vector(values, params.p), eval_eltype)
                 _, γg, βg = basso_expectation_and_gradient(params, candidate; clause_sign)
                 if any(!isfinite, γg) || any(!isfinite, βg)
                     _overflow_gradient!(G, values, params.p)
                     return
                 end
-                G[1:params.p] .= .-γg
-                G[params.p+1:2*params.p] .= .-βg
+                G[1:params.p] .= .-Float64.(γg)
+                G[params.p+1:2*params.p] .= .-Float64.(βg)
                 last_g_norm[] = maximum(abs, G)
             end
 
             function fg_adjoint!(G, values)
                 local_evaluations[] += 1
                 maybe_report_progress!()
-                candidate = angles_from_vector(values, params.p)
+                candidate = _promote_angles(angles_from_vector(values, params.p), eval_eltype)
                 val, γg, βg = basso_expectation_and_gradient(params, candidate; clause_sign)
-                if !is_valid_qaoa_value(val) ||
+                fval = Float64(val)
+                if !is_valid_qaoa_value(fval) ||
                    any(!isfinite, γg) || any(!isfinite, βg)
                     _overflow_gradient!(G, values, params.p)
                     last_value[] = NaN
                     return 1.0e6  # overflow — large but finite
                 end
-                G[1:params.p] .= .-γg
-                G[params.p+1:2*params.p] .= .-βg
+                G[1:params.p] .= .-Float64.(γg)
+                G[params.p+1:2*params.p] .= .-Float64.(βg)
                 last_g_norm[] = maximum(abs, G)
-                last_value[] = val
-                -val
+                last_value[] = fval
+                -fval
             end
 
             od = Optim.OnceDifferentiable(f_adjoint, g_adjoint!, fg_adjoint!, angle_vector(guess.angles))
@@ -460,7 +468,8 @@ function optimize_angles(
             # Package results — re-evaluate using normalized path to avoid overflow
             elapsed_seconds_start = (time_ns() - started_at) / 1.0e9
             candidate_angles_start = angles_from_vector(Optim.minimizer(result), params.p) |> canonicalize_angles
-            candidate_value_start = basso_expectation_normalized(params, candidate_angles_start; clause_sign)
+            candidate_value_start = Float64(basso_expectation_normalized(params,
+                _promote_angles(candidate_angles_start, eval_eltype); clause_sign))
             if !is_valid_qaoa_value(candidate_value_start)
                 @warn "start $(i) ($(guess.kind)) produced invalid value $(candidate_value_start); marking failed"
                 candidate_value_start = -Inf
@@ -712,6 +721,7 @@ function swarm_optimize(
     g_abstol::Float64=DEFAULT_G_ABSTOL,
     on_generation=nothing,
     warm_starts::AbstractVector{<:QAOAAngles}=QAOAAngles[],
+    eval_eltype::Type=Float64,
 )::AngleOptimizationResult
     p = params.p
     started_at = time_ns()
@@ -729,6 +739,7 @@ function swarm_optimize(
             autodiff,
             rng,
             g_abstol,
+            eval_eltype,
         )
         (result.angles, result.value, result.evaluations, result.converged)
     end
@@ -739,7 +750,7 @@ function swarm_optimize(
     # Seed with warm starts
     for ws in warm_starts
         depth(ws) == p || continue
-        val = basso_expectation_normalized(params, ws; clause_sign)
+        val = Float64(basso_expectation_normalized(params, _promote_angles(ws, eval_eltype); clause_sign))
         push!(candidates, SwarmCandidate(ws, is_valid_qaoa_value(val) ? val : -Inf))
     end
 
@@ -855,6 +866,7 @@ function swarm_optimize(
             autodiff,
             rng,
             g_abstol,
+            eval_eltype,
         )
         total_evaluations += polish_result.evaluations
         if is_valid_qaoa_value(polish_result.value) && polish_result.value > best_ever.value

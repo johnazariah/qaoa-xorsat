@@ -48,6 +48,11 @@ scancel -u $USER 2>/dev/null && echo "Cancelled" || echo "No jobs to cancel"
 sleep 2
 echo ""
 
+# ── Clear old D64 results (they were F64-optimized, not pure D64) ──
+echo "--- Clearing old D64 result files (were F64-optimized garbage) ---"
+rm -f results/swarm-d64-k*.csv 2>/dev/null && echo "Cleared" || echo "Nothing to clear"
+echo ""
+
 # ── Submit ────────────────────────────────────────────────────────
 echo "--- Submitting D64 sweep ---"
 JOBID=$(sbatch --parsable scripts/qaoa_d64_sweep.sh 2>&1)
