@@ -37,10 +37,11 @@
 #SBATCH --job-name=qaoa-d64
 #SBATCH --array=1-15
 #SBATCH --partition=c3d
-#SBATCH --time=999:00:00
+#SBATCH --time=48:00:00
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=28
-#SBATCH --exclusive
+#SBATCH --mem=2700G
+#SBATCH --requeue
 #SBATCH --comment="maintain_node"
 #SBATCH --output=qaoa-d64_%A-%a.out
 #SBATCH --error=qaoa-d64_%A-%a.err
@@ -99,6 +100,7 @@ echo ""
 
 cd "$REPO"
 export PATH="$HOME/.juliaup/bin:$PATH"
+export JULIA_HEAP_SIZE_HINT="250G"
 
 # ── Clean start ───────────────────────────────────────────────────
 RESULTS_FILE="results/swarm-d64-k${K}d${D}.csv"
@@ -107,34 +109,18 @@ if [ -f "$RESULTS_FILE" ]; then
     rm -f "$RESULTS_FILE"
 fi
 
-# ── Precompile (task 1 only, others wait) ─────────────────────────
-LOCKFILE="$REPO/.precompile-done-${SLURM_ARRAY_JOB_ID}"
-if [ "$SLURM_ARRAY_TASK_ID" -eq 1 ]; then
-    echo "Task 1: precompiling..."
-    julia --project=. -e 'using DoubleFloats, QaoaXorsat; println("Precompile done")' 2>&1
-    RC=$?
-    if [ $RC -ne 0 ]; then
-        echo "FATAL: precompile failed with exit code $RC"
-        exit $RC
-    fi
-    touch "$LOCKFILE"
-else
-    echo "Waiting for task 1 to finish precompilation..."
-    WAIT=0
-    while [ ! -f "$LOCKFILE" ]; do
-        sleep 5
-        WAIT=$((WAIT + 5))
-        if [ $WAIT -ge 600 ]; then
-            echo "FATAL: waited 10 minutes for precompile, giving up"
-            exit 1
-        fi
-    done
-    echo "Precompilation ready (waited ${WAIT}s)."
+# ── Precompile ────────────────────────────────────────────────────
+echo "Checking Julia environment..."
+julia --project=. -e 'using DoubleFloats, QaoaXorsat; println("Environment ready.")' 2>&1
+RC=$?
+if [ $RC -ne 0 ]; then
+    echo "FATAL: precompile failed with exit code $RC"
+    exit $RC
 fi
 
 # ── Run ───────────────────────────────────────────────────────────
 echo ""
-echo "Starting swarm_chain_d64.jl at $(date -u)"
+echo "Starting swarm_chain_d64.jl with ${SLURM_CPUS_PER_TASK:-28} threads at $(date -u)"
 julia --project=. -t ${SLURM_CPUS_PER_TASK:-28} scripts/swarm_chain_d64.jl $K $D 15 100 10 20 42
 RC=$?
 
