@@ -89,13 +89,33 @@ This is worth trying if you want k>=6 at p>=10.
 I can implement and test this quickly if you want to try it on
 the cluster.
 
-## What to do now
+## Action: kill everything and run Double64 sweep
 
-1. The working pairs are done — let swarm jobs finish or cancel them
-2. For (6,7), (6,8), (7,8) — cancel those swarm jobs, they won't
-   improve beyond p=8-9 in Float64
-3. If you want to try Double64 for those three pairs, let me know
-   and I'll push the code
+The Double64 swarm is ready. It runs ALL 15 pairs from p=1 with
+31-digit precision. Your 55 nodes will run them all simultaneously.
+
+Step 1 — kill all existing jobs:
+
+    scancel -u $USER
+
+Step 2 — pull and install the new dependency:
+
+    cd ~/qaoa-xorsat
+    git pull origin main
+    julia --project=. -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'
+
+Step 3 — submit:
+
+    sbatch scripts/qaoa_d64_sweep.sh
+
+That's it. 15 SLURM tasks, one per (k,D) pair, each from p=1 to p=15.
+Results go to `results/swarm-d64-k{K}d{D}.csv`, written per depth.
+
+Step 4 — push when done:
+
+    git add -f results/swarm-d64-*.csv
+    git commit -m "Stephen: Double64 swarm results"
+    git push origin stephen-d64-results
 
 ## Best values with angles (for the paper)
 
