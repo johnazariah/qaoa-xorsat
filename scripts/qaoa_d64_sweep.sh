@@ -49,6 +49,11 @@ echo ""
 
 cd ~/qaoa-xorsat
 export PATH="$HOME/.juliaup/bin:$PATH"
+
+# Ensure DoubleFloats is installed and precompiled before starting
+# (avoids 15 tasks racing to precompile simultaneously)
+julia --project=. -e 'using Pkg; Pkg.instantiate(); using DoubleFloats, QaoaXorsat; println("Ready")' 2>&1
+
 julia --project=. -t ${SLURM_CPUS_PER_TASK:-28} scripts/swarm_chain_d64.jl $K $D 15 100 10 20 42
 
 echo ""
