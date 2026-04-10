@@ -88,12 +88,17 @@ if [ -f "$RESULTS_FILE" ]; then
     rm -f "$RESULTS_FILE"
 fi
 
-# Stagger startup to avoid 15 tasks racing to precompile simultaneously.
-DELAY=$(( (SLURM_ARRAY_TASK_ID - 1) * 10 ))
-echo "Stagger delay: ${DELAY}s (task $SLURM_ARRAY_TASK_ID)"
-sleep $DELAY
-
-julia --project=. -e 'using DoubleFloats, QaoaXorsat; println("Ready")' 2>&1
+# Task 1 precompiles; all others wait for it via a lockfile on shared fs.
+LOCKFILE="$HOME/qaoa-xorsat/.precompile-done-${SLURM_ARRAY_JOB_ID}"
+if [ "$SLURM_ARRAY_TASK_ID" -eq 1 ]; then
+    echo "Task 1: precompiling..."
+    julia --project=. -e 'using DoubleFloats, QaoaXorsat; println("Precompile done")' 2>&1
+    touch "$LOCKFILE"
+else
+    echo "Waiting for task 1 to finish precompilation..."
+    while [ ! -f "$LOCKFILE" ]; do sleep 5; done
+    echo "Precompilation ready."
+fi
 
 julia --project=. -t ${SLURM_CPUS_PER_TASK:-28} scripts/swarm_chain_d64.jl $K $D 15 100 10 20 42
 
