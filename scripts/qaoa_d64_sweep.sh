@@ -80,10 +80,15 @@ echo ""
 cd ~/qaoa-xorsat
 export PATH="$HOME/.juliaup/bin:$PATH"
 
+# Clean start: remove any old result file for THIS pair so resume
+# logic doesn't pick up garbage from a previous run.
+RESULTS_FILE="results/swarm-d64-k${K}d${D}.csv"
+if [ -f "$RESULTS_FILE" ]; then
+    echo "Removing stale $RESULTS_FILE"
+    rm -f "$RESULTS_FILE"
+fi
+
 # Stagger startup to avoid 15 tasks racing to precompile simultaneously.
-# Each task waits (task_id * 10) seconds before starting.
-# Precompilation should be done on the login node BEFORE sbatch,
-# but this provides a safety net.
 DELAY=$(( (SLURM_ARRAY_TASK_ID - 1) * 10 ))
 echo "Stagger delay: ${DELAY}s (task $SLURM_ARRAY_TASK_ID)"
 sleep $DELAY
