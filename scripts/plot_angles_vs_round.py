@@ -30,9 +30,11 @@ SAFE_P_MAX = {
     (7, 8): 7,
 }
 
-def normalize_to_0_pi(v):
-    """Map angle to [0, π] by subtracting integer multiples of π."""
+def normalize_to_pm_half_pi(v):
+    """Map angle to [-π/2, +π/2] via mod π, then shift."""
     v = v % math.pi          # -> [0, π)
+    if v > math.pi / 2:
+        v -= math.pi         # -> (-π/2, 0] for the upper half
     return v
 
 # Read data: (k,D) -> p -> [(round, value)]
@@ -55,7 +57,7 @@ for fname, store, col in [('gamma_angles.csv', gamma_data, 'gamma'),
             p_max = SAFE_P_MAX.get((k, D), 8)
             if p > p_max:
                 continue
-            v = normalize_to_0_pi(v)
+            v = normalize_to_pm_half_pi(v)
             store[(k, D)][p].append((j, v))
 
 pairs = sorted(set(gamma_data.keys()))
@@ -98,9 +100,9 @@ def make_plot(store, angle_name, ylabel, filename):
         ax.set_title(f'({k},{D})', fontsize=10)
         ax.set_xlabel('round j', fontsize=8)
         ax.set_ylabel(f'{ylabel} (mod π)', fontsize=8)
-        ax.set_ylim(-0.05, math.pi + 0.05)
-        ax.set_yticks([0, math.pi/4, math.pi/2, 3*math.pi/4, math.pi])
-        ax.set_yticklabels(['0', 'π/4', 'π/2', '3π/4', 'π'], fontsize=7)
+        ax.set_ylim(-math.pi/2 - 0.05, math.pi/2 + 0.05)
+        ax.set_yticks([-math.pi/2, -math.pi/4, 0, math.pi/4, math.pi/2])
+        ax.set_yticklabels(['-π/2', '-π/4', '0', 'π/4', 'π/2'], fontsize=7)
         ax.tick_params(labelsize=7)
 
     # Hide unused subplots
