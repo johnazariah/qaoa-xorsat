@@ -37,7 +37,7 @@
 #SBATCH --job-name=qaoa-d64
 #SBATCH --array=1-15
 #SBATCH --partition=c3d
-#SBATCH --time=48:00:00
+#SBATCH --time=240:00:00
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=28
 #SBATCH --mem=1448G
