@@ -36,11 +36,16 @@
 #
 #SBATCH --job-name=qaoa-d64
 #SBATCH --array=1-15
+<<<<<<< Updated upstream
 #SBATCH --partition=c3d
 #SBATCH --time=240:00:00
+=======
+#SBATCH --partition=c3dssd
+#SBATCH --time=48:00:00
+>>>>>>> Stashed changes
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=28
-#SBATCH --mem=1448G
+#SBATCH --mem=0
 #SBATCH --requeue
 #SBATCH --comment="maintain_node"
 #SBATCH --output=qaoa-d64_%A-%a.out
