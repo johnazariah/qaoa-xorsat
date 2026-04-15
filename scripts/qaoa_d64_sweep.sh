@@ -36,13 +36,8 @@
 #
 #SBATCH --job-name=qaoa-d64
 #SBATCH --array=1-15
-<<<<<<< Updated upstream
-#SBATCH --partition=c3d
-#SBATCH --time=240:00:00
-=======
 #SBATCH --partition=c3dssd
-#SBATCH --time=48:00:00
->>>>>>> Stashed changes
+#SBATCH --time=240:00:00
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=28
 #SBATCH --mem=0
