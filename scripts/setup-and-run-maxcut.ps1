@@ -53,11 +53,7 @@ Write-Host ""
 
 # ── Determine settings ────────────────────────────────────────────
 $totalCPUs = [Environment]::ProcessorCount
-
-if ($mem -ge 140) { $pmax = 14 }
-elseif ($mem -ge 40) { $pmax = 13 }
-else { $pmax = 12 }
-Write-Host "CPUs: $totalCPUs, Memory: ${mem}GB, targeting p=$pmax"
+Write-Host "CPUs: $totalCPUs, Memory: ${mem}GB"
 Write-Host ""
 
 $logDir = Join-Path $RepoDir "results"
@@ -76,9 +72,9 @@ function Wait-Sweeps($jobs) {
     }
 }
 
-function Start-Sweep($D, $threads) {
+function Start-Sweep($D, $threads, $pmax) {
     $logFile = Join-Path $logDir "maxcut-k2-d${D}-sweep.log"
-    Write-Host "  D=$D  threads=$threads  (log: $logFile)"
+    Write-Host "  D=$D  threads=$threads  p_max=$pmax  (log: $logFile)"
     $proc = Start-Process -FilePath julia `
         -ArgumentList "--project=.", "-t", $threads, "scripts/maxcut_sweep.jl", $D, $pmax, 42 `
         -WorkingDirectory $RepoDir `
@@ -88,23 +84,51 @@ function Start-Sweep($D, $threads) {
     return @{ D = $D; Process = $proc; Log = $logFile }
 }
 
-# ── Run sweeps in pairs (2 at a time, half CPUs each) ─────────────
-$allD = @(3, 4, 5, 6, 7, 8)
-$threads2 = [math]::Floor($totalCPUs / 2)
+# ── Memory budget per depth ───────────────────────────────────────
+# p=10: ~2 GB/eval  → 6 in parallel fine
+# p=11: ~8 GB/eval  → 3 in parallel (with semaphore + headroom)
+# p=12: ~19 GB/eval → 1 at a time (solo, needs ~32 GB)
+# p=13: ~84 GB/eval → 1 at a time (solo, needs ~128 GB)
 
-for ($i = 0; $i -lt $allD.Count; $i += 2) {
-    $pair = @($allD[$i])
-    if ($i + 1 -lt $allD.Count) { $pair += $allD[$i + 1] }
-    $nPair = $pair.Count
-    $thr = [math]::Floor($totalCPUs / $nPair)
+# ── Phase 1: Catch everyone up to p=10 (3 at a time) ─────────────
+Write-Host ""
+Write-Host "=== Phase 1: Catch up D=6,7,8 to p=10 ==="
+$catchUp = @(6, 7, 8)
+$thr = [math]::Floor($totalCPUs / $catchUp.Count)
+$jobs = @()
+foreach ($D in $catchUp) {
+    $jobs += Start-Sweep $D $thr 10
+}
+Write-Host "PIDs: $($jobs | ForEach-Object { $_.Process.Id })"
+Wait-Sweeps $jobs
+
+# ── Phase 2: All 6 to p=11 (3 at a time) ─────────────────────────
+Write-Host ""
+Write-Host "=== Phase 2: All D to p=11 (3 at a time) ==="
+$allD = @(3, 4, 5, 6, 7, 8)
+for ($i = 0; $i -lt $allD.Count; $i += 3) {
+    $batch = @()
+    for ($j = $i; $j -lt [math]::Min($i + 3, $allD.Count); $j++) { $batch += $allD[$j] }
+    $thr = [math]::Floor($totalCPUs / $batch.Count)
 
     Write-Host ""
-    Write-Host "=== Batch: D=$($pair -join ',') parallel, $thr threads each ==="
+    Write-Host "--- Batch: D=$($batch -join ','), $thr threads each, p_max=11 ---"
     $jobs = @()
-    foreach ($D in $pair) {
-        $jobs += Start-Sweep $D $thr
+    foreach ($D in $batch) {
+        $jobs += Start-Sweep $D $thr 11
     }
     Write-Host "PIDs: $($jobs | ForEach-Object { $_.Process.Id })"
+    Wait-Sweeps $jobs
+}
+
+# ── Phase 3: D=3,4,5 to p=12 (one at a time) ────────────────────
+Write-Host ""
+Write-Host "=== Phase 3: D=3,4,5 to p=12 (sequential, all CPUs) ==="
+foreach ($D in 3, 4, 5) {
+    Write-Host ""
+    Write-Host "--- D=$D solo, $totalCPUs threads, p_max=12 ---"
+    $jobs = @(Start-Sweep $D $totalCPUs 12)
+    Write-Host "PID: $($jobs[0].Process.Id)"
     Wait-Sweeps $jobs
 }
 
