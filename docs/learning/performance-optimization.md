@@ -542,3 +542,66 @@ compute).
     record `(start, iteration, value, g_norm)` at every step. When convergence
     puzzles arise, these traces show exactly where the optimizer stalled, whether
     the gradient norm plateaued, and whether relaxing tolerance was the right call.
+
+---
+
+## Optimization 12: Memory Reduction for High-p Scaling
+
+**Date**: 17 April 2026
+
+At p=11 with threaded restarts, the adjoint cache consumed ~6.7 GB per evaluation.
+Running 20 restarts in parallel on a 181 GB machine caused OOM crashes. A code
+review (with rubber-duck critique) identified several major inefficiencies.
+
+### Changes
+
+1. **Removed `bits_table`** (~1.47 GB saved at p=11): a `Matrix{Int}(23, 8.4M)`
+   was precomputed solely for two XOR reads in the β gradient loop. Replaced with
+   inline bit arithmetic: `xor((config >> (r-1)) & 1, (config >> r) & 1)`.
+
+2. **Deduplicated phase computation** (~128 MB saved): `constraint_phase` and
+   `root_phase` both computed the same `_phase_dot(gamma_full, config, bit_count)`.
+   Unified into a single `phase_args` vector shared by both kernel constructions.
+
+3. **Rewrote `basso_f_table`**: the original called `f_function` per config, which
+   allocated `decode_bits` (a `Vector{Int}`) and recomputed `basso_trig_table`
+   (a `Matrix{Complex}`) for every one of 8.4M configs. New `_basso_f_table_fast`
+   uses the pre-built `trig_table` and direct bit ops — zero allocations per config.
+
+4. **Memory-bounded restart concurrency**: replaced unbounded `Threads.@threads`
+   with a `Semaphore` that caps concurrent evaluations based on available RAM.
+   At p=11 (~7 GB/eval), this limits to ~19 concurrent evals on 181 GB instead
+   of 40, preventing OOM while still using available parallelism.
+
+5. **Specialized small-integer complex power** (`_fast_pow`): replaced generic
+   `x^n` (which uses log/exp) with multiplication chains for n=1–7. These are
+   the only exponents that appear (arity = k-1, degree = D-1, for k,D ≤ 8).
+
+6. **In-place WHT in hot paths**: replaced `wht(complex.(kernel))` (which copies
+   + allocates a new complex vector) with `wht!(copy(kernel))`, and
+   `wht(complex.(root_msg))` with `wht!(complex.(root_msg))`.
+
+### Expected impact
+
+- **Memory**: ~1.6 GB saved per evaluation at p=11, plus elimination of millions
+  of per-config allocations in f_table construction
+- **Wall time**: `_fast_pow` avoids log/exp for every element in 6 hot loops;
+  `_basso_f_table_fast` eliminates O(N) vector allocations; reduced GC pressure
+- **Correctness**: all 1741 tests pass with identical numerical results
+
+### Lessons learned
+
+13. **Profile memory, not just time** — the `bits_table` was invisible in
+    wall-time profiling (precomputed once, O(1) lookup) but dominated memory
+    at high p. A 1.47 GB matrix for a few XOR operations is the wrong trade-off.
+
+14. **Generic power is expensive for complex numbers** — Julia's `Complex^Int`
+    dispatches to a general algorithm using log/exp. For the small fixed
+    exponents in this codebase (1–7), explicit multiplication chains are 2–5×
+    faster and produce identical results.
+
+15. **Unbounded thread parallelism is a memory bomb** — `Threads.@threads`
+    launches as many concurrent tasks as there are threads. At high p where
+    each task allocates GB of cache, this trivially OOMs. A semaphore-based
+    concurrency limit is the right pattern: use all CPUs for compute, but
+    bound the number of simultaneous memory-heavy allocations.

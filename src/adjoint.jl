@@ -91,6 +91,25 @@
 # ──────────────────────────────────────────────────────────────────────────────
 
 """
+    _fast_pow(x, n)
+
+Specialized complex power for small positive integers (1–7), avoiding the
+general `x^n` path which uses log/exp internally. Falls back to `x^n` for n>7.
+"""
+@inline function _fast_pow(x::Complex{T}, n::Int) where T
+    n == 1 && return x
+    n == 2 && return x * x
+    x2 = x * x
+    n == 3 && return x2 * x
+    n == 4 && return x2 * x2
+    x4 = x2 * x2
+    n == 5 && return x4 * x
+    n == 6 && return x4 * x2
+    n == 7 && return x4 * x2 * x
+    return x ^ n
+end
+
+"""
     _phase_dot(gamma_full, configuration, bit_count)
 
 Compute Σ_i gamma_full[i] * z_eigenvalue(bit i of configuration).
@@ -126,11 +145,10 @@ struct BassoPipelineCache{T<:Real}
     β::Vector{T}                     # mixer angles (needed for backward pass)
     gamma_full::Vector{T}
     trig_table::Matrix{Complex{T}}   # 2 × 2p — cos/isin for each transition
-    bits_table::Matrix{Int}          # bit_count × configuration_count (columns = configs)
 
     # f_table and per-config phase arguments
     f_table::Vector{Complex{T}}
-    constraint_phase::Vector{T}      # phase arg per config for constraint kernel
+    phase_args::Vector{T}            # phase arg per config (shared by constraint + root kernels)
 
     # Constraint kernel and its WHT
     kernel::Vector{Complex{T}}
@@ -151,7 +169,6 @@ struct BassoPipelineCache{T<:Real}
     root_msg::Vector{Complex{T}}
     root_parity_signs::Vector{Int}
     root_kernel::Vector{Complex{T}}
-    root_phase::Vector{T}            # phase arg per config for root kernel
     msg_hat::Vector{Complex{T}}      # WHT(root_msg) / msg_hat_scale  (NORMALIZED)
     msg_hat_scale::T                 # max|WHT(root_msg)|
     msg_hat_power::Vector{Complex{T}}  # msg_hat_norm .^ k
@@ -162,6 +179,27 @@ struct BassoPipelineCache{T<:Real}
     # Final result
     S_normalized::Complex{T}         # sum(root_kernel .* conv) in normalized space
     value::T
+end
+
+"""
+    _basso_f_table_fast(trig_table, bit_count, N, T)
+
+Compute the mixer weight f(a) for all N configurations using a pre-built
+trig_table, avoiding per-config allocations. Each f(a) is ½ · ∏ⱼ trigs[Δ(a,j)+1, j]
+where Δ(a,j) = bit[j] ⊻ bit[j+1].
+"""
+function _basso_f_table_fast(trig_table::Matrix{Complex{T}}, bit_count::Int, N::Int, ::Type{T}) where T
+    table = Vector{Complex{T}}(undef, N)
+    transitions = bit_count - 1  # = 2p
+    Threads.@threads for config in 0:N-1
+        weight = complex(one(T) / 2)
+        @inbounds for j in 1:transitions
+            d = xor((config >> (j - 1)) & 1, (config >> j) & 1)
+            weight *= trig_table[d + 1, j]
+        end
+        @inbounds table[config+1] = weight
+    end
+    table
 end
 
 """
@@ -188,27 +226,19 @@ function _forward_pass(
     gamma_full = build_gamma_full_vector(angles)
     trig_table = basso_trig_table(angles)
 
-    # Precompute bits table (integer, independent of angles)
-    bits_table = Matrix{Int}(undef, bit_count, N)
-    for config in 0:N-1
-        for index in 1:bit_count
-            @inbounds bits_table[index, config+1] = (config >> (index - 1)) & 1
-        end
-    end
+    # f_table — allocation-free version using pre-built trig_table
+    f_table = _basso_f_table_fast(trig_table, bit_count, N, T)
 
-    # f_table (threaded)
-    f_table = basso_f_table(angles)
-
-    # Constraint kernel with cached phase arguments
+    # Phase arguments (shared by constraint + root kernels)
     half = one(T) / 2
-    constraint_phase = Vector{T}(undef, N)
+    phase_args = Vector{T}(undef, N)
     kernel = Vector{Complex{T}}(undef, N)
     Threads.@threads for config in 0:N-1
         ph = _phase_dot(gamma_full, config, bit_count)
-        @inbounds constraint_phase[config+1] = ph
+        @inbounds phase_args[config+1] = ph
         @inbounds kernel[config+1] = complex(cos(half * ph))
     end
-    kernel_hat = wht(complex.(kernel))
+    kernel_hat = wht!(copy(kernel))
 
     # Branch tensor iteration with caching and per-step normalization.
     #
@@ -263,7 +293,7 @@ function _forward_pass(
         # folded = iWHT(kernel_hat .* child_hat .^ arity) — reuse scratch
         ch = child_hat_history[t]
         @inbounds @simd for i in 1:N
-            scratch[i] = kernel_hat[i] * ch[i] ^ arity
+            scratch[i] = kernel_hat[i] * _fast_pow(ch[i], arity)
         end
         iwht!(scratch)
 
@@ -284,7 +314,7 @@ function _forward_pass(
         fld = folded_history[t]
         new_B = Vector{Complex{T}}(undef, N)
         @inbounds @simd for i in 1:N
-            new_B[i] = fld[i] ^ degree
+            new_B[i] = _fast_pow(fld[i], degree)
         end
         B_history[t+1] = new_B
 
@@ -298,19 +328,16 @@ function _forward_pass(
     root_parity_signs = [basso_root_parity(config, p) for config in 0:N-1]
     root_msg = root_parity_signs .* f_table .* B_history[p+1]
 
-    # Root kernel with cached phase
+    # Root kernel — reuse phase_args instead of recomputing
     cs = T(clause_sign)
-    root_phase = Vector{T}(undef, N)
     root_kernel = Vector{Complex{T}}(undef, N)
     Threads.@threads for config in 0:N-1
-        ph = _phase_dot(gamma_full, config, bit_count)
-        @inbounds root_phase[config+1] = ph
-        @inbounds root_kernel[config+1] = complex(zero(T), sin(half * cs * ph))
+        @inbounds root_kernel[config+1] = complex(zero(T), sin(half * cs * phase_args[config+1]))
     end
 
     # Root fold: S = Σ root_kernel .* iWHT(WHT(root_msg).^k)
     # Normalize msg_hat before ^k — ONLY if needed
-    msg_hat_raw = wht(complex.(root_msg))
+    msg_hat_raw = wht!(complex.(root_msg))
     mh_scale = maximum(abs, msg_hat_raw)
     if mh_scale > _NORM_THRESHOLD
         msg_hat_raw .*= one(T) / mh_scale
@@ -347,12 +374,12 @@ function _forward_pass(
     BassoPipelineCache{T}(
         p, k, D, clause_sign,
         bit_count, N, arity, degree,
-        copy(angles.β), gamma_full, trig_table, bits_table,
-        f_table, constraint_phase,
+        copy(angles.β), gamma_full, trig_table,
+        f_table, phase_args,
         kernel, kernel_hat,
         B_history, child_hat_history, folded_history,
         child_hat_scales, folded_scales,
-        root_msg, root_parity_signs, root_kernel, root_phase,
+        root_msg, root_parity_signs, root_kernel,
         msg_hat, mh_scale, msg_hat_power,
         log_total_scale,
         S_normalized, value,
@@ -425,7 +452,7 @@ function _backward_pass(cache::BassoPipelineCache{T}) where T
         # B[t+1] = folded[t] .^ degree
         # folded_bar = degree .* conj(folded[t] .^ (degree-1)) .* B_bar
         @inbounds @simd for i in 1:N
-            scratch[i] = cache.degree * conj(cache.folded[t][i] ^ (cache.degree - 1)) * B_bar[i]
+            scratch[i] = cache.degree * conj(_fast_pow(cache.folded[t][i], cache.degree - 1)) * B_bar[i]
         end
         # scratch now holds folded_bar
 
@@ -436,13 +463,13 @@ function _backward_pass(cache::BassoPipelineCache{T}) where T
 
         # kernel_hat_bar .+= conj(child_hat .^ arity) .* product_bar
         @inbounds @simd for i in 1:N
-            kernel_hat_bar[i] += conj(cache.child_hat[t][i] ^ cache.arity) * scratch[i]
+            kernel_hat_bar[i] += conj(_fast_pow(cache.child_hat[t][i], cache.arity)) * scratch[i]
         end
 
         # child_hat_bar = arity .* conj(child_hat .^ (arity-1)) .* conj(kernel_hat) .* product_bar
         # Reuse scratch: overwrite with child_hat_bar, then WHT in-place
         @inbounds @simd for i in 1:N
-            scratch[i] = cache.arity * conj(cache.child_hat[t][i] ^ (cache.arity - 1)) *
+            scratch[i] = cache.arity * conj(_fast_pow(cache.child_hat[t][i], cache.arity - 1)) *
                          conj(cache.kernel_hat[i]) * scratch[i]
         end
 
@@ -473,7 +500,7 @@ function _backward_pass(cache::BassoPipelineCache{T}) where T
     gamma_full_bar = zeros(T, cache.bit_count)
 
     for config in 0:N-1
-        ph = cache.constraint_phase[config+1]
+        ph = cache.phase_args[config+1]
         sin_ph = sin(half * ph)
         kb_re = real(kernel_bar[config+1])
         factor = -half * sin_ph * kb_re
@@ -483,39 +510,12 @@ function _backward_pass(cache::BassoPipelineCache{T}) where T
         end
     end
 
-    # γ gradient from root kernel:
-    # root_kernel[a] = i · sin(½ · cs · phase_dot(a))
-    # ∂root_kernel[a]/∂γ_full[i] = i · ½ · cs · cos(½ · cs · phase_dot(a)) · spin(a,i)
-    # Contribution: Re(root_kernel_bar[a]* · i · ½ · cs · cos(½ · cs · phase_dot(a)) · spin(a,i)))
-    # = -Im(root_kernel_bar[a]) · ½ · cs · cos(½ · cs · phase_dot(a)) · spin(a,i)
-    # (because Re(z* · i·w) = -Im(z) · Re(w) + Re(z) · Im(w), and cos is real)
-    # Actually: root_kernel_bar is complex. Let rkb = root_kernel_bar[a].
-    # derivative direction = i · ½ · cs · cos(½·cs·ph) · spin
-    # cotangent contribution = Re(conj(rkb) · i · ½ · cs · cos(½·cs·ph) · spin)
-    # = Re((Re(rkb) - i·Im(rkb)) · (i · ½ · cs · cos(½·cs·ph) · spin))
-    # = Re(i·Re(rkb) · ... + Im(rkb) · ...)
-    # = ½ · cs · cos(½·cs·ph) · spin · (-Im(rkb) + 0) ... wait, let me redo.
-    # Actually for a real-valued loss, the correct formula is:
-    # If z = complex(0, sin(θ)), dz/dθ = complex(0, cos(θ))
-    # Then θ_bar += Re(z_bar · conj(dz/dθ)) = Re(z_bar · complex(0, -cos(θ)))
-    #            = Im(z_bar) · (-cos(θ))  ... no.
-    # Re(z_bar · conj(complex(0, cos(θ)))) = Re(z_bar · complex(0, -cos(θ)))
-    # = Re((a+bi)(0 - ci)) = Re(-aci + bci²) = Re(-aci - bc) = -bc
-    # where z_bar = a + bi, so = -Im(z_bar) · cos(θ) ... hmm that's not right either.
-    # Let me use the real chain rule directly:
-    # z = 0 + i·sin(θ), so Re(z) = 0, Im(z) = sin(θ)
-    # ∂L/∂θ = ∂L/∂Re(z) · 0 + ∂L/∂Im(z) · cos(θ) = Im_bar(z) · cos(θ)
-    # But z_bar encodes: z_bar = ∂L/∂Re(z) + i·∂L/∂Im(z)
-    # So Im_bar(z) = Im(z_bar)
-    # Therefore: θ_bar = Im(z_bar) · cos(θ)
-
+    # γ gradient from root kernel (reuses phase_args)
     for config in 0:N-1
-        ph = cache.root_phase[config+1]
+        ph = cache.phase_args[config+1]
         theta = half * cs * ph
         cos_theta = cos(theta)
         rkb_im = imag(root_kernel_bar[config+1])
-        # θ = ½ · cs · Σ_i γ_full[i] · spin(a,i)
-        # ∂θ/∂γ_full[i] = ½ · cs · spin(a,i)
         factor = rkb_im * cos_theta * half * cs
         for index in 1:cache.bit_count
             spin = z_eigenvalue((config >> (index - 1)) & 1)
@@ -524,39 +524,17 @@ function _backward_pass(cache::BassoPipelineCache{T}) where T
     end
 
     # Map γ_full_bar -> γ_bar via the mirrored indexing
-    # gamma_full[bit_index] = gamma_vector[gamma_index]
-    # gamma_vector[round] = γ[round], gamma_vector[mirror] = -γ[round]
     positions = basso_phase_bit_positions(p)
     γ_bar = zeros(T, p)
     for round in 1:p
         mirror = 2p - round + 1
-        # gamma_vector[round] = γ[round] → γ_bar[round] += gamma_full_bar[positions[round]]
-        # gamma_vector[mirror] = -γ[round] → γ_bar[round] -= gamma_full_bar[positions[mirror]]
-        # But positions maps gamma_index -> bit_index, and gamma_full_bar is indexed by bit_index.
-        # positions[round] is the bit_index for the forward direction
-        # positions[p + round'] where round' = 2p - round + 1 - p = p - round + 1
-        # Actually: positions = [1:p; (p+2):(2p+1)]
-        # gamma_vector has 2p entries: gamma_vector[round] and gamma_vector[2p-round+1]
-        # gamma_full is 2p+1 entries, and gamma_full[positions[gi]] = gamma_vector[gi]
         bit_fwd = positions[round]
         bit_bwd = positions[2p - round + 1]
         γ_bar[round] += gamma_full_bar[bit_fwd]
         γ_bar[round] -= gamma_full_bar[bit_bwd]   # mirror has negative sign
     end
 
-    # β gradient from f_table_bar:
-    # f[a] = ½ · ∏_j trigs[Δ(a,j)+1, j]
-    # ∂f/∂β_r = f · [(dtrig_fwd/trig_fwd) at position r + (dtrig_bwd/trig_bwd) at mirror r]
-    # The log-derivative ratio dtrig/trig depends only on Δ and β_r:
-    #   Δ=0: dtrig/trig = -sin(β)/cos(β) = -tan(β)          (forward)
-    #   Δ=1: dtrig/trig = i·cos(β)/(i·sin(β)) = cot(β)      (forward)
-    #   Δ=0 mirror: dtrig/trig = -sin(β)/cos(β) = -tan(β)    (same as forward, since cos(-β)=cos(β))
-    #   Δ=1 mirror: dtrig/trig = -i·cos(β)/(i·(-sin(β))) = cos(β)/sin(β) = cot(β) (same!)
-    # So the log-derivative ratio is: Δ=0 → -tan(β_r), Δ=1 → cot(β_r), for both positions.
-    #
-    # Therefore: ∂f/∂β_r = f · (logderiv[Δ_fwd] + logderiv[Δ_bwd])
-    # And: β_bar[r] = Σ_a Re(conj(f_table_bar[a]) · f[a] · (logderiv[Δ_fwd(a)] + logderiv[Δ_bwd(a)]))
-
+    # β gradient from f_table_bar — uses inline bit arithmetic instead of bits_table
     β_bar = zeros(T, p)
 
     for round in 1:p
@@ -564,15 +542,21 @@ function _backward_pass(cache::BassoPipelineCache{T}) where T
         β_r = cache.β[round]
         neg_tan = -tan(β_r)
         cot_val = cos(β_r) / sin(β_r)
-        # logderiv: Δ=0 → neg_tan, Δ=1 → cot_val
 
         acc = zero(T)
+        # Bit positions are 0-indexed within config: bit at position j is (config >> (j-1)) & 1
+        # d_fwd = bit[round] ⊻ bit[round+1], d_bwd = bit[mirror] ⊻ bit[mirror+1]
+        fwd_shift0 = round - 1      # 0-indexed shift for bit[round]
+        fwd_shift1 = round           # 0-indexed shift for bit[round+1]
+        bwd_shift0 = mirror - 1     # 0-indexed shift for bit[mirror]
+        bwd_shift1 = mirror          # 0-indexed shift for bit[mirror+1]
+
         for config in 0:N-1
             @inbounds ft = cache.f_table[config+1]
             @inbounds ftb = f_table_bar[config+1]
 
-            d_fwd = xor(cache.bits_table[round, config+1], cache.bits_table[round+1, config+1])
-            d_bwd = xor(cache.bits_table[mirror, config+1], cache.bits_table[mirror+1, config+1])
+            d_fwd = xor((config >> fwd_shift0) & 1, (config >> fwd_shift1) & 1)
+            d_bwd = xor((config >> bwd_shift0) & 1, (config >> bwd_shift1) & 1)
 
             ld_fwd = d_fwd == 0 ? neg_tan : cot_val
             ld_bwd = d_bwd == 0 ? neg_tan : cot_val

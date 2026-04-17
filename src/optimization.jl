@@ -293,9 +293,23 @@ function optimize_angles(
 
     optimization_started_at = time_ns()
 
-    # Run each restart independently — thread-parallel when multiple threads available
+    # Memory-bounded concurrency: limit parallel restarts to avoid OOM.
+    # At p=11 each adjoint cache is ~5-7 GB; running too many in parallel
+    # exhausts RAM. Cap at available_ram / estimated_per_eval_bytes.
+    N = basso_configuration_count(params.p)
+    # Rough estimate: ~40 vectors of size N × 16 bytes (ComplexF64) per eval
+    est_bytes_per_eval = 40 * N * sizeof(ComplexF64)
+    available_ram = Sys.total_memory() * 0.75  # leave 25% headroom
+    max_concurrent = max(1, min(Threads.nthreads(), floor(Int, available_ram / est_bytes_per_eval)))
+
+    # Use a semaphore to limit concurrency
+    sem = Base.Semaphore(max_concurrent)
+
+    # Run each restart independently — thread-parallel with memory-bounded concurrency
     per_start_results = Vector{Tuple{QAOAAngles,Float64,AngleOptimizationStartResult}}(undef, length(guesses))
     Threads.@threads for i in eachindex(guesses)
+        Base.acquire(sem)
+        try
         guess = guesses[i]
         local_evaluations = Ref(0)
         last_progress_at = Ref(time_ns())
@@ -524,6 +538,9 @@ function optimize_angles(
                 trace_entries,
             )
             per_start_results[i] = (candidate_angles, candidate_value, start_result)
+        end
+        finally
+            Base.release(sem)
         end
     end
 

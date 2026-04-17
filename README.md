@@ -15,7 +15,7 @@
 
 ## Results
 
-Best-found QAOA satisfaction fractions at finite D, computed on Apple M4 Mac Studio (64 GB) and Azure fleet (5× E8as_v5, 256 GB). Full data in [`results/qaoa-best-values.csv`](results/qaoa-best-values.csv).
+Best-found QAOA satisfaction fractions at finite D, computed on Apple M4 Mac Studio (64 GB), Azure fleet (5× E8as_v5, 256 GB), and Windows Server (40-core, 181 GB). Full data in [`results/`](results/).
 
 ### Primary target: (k=3, D=4) through p=12
 
@@ -35,7 +35,7 @@ Best-found QAOA satisfaction fractions at finite D, computed on Apple M4 Mac Stu
 | **12** | **0.8769** | **+0.0044** | **~40 min** |
 | **13** | **0.8807** | **+0.0038** | **~84 hr** |
 
-### All 15 (k,D) pairs
+### All 15 (k,D) pairs — Max-k-XORSAT
 
 | (k,D) | p | c̃ | (k,D) | p | c̃ | (k,D) | p | c̃ |
 |-------|---|------|-------|---|------|-------|---|------|
@@ -47,6 +47,24 @@ Best-found QAOA satisfaction fractions at finite D, computed on Apple M4 Mac Stu
 | | | | | | | (7,8) | 8 | 0.819 |
 
 QAOA surpasses DQI+BP for 13 of 15 pairs. To our knowledge, no prior exact finite-D QAOA evaluation has been performed for k ≥ 3.
+
+### MaxCut (k=2) — D=3 through D=8
+
+Validation and extension of Farhi et al. (2014, 2025) MaxCut results to higher D.
+D=3 reproduces published values; D=4–8 are new.
+
+| p | D=3 | D=4 | D=5 | D=6 | D=7 | D=8 |
+|---|------|------|------|------|------|------|
+| 1 | 0.6925 | 0.6624 | 0.6431 | 0.6294 | 0.6190 | 0.6108 |
+| 2 | 0.7559 | 0.7161 | 0.6907 | 0.6726 | 0.6589 | 0.6480 |
+| 3 | 0.7924 | 0.7486 | 0.7199 | 0.6993 | 0.6836 | 0.6711 |
+| 4 | 0.8169 | 0.7690 | 0.7386 | 0.7165 | 0.6996 | 0.6861 |
+| 5 | 0.8364 | 0.7841 | 0.7523 | 0.7292 | 0.7114 | 0.6972 |
+| 6 | 0.8499 | 0.7949 | 0.7624 | 0.7386 | 0.7202 | 0.7055 |
+| 7 | 0.8598 | 0.8034 | 0.7705 | 0.7460 | 0.7272 | 0.7121 |
+| 8 | 0.8674 | 0.8099 | 0.7771 | 0.7519 | 0.7328 | 0.7174 |
+| 9 | 0.8735 | 0.8152 | 0.7829 | 0.7568 | | |
+| 10 | 0.8784 | 0.8196 | 0.7879 | | | |
 
 ## Technical Contributions
 
