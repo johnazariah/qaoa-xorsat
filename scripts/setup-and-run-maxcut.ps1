@@ -58,78 +58,41 @@ Write-Host ""
 
 $logDir = Join-Path $RepoDir "results"
 
-function Wait-Sweeps($jobs) {
-    while ($jobs | Where-Object { -not $_.Process.HasExited }) {
-        Start-Sleep -Seconds 60
-        foreach ($j in $jobs) {
-            if ($j.Process.HasExited -and -not $j.Reported) {
-                $exit = $j.Process.ExitCode
-                $status = if ($exit -eq 0) { "OK" } else { "FAILED (exit $exit)" }
-                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] D=$($j.D) finished: $status"
-                $j.Reported = $true
-            }
-        }
-    }
-}
-
-function Start-Sweep($D, $threads, $pmax) {
+function Start-Sweep-And-Wait($D, $threads, $pmax) {
     $logFile = Join-Path $logDir "maxcut-k2-d${D}-sweep.log"
+    $errFile = Join-Path $logDir "maxcut-k2-d${D}-sweep.err"
     Write-Host "  D=$D  threads=$threads  p_max=$pmax  (log: $logFile)"
     $proc = Start-Process -FilePath julia `
         -ArgumentList "--project=.", "-t", $threads, "scripts/maxcut_sweep.jl", $D, $pmax, 42 `
         -WorkingDirectory $RepoDir `
         -RedirectStandardOutput $logFile `
-        -RedirectStandardError (Join-Path $logDir "maxcut-k2-d${D}-sweep.err") `
+        -RedirectStandardError $errFile `
         -PassThru -NoNewWindow
-    return @{ D = $D; Process = $proc; Log = $logFile }
-}
-
-# ── Memory budget per depth ───────────────────────────────────────
-# p=10: ~2 GB/eval  → 6 in parallel fine
-# p=11: ~8 GB/eval  → 3 in parallel (with semaphore + headroom)
-# p=12: ~19 GB/eval → 1 at a time (solo, needs ~32 GB)
-# p=13: ~84 GB/eval → 1 at a time (solo, needs ~128 GB)
-
-# ── Phase 1: Catch everyone up to p=10 (3 at a time) ─────────────
-Write-Host ""
-Write-Host "=== Phase 1: Catch up D=6,7,8 to p=10 ==="
-$catchUp = @(6, 7, 8)
-$thr = [math]::Floor($totalCPUs / $catchUp.Count)
-$jobs = @()
-foreach ($D in $catchUp) {
-    $jobs += Start-Sweep $D $thr 10
-}
-Write-Host "PIDs: $($jobs | ForEach-Object { $_.Process.Id })"
-Wait-Sweeps $jobs
-
-# ── Phase 2: All 6 to p=11 (3 at a time) ─────────────────────────
-Write-Host ""
-Write-Host "=== Phase 2: All D to p=11 (3 at a time) ==="
-$allD = @(3, 4, 5, 6, 7, 8)
-for ($i = 0; $i -lt $allD.Count; $i += 3) {
-    $batch = @()
-    for ($j = $i; $j -lt [math]::Min($i + 3, $allD.Count); $j++) { $batch += $allD[$j] }
-    $thr = [math]::Floor($totalCPUs / $batch.Count)
-
+    Write-Host "  PID: $($proc.Id)"
+    $proc.WaitForExit()
+    $exit = $proc.ExitCode
+    $status = if ($exit -eq 0) { "OK" } else { "STOPPED (exit $exit)" }
+    Write-Host "[$(Get-Date -Format 'HH:mm:ss')] D=$D finished: $status"
     Write-Host ""
-    Write-Host "--- Batch: D=$($batch -join ','), $thr threads each, p_max=11 ---"
-    $jobs = @()
-    foreach ($D in $batch) {
-        $jobs += Start-Sweep $D $thr 11
-    }
-    Write-Host "PIDs: $($jobs | ForEach-Object { $_.Process.Id })"
-    Wait-Sweeps $jobs
 }
 
-# ── Phase 3: D=3,4,5 to p=12 (one at a time) ────────────────────
-Write-Host ""
-Write-Host "=== Phase 3: D=3,4,5 to p=12 (sequential, all CPUs) ==="
-foreach ($D in 3, 4, 5) {
-    Write-Host ""
-    Write-Host "--- D=$D solo, $totalCPUs threads, p_max=12 ---"
-    $jobs = @(Start-Sweep $D $totalCPUs 12)
-    Write-Host "PID: $($jobs[0].Process.Id)"
-    Wait-Sweeps $jobs
+# ── Sequential sweep: all D values solo with full resources ───────
+# Order: most behind first, so the table fills evenly.
+# p_max=12 for D=3..5 (memory allows solo); p_max=11 for D=6..8.
+$sweeps = @(
+    @{ D = 6; pmax = 11 },
+    @{ D = 7; pmax = 11 },
+    @{ D = 8; pmax = 11 },
+    @{ D = 3; pmax = 12 },
+    @{ D = 5; pmax = 12 },
+    @{ D = 4; pmax = 12 }
+)
+
+foreach ($s in $sweeps) {
+    Write-Host "============================================"
+    Write-Host "=== MaxCut D=$($s.D), p_max=$($s.pmax), solo ==="
+    Write-Host "============================================"
+    Start-Sweep-And-Wait $s.D $totalCPUs $s.pmax
 }
 
 # ── Final report ──────────────────────────────────────────────────

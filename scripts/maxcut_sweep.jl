@@ -85,13 +85,18 @@ for p in p_start:p_max
     params = TreeParams(k, D, p)
     ws = isempty(warm) ? QAOAAngles[] : [extend_angles(warm[1], p)]
 
+    # Cap restarts at high p to avoid OOM: each eval cache is ~8.5 GB at p=11
+    num_restarts = p ≤ 9 ? max(8, 2*p) :
+                   p ≤ 10 ? 4 :
+                            2  # p≥11: warm-start + 1 random
+
     t0 = time()
     local result
     try
         result = optimize_angles(
             params;
             clause_sign,
-            restarts = max(8, 2*p),
+            restarts = num_restarts,
             maxiters = 1280,
             initial_guesses = ws,
             rng = MersenneTwister(seed + p),
