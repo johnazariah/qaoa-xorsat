@@ -101,6 +101,11 @@ for p in p_start:p_max
             initial_guesses = ws,
             rng = MersenneTwister(seed + p),
             g_abstol = 1e-8,
+            on_evaluation = (start_idx, evals, elapsed, val, gnorm) -> begin
+                @printf("  [start %d] %d evals, %.0fs, c̃=%.10f, |g|=%.2e\n",
+                        start_idx, evals, elapsed, val, gnorm)
+                flush(stdout)
+            end,
         )
     catch e
         dt = time() - t0
