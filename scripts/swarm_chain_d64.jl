@@ -40,6 +40,31 @@ mutable struct State
     warm::Vector{QAOAAngles}
 end
 
+checkpoint_file = results_file * ".checkpoint"
+
+function save_checkpoint(p, val, angles)
+    gamma_str = join(string.(angles.γ), ';')
+    beta_str = join(string.(angles.β), ';')
+    open(checkpoint_file, "w") do io
+        @printf(io, "%d,%d,%d,%.12f,%s,%s\n", k, D, p, val, gamma_str, beta_str)
+    end
+end
+
+function load_checkpoint()
+    isfile(checkpoint_file) || return nothing
+    line = strip(readline(checkpoint_file))
+    fields = split(line, ',')
+    length(fields) >= 6 || return nothing
+    lk = tryparse(Int, fields[1]); lk === nothing && return nothing
+    lD = tryparse(Int, fields[2]); lD === nothing && return nothing
+    lp = tryparse(Int, fields[3]); lp === nothing && return nothing
+    lv = tryparse(Float64, fields[4]); lv === nothing && return nothing
+    (lk == k && lD == D) || return nothing
+    gamma = parse.(Float64, split(fields[5], ';'))
+    beta = parse.(Float64, split(fields[6], ';'))
+    return (p=lp, value=lv, angles=QAOAAngles(gamma, beta))
+end
+
 # Resume logic
 p_start = 1
 state = State(QAOAAngles[])
@@ -69,6 +94,14 @@ if isfile(results_file)
     end
 end
 
+# Check for a checkpoint from an interrupted depth
+cp = load_checkpoint()
+if cp !== nothing && cp.p == p_start
+    @printf("  Found checkpoint at p=%d (c̃=%.10f) — using as warm-start\n", cp.p, cp.value)
+    state.warm = [cp.angles]
+    flush(stdout)
+end
+
 if p_start > 1
     @printf("Skipping p=1-%d, starting at p=%d\n", p_start - 1, p_start)
 else
@@ -95,8 +128,9 @@ for p in p_start:p_max
         rng=MersenneTwister(seed + p),
         warm_starts=ws,
         eval_eltype=Double64,
-        on_generation=(gen, best, npop) -> begin
+        on_generation=(gen, best, npop, best_angles) -> begin
             emit(@sprintf("# p=%d gen %2d: best_d64=%.10f  pop=%d", p, gen, best, npop))
+            save_checkpoint(p, best, best_angles)
         end,
     )
 
@@ -107,6 +141,9 @@ for p in p_start:p_max
     emit(@sprintf("%d,%d,%d,%.12f,%d,%.1f,%s,%s",
         k, D, p, result.value, result.evaluations, dt,
         gamma_str, beta_str))
+
+    # Depth complete — clear checkpoint
+    isfile(checkpoint_file) && rm(checkpoint_file)
 
     if QaoaXorsat.is_valid_qaoa_value(result.value) && result.value > 0.501
         state.warm = [result.angles]

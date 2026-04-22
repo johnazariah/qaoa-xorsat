@@ -11,6 +11,32 @@ slightly lower c̃ than the F64 L-BFGS at the same depth because the swarm
 prioritises basin discovery over fine polishing. The composite-best.csv
 (which picks the best from any source) is intact with all historic highs.
 
+### Why it rolled back to p=7-8 (not p=9-10)
+
+The swarm chain only writes a result row to the CSV **after the entire swarm
+optimization completes for a given depth**. The per-generation progress
+comments (`# p=8 gen 2: best_d64=...`) are just log messages — the resume
+logic ignores them.
+
+When the cluster killed the jobs mid-computation, the CSVs looked like:
+
+```
+3,4,7,0.838140100433,...          ← last complete data row
+# p=8 gen  1: best_d64=0.8479    ← progress comment (not a result)
+# p=8 gen  2: best_d64=0.8479    ← killed here — no p=8 data row written
+```
+
+The resume logic scans for data rows matching `k,D,p,ctilde,...` and finds
+p=7 as the last complete depth. The p=8-10 results that existed before came
+from the **previous run's CSV files**, which were overwritten when the new
+run started from p=1 and wrote a fresh header + results through p=7.
+
+**Fix applied in this commit**: the swarm now checkpoints the best-so-far
+result to a sidecar file (`*.checkpoint`) after each generation. On resume,
+it checks for a checkpoint at the next depth and uses it as a warm-start
+even if the depth didn't complete. This means a kill at "p=8 gen 6" loses
+at most 1 generation of work instead of the entire depth.
+
 ## What's new on `main` (please pull)
 
 Performance improvements that will speed up the re-run:
@@ -80,27 +106,6 @@ Step 6 — push results periodically:
     git add -f results/swarm-d64-k*.csv
     git commit -m "Stephen: D64 swarm recovery"
     git push
-
-## What we've been computing (MaxCut, k=2)
-
-On a 40-core, 181 GB Windows Server we've been running MaxCut sweeps for
-D=3 through D=8. D=3 reproduces Farhi et al. (2014); **D=4–8 are new**.
-
-| p | D=3 | D=4 | D=5 | D=6 | D=7 | D=8 |
-|---|------|------|------|------|------|------|
-| 1 | 0.6925 | 0.6624 | 0.6431 | 0.6294 | 0.6190 | 0.6108 |
-| 2 | 0.7559 | 0.7161 | 0.6907 | 0.6726 | 0.6589 | 0.6480 |
-| 3 | 0.7924 | 0.7486 | 0.7199 | 0.6993 | 0.6836 | 0.6711 |
-| 4 | 0.8169 | 0.7690 | 0.7386 | 0.7165 | 0.6996 | 0.6861 |
-| 5 | 0.8364 | 0.7841 | 0.7523 | 0.7292 | 0.7114 | 0.6972 |
-| 6 | 0.8499 | 0.7949 | 0.7624 | 0.7386 | 0.7202 | 0.7055 |
-| 7 | 0.8598 | 0.8034 | 0.7705 | 0.7460 | 0.7272 | 0.7121 |
-| 8 | 0.8674 | 0.8099 | 0.7771 | 0.7519 | 0.7328 | 0.7174 |
-| 9 | 0.8735 | 0.8152 | 0.7829 | 0.7568 | 0.7374 | 0.7217 |
-| 10 | 0.8784 | 0.8196 | 0.7879 | *running* | | |
-| 11 | | 0.8233 | 0.7921 | | | |
-
-D=6 p=10 is currently running solo (40 threads, ~70hrs in). D=7/8 queued.
 
 ## Composite best — all XORSAT (k≥3) values intact
 

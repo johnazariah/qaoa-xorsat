@@ -722,7 +722,7 @@ L-BFGS effort on promising regions.
 - `cull_fraction`: fraction of population to kill each generation (default: 0.5)
 - `random_fraction`: fraction of replacements that are fresh random (default: 0.4)
 - `clause_sign`, `autodiff`, `rng`, `g_abstol`: as in `optimize_angles`
-- `on_generation`: optional callback `(gen, best_value, population_size) -> nothing`
+- `on_generation`: optional callback `(gen, best_value, population_size, best_angles) -> nothing`
 - `warm_starts`: optional initial angles to seed the population
 """
 function swarm_optimize(
@@ -813,7 +813,7 @@ function swarm_optimize(
         push!(all_trace, OptimizationTraceEntry(gen, -best_ever.value, 0.0))
 
         if !isnothing(on_generation)
-            on_generation(gen, best_ever.value, length(candidates))
+            on_generation(gen, best_ever.value, length(candidates), best_ever.angles)
         end
 
         # ── Early exit: if the swarm isn't improving, stop exploring ──────
@@ -827,7 +827,7 @@ function swarm_optimize(
         if stagnant_generations >= 3 && gen >= 3
             # Swarm is wandering — polish the winner and exit
             if !isnothing(on_generation)
-                on_generation(gen, best_ever.value, -1)  # -1 signals early exit
+                on_generation(gen, best_ever.value, -1, best_ever.angles)  # -1 signals early exit
             end
             break
         end
