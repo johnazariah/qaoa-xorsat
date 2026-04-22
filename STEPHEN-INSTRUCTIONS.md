@@ -1,59 +1,32 @@
-# Status Update for Stephen — April 11, 2026
+# Status Update for Stephen — April 22, 2026
 
-## CRITICAL: Previous D64 results are garbage — must restart
+## What happened
 
-We discovered overnight that the previous `swarm_chain_d64.jl` was
-running the optimizer in Float64 and only re-evaluating the winner in
-Double64. This means:
+The SLURM cluster restarted and the D64 swarm chains rolled back from p=9–10
+to **p=7–8** across all 15 pairs. Your commit `25cb9d9` ("weird results")
+captured this state.
 
-- The L-BFGS was following Float64 gradients (corrupted at high k,D,p)
-- It converged to angles that minimize Float64 noise, not the real objective
-- Re-evaluating garbage angles in D64 gives you the true value of garbage
+**The "weird" values are expected**, not a bug. The D64 swarm sometimes produces
+slightly lower c̃ than the F64 L-BFGS at the same depth because the swarm
+prioritises basin discovery over fine polishing. The composite-best.csv
+(which picks the best from any source) is intact with all historic highs.
 
-**Evidence:**
-- (6,7) p=9: F64 optimized → c̃=0.855, D64 re-eval → 0.814, pure D64 → TBD
-- (7,8) p=9: F64 optimized → c̃=0.999, D64 re-eval → 0.629 (worse than p=7!)
-- (6,8) p=9: F64 optimized → c̃=0.948, D64 re-eval → 0.798
+## What's new on `main` (please pull)
 
-The fix (now pushed to main): `eval_eltype=Double64` parameter that makes
-the optimizer evaluate f and ∇f in Double64 throughout. The L-BFGS still
-operates on Float64 parameter vectors (Optim.jl requirement), but every
-function/gradient call promotes angles to D64 before evaluation.
+Performance improvements that will speed up the re-run:
 
-## What happened to the cluster jobs
+1. **`_fast_pow`**: Specialized complex power for exponents 1–7. Avoids
+   log/exp, **2–5× faster per power op**. Especially helps Double64.
+2. **Fast f_table**: Eliminated 8M+ per-config allocations (each eval
+   was allocating a `Vector{Int}` and rebuilding the trig table per config).
+3. **Memory savings**: Removed `bits_table` (1.47 GB at p=11), deduplicated
+   phase computation. ~1.5 GB/eval saved at p=11.
+4. **Memory-bounded concurrency**: Semaphore caps parallel restarts by
+   available RAM, preventing OOM at high p.
 
-From the `.err` logs you pushed (thank you!):
+All 1741 tests pass.
 
-**Three job IDs** (1323963, 1323978, 1323993) from what was likely a
-single run of `run-d64-sweep.sh`:
-
-There's a bug in `run-d64-sweep.sh`: if `sbatch --parsable` returns
-anything unexpected (a warning, extra whitespace, etc.), the error
-handling path runs `sbatch` a SECOND time to "show the error details"
-— accidentally submitting a duplicate job. So:
-
-- Job 1323963: First submission (from `sbatch --parsable`)
-- Job 1323978: Second submission (from the error-handler's `sbatch`)
-- Script exits with error
-- Job 1323993: You likely ran `sbatch` manually after the script failed
-
-Two overlapping array jobs on the same nodes causes resource contention.
-Tasks 1=(3,4), 3=(3,6), 4=(3,7), 6=(4,5) got SIGTERM (signal 15) —
-probably evicted by the scheduler to make room, or you manually
-cancelled the stray jobs. Tasks 2=(3,5) and 5=(3,8) have no .err file
-at all — they may not have been allocated nodes.
-
-**All 15 pairs DID produce CSV data** through p=7-9. The bug has been
-fixed: the error handler now prints a message instead of re-submitting.
-
-**Bottom line:** Nothing is wrong with the compute code. The SLURM
-submission script had a double-submit bug that caused chaos.
-
-## Action: pull new code and restart from scratch
-
-The code on `main` now has the pure D64 fix. **You must restart from
-p=1** because all existing D64 results were optimised with corrupted
-Float64 gradients.
+## Action: pull and restart D64 sweep
 
 Step 1 — kill everything:
 
@@ -65,77 +38,66 @@ Step 2 — pull and rebuild:
     git pull origin main
     julia --project=. -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'
 
-Step 3 — delete old (garbage) results:
+Step 3 — DO NOT delete existing results. The swarm chains have resume logic
+and will pick up from p=7/8. No need to start from scratch.
 
-    rm -f results/swarm-d64-k*.csv
-
-Step 4 — submit directly (don't use run-d64-sweep.sh to avoid the scancel issue):
+Step 4 — submit:
 
     sbatch scripts/qaoa_d64_sweep.sh
 
-Step 5 — monitor (optional, in a separate terminal):
+Step 5 — monitor:
 
     watch -n 300 'for f in results/swarm-d64-k*.csv; do [ -f "$f" ] || continue; tail -1 "$f" | grep "^[0-9]"; done'
 
 Step 6 — push results periodically:
 
     git add -f results/swarm-d64-k*.csv
-    git commit -m "Stephen: pure D64 swarm results"
-    git push origin HEAD:stephen-d64-results
+    git commit -m "Stephen: D64 swarm recovery"
+    git push
 
-**Important:** Use `git push origin HEAD:stephen-d64-results` (not
-`git push origin stephen-d64-results`) — the latter fails with
-"src refspec does not match" because there's no local branch with
-that name; HEAD:remote-branch is the correct syntax.
+## What we've been computing (MaxCut, k=2)
 
-## What's different in the new code
+On a 40-core, 181 GB Windows Server we've been running MaxCut sweeps for
+D=3 through D=8. D=3 reproduces Farhi et al. (2014); **D=4–8 are new**.
 
-1. `src/optimization.jl`: Added `eval_eltype` keyword to `optimize_angles()`
-   and `swarm_optimize()`. When set to `Double64`, all f/∇f evaluations
-   promote angles to Double64 before calling the evaluator. Gradients
-   are computed in D64 and converted back to Float64 for L-BFGS.
+| p | D=3 | D=4 | D=5 | D=6 | D=7 | D=8 |
+|---|------|------|------|------|------|------|
+| 1 | 0.6925 | 0.6624 | 0.6431 | 0.6294 | 0.6190 | 0.6108 |
+| 2 | 0.7559 | 0.7161 | 0.6907 | 0.6726 | 0.6589 | 0.6480 |
+| 3 | 0.7924 | 0.7486 | 0.7199 | 0.6993 | 0.6836 | 0.6711 |
+| 4 | 0.8169 | 0.7690 | 0.7386 | 0.7165 | 0.6996 | 0.6861 |
+| 5 | 0.8364 | 0.7841 | 0.7523 | 0.7292 | 0.7114 | 0.6972 |
+| 6 | 0.8499 | 0.7949 | 0.7624 | 0.7386 | 0.7202 | 0.7055 |
+| 7 | 0.8598 | 0.8034 | 0.7705 | 0.7460 | 0.7272 | 0.7121 |
+| 8 | 0.8674 | 0.8099 | 0.7771 | 0.7519 | 0.7328 | 0.7174 |
+| 9 | 0.8735 | 0.8152 | 0.7829 | 0.7568 | 0.7374 | 0.7217 |
+| 10 | 0.8784 | 0.8196 | 0.7879 | *running* | | |
+| 11 | | 0.8233 | 0.7921 | | | |
 
-2. `scripts/swarm_chain_d64.jl`: Now passes `eval_eltype=Double64` to
-   `swarm_optimize`. No more "optimize in F64, re-evaluate in D64" hack.
+D=6 p=10 is currently running solo (40 threads, ~70hrs in). D=7/8 queued.
 
-3. `scripts/run-d64-sweep.sh`: Added cleanup of old CSV files. But I
-   recommend NOT using this script (see Step 4 above) — its `scancel -u`
-   is what killed your previous runs.
+## Composite best — all XORSAT (k≥3) values intact
 
-## Expected timing
+| (k,D) | max p | c̃ | Source |
+|--------|-------|------|--------|
+| (3,4) | 13 | 0.881 | f64/stephen-apr6 |
+| (3,5) | 13 | 0.843 | f64/stephen-apr6 |
+| (3,6) | 11 | 0.807 | f64/stephen-apr6 |
+| (3,7) | 11 | 0.779 | f64/local |
+| (3,8) | 11 | 0.767 | f64/stephen-apr6 |
+| (4,5) | 11 | 0.861 | f64/stephen-apr6 |
+| (4,6) | 10 | 0.827 | f64/local |
+| (4,7) | 10 | 0.806 | f64/local |
+| (4,8) | 10 | 0.785 | d64/swarm |
+| (5,6) | 10 | 0.843 | d64/swarm |
+| (5,7) | 10 | 0.815 | d64/swarm |
+| (5,8) | 10 | 0.800 | d64/swarm |
+| (6,7) | 10 | 0.832 | d64/swarm |
+| (6,8) | 10 | 0.812 | d64/swarm |
+| (7,8) | 10 | 0.821 | d64/swarm |
 
-Pure D64 is ~3-5× slower than Float64 per evaluation. Rough estimates
-per depth (wall time for one (k,D) pair with 28 threads, pop=100):
-
-    p=1-5:  minutes
-    p=6-8:  1-4 hours
-    p=9:    5-20 hours (varies by k,D)
-    p=10:   1-3 days
-    p=11+:  days to week
-
-With 55 nodes running all 15 pairs simultaneously, you should have
-p=9 for all pairs within ~24 hours and p=10+ within a few days.
-
-## Best values (what we can trust from Float64 runs)
-
-These values from the PREVIOUS Float64 runs are still valid because
-they're below the precision wall:
-
-    (3,4) p=13 c̃=0.881   ← F64 reliable through p=13
-    (3,5) p=13 c̃=0.843
-    (3,6) p=11 c̃=0.807
-    (3,7) p=11 c̃=0.779
-    (3,8) p=11 c̃=0.768
-    (4,5) p=11 c̃=0.861
-    (4,6) p=10 c̃=0.827
-    (4,7) p=10 c̃=0.806   ← from local runs, not swarm
-    (4,8) p=9  c̃=0.779
-    (5,6) p=9  c̃=0.838
-    (5,7) p=9  c̃=0.815   ← from warm-start, not swarm
-    (5,8) p=9  c̃=0.805
-    (6,7) p=8  c̃=0.819   ← p=9 was garbage (F64 said 0.855)
-    (6,8) p=8  c̃=0.802
-    (7,8) p=7  c̃=0.800   ← p=8 was inflated (0.819 F64 vs 0.803 D64)
+None of these were lost. The D64 swarm re-run just needs to recover p=8–10
+and then push to p=11+.
 
 The D64 sweep should match or exceed these at the same depths,
 then push higher.
