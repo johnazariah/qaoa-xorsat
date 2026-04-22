@@ -26,6 +26,32 @@ Performance improvements that will speed up the re-run:
 
 All 1741 tests pass.
 
+## But first: why did the cluster restart?
+
+Before re-submitting, please check what caused the rollback so we can
+prevent it happening again (each p=10 run now takes days):
+
+    # Check recent job history — did jobs get killed, timeout, or node failure?
+    sacct -u $USER --starttime=2026-04-18 --format=JobID,JobName,State,ExitCode,Start,End,Elapsed,MaxRSS
+
+    # Check if there was scheduled maintenance
+    scontrol show reservation
+    # or check cluster announcements / MOTD
+
+    # Check node health — were nodes rebooted?
+    sinfo -N -l | head -20
+
+    # Check if our jobs hit a time limit
+    sacct -u $USER --starttime=2026-04-18 --state=TIMEOUT,FAILED,CANCELLED --format=JobID,State,ExitCode,Elapsed,TimelimitRaw
+
+Key questions:
+- Were jobs TIMEOUT'd (hit wall-time limit)?
+- Were they CANCELLED (admin or scheduler preemption)?
+- Were nodes DRAINED/rebooted (maintenance)?
+- Should we use `--requeue` or SLURM checkpointing to survive restarts?
+
+Please share the `sacct` output so we can diagnose and harden the setup.
+
 ## Action: pull and restart D64 sweep
 
 Step 1 — kill everything:
