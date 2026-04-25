@@ -285,6 +285,7 @@ function optimize_angles(
     on_evaluation=nothing,
     on_chunk=nothing,
     eval_eltype::Type=Float64,
+    gpu_evaluator::Union{Function,Nothing}=nothing,
 )::AngleOptimizationResult
     validate_clause_sign(clause_sign)
     maxiters ≥ 1 || throw(ArgumentError("maxiters must be ≥ 1, got $maxiters"))
@@ -350,16 +351,24 @@ function optimize_angles(
                 local_evaluations[] += 1
                 maybe_report_progress!()
                 candidate = _promote_angles(angles_from_vector(values, params.p), eval_eltype)
-                val = Float64(basso_expectation_normalized(params, candidate; clause_sign))
+                if gpu_evaluator !== nothing
+                    val, _, _ = gpu_evaluator(params, candidate; clause_sign)
+                else
+                    val = Float64(basso_expectation_normalized(params, candidate; clause_sign))
+                end
                 if !is_valid_qaoa_value(val)
-                    return 1.0e6  # overflow — large but finite so Optim doesn't choke
+                    return 1.0e6
                 end
                 -val
             end
 
             function g_adjoint!(G, values)
                 candidate = _promote_angles(angles_from_vector(values, params.p), eval_eltype)
-                _, γg, βg = basso_expectation_and_gradient(params, candidate; clause_sign)
+                if gpu_evaluator !== nothing
+                    _, γg, βg = gpu_evaluator(params, candidate; clause_sign)
+                else
+                    _, γg, βg = basso_expectation_and_gradient(params, candidate; clause_sign)
+                end
                 if any(!isfinite, γg) || any(!isfinite, βg)
                     _overflow_gradient!(G, values, params.p)
                     return
@@ -373,8 +382,15 @@ function optimize_angles(
                 local_evaluations[] += 1
                 maybe_report_progress!()
                 candidate = _promote_angles(angles_from_vector(values, params.p), eval_eltype)
-                val, γg, βg = basso_expectation_and_gradient(params, candidate; clause_sign)
-                fval = Float64(val)
+
+                # GPU path: use gpu_evaluator if provided
+                if gpu_evaluator !== nothing
+                    fval, γg, βg = gpu_evaluator(params, candidate; clause_sign)
+                else
+                    val, γg, βg = basso_expectation_and_gradient(params, candidate; clause_sign)
+                    fval = Float64(val)
+                end
+
                 if !is_valid_qaoa_value(fval) ||
                    any(!isfinite, γg) || any(!isfinite, βg)
                     _overflow_gradient!(G, values, params.p)
@@ -482,8 +498,13 @@ function optimize_angles(
             # Package results — re-evaluate using normalized path to avoid overflow
             elapsed_seconds_start = (time_ns() - started_at) / 1.0e9
             candidate_angles_start = angles_from_vector(Optim.minimizer(result), params.p) |> canonicalize_angles
-            candidate_value_start = Float64(basso_expectation_normalized(params,
-                _promote_angles(candidate_angles_start, eval_eltype); clause_sign))
+            if gpu_evaluator !== nothing
+                candidate_value_start, _, _ = gpu_evaluator(params,
+                    _promote_angles(candidate_angles_start, eval_eltype); clause_sign)
+            else
+                candidate_value_start = Float64(basso_expectation_normalized(params,
+                    _promote_angles(candidate_angles_start, eval_eltype); clause_sign))
+            end
             if !is_valid_qaoa_value(candidate_value_start)
                 @warn "start $(i) ($(guess.kind)) produced invalid value $(candidate_value_start); marking failed"
                 candidate_value_start = -Inf
@@ -739,6 +760,7 @@ function swarm_optimize(
     on_generation=nothing,
     warm_starts::AbstractVector{<:QAOAAngles}=QAOAAngles[],
     eval_eltype::Type=Float64,
+    gpu_evaluator::Union{Function,Nothing}=nothing,
 )::AngleOptimizationResult
     p = params.p
     started_at = time_ns()
@@ -757,6 +779,7 @@ function swarm_optimize(
             rng,
             g_abstol,
             eval_eltype,
+            gpu_evaluator,
         )
         (result.angles, result.value, result.evaluations, result.converged)
     end
@@ -767,7 +790,11 @@ function swarm_optimize(
     # Seed with warm starts
     for ws in warm_starts
         depth(ws) == p || continue
-        val = Float64(basso_expectation_normalized(params, _promote_angles(ws, eval_eltype); clause_sign))
+        if gpu_evaluator !== nothing
+            val, _, _ = gpu_evaluator(params, _promote_angles(ws, eval_eltype); clause_sign)
+        else
+            val = Float64(basso_expectation_normalized(params, _promote_angles(ws, eval_eltype); clause_sign))
+        end
         push!(candidates, SwarmCandidate(ws, is_valid_qaoa_value(val) ? val : -Inf))
     end
 
@@ -884,6 +911,7 @@ function swarm_optimize(
             rng,
             g_abstol,
             eval_eltype,
+            gpu_evaluator,
         )
         total_evaluations += polish_result.evaluations
         if is_valid_qaoa_value(polish_result.value) && polish_result.value > best_ever.value
