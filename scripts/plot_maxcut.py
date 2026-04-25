@@ -32,6 +32,7 @@ for D in [3, 4, 5, 6, 7, 8]:
     if not os.path.exists(fname):
         continue
     rows = []
+    best = {}  # best c̃ per p
     with open(fname) as f:
         for line in f:
             if line.startswith('#') or line.startswith('k,'):
@@ -41,9 +42,11 @@ for D in [3, 4, 5, 6, 7, 8]:
                 continue
             p = int(fields[2])
             v = float(fields[3])
-            rows.append((p, v))
+            if p not in best or v > best[p]:
+                best[p] = v
+    rows = sorted(best.items())
     if rows:
-        data[D] = sorted(rows)
+        data[D] = rows
 
 print(f"Loaded data for D = {sorted(data.keys())}")
 for D in sorted(data.keys()):
