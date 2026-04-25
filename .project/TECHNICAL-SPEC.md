@@ -806,4 +806,176 @@ where $L = k(\log s_p + \log \mu)$ is the accumulated log-scale and $\mu = \max|
 
 The QAOA-XORSAT codebase represents a tightly engineered, production-grade evaluator for exact QAOA performance on D-regular Max-k-XORSAT. The 8 core innovations enable exact, numerically stable evaluation up to $p=13$ for primary targets (3,4) and discovery of competitive solutions at high $(k,D)$ pairs unreachable by standard techniques.
 
+---
+
+## D. GPU Acceleration Design (Innovation 9)
+
+### D.1 Objectives
+
+1. Accelerate the forward and backward passes by offloading WHT, element-wise power, and element-wise multiply to GPU
+2. Support both Metal (Apple M4, local development) and CUDA (NVIDIA, cluster production) via a shared abstraction
+3. Maintain bit-level validation against CPU results (within floating-point associativity tolerance)
+4. No change to the optimizer or angle management — GPU accelerates only the evaluator
+
+### D.2 Architecture
+
+**Layer 1: Abstract GPU Array Interface**
+
+Use `KernelAbstractions.jl` as the portable GPU programming model. It targets:
+- `CUDABackend()` → NVIDIA via CUDA.jl
+- `MetalBackend()` → Apple Silicon via Metal.jl
+- `CPU()` → fallback, for testing
+
+All GPU operations work on `AbstractArray` — the same code runs on CPU or GPU depending on where the array lives.
+
+**Layer 2: GPU-Accelerated WHT**
+
+The WHT butterfly is the core kernel. Two implementation options:
+
+*Option A: Iterative GPU WHT kernel*
+
+A single GPU kernel performs all butterfly levels in-place. Each thread handles one butterfly pair. For $N = 2^{2p+1}$ elements:
+- Level 0: N/2 pairs with stride 1
+- Level 1: N/2 pairs with stride 2
+- ...
+- Level $2p$: N/2 pairs with stride $N/2$
+
+Synchronization between levels via `@synchronize` (shared memory) or separate kernel launches per level.
+
+*Option B: Use existing GPU FFT and convert*
+
+The WHT on $\mathbb{Z}_2^n$ is equivalent to the DFT on the group $\mathbb{Z}_2^n$ — but cuFFT implements DFT on $\mathbb{Z}_N$, not on $\mathbb{Z}_2^n$. These are different transforms. There is no standard GPU library for WHT, so we must write our own kernel.
+
+**Recommendation: Option A** — write a custom GPU WHT kernel using KernelAbstractions.jl.
+
+**Layer 3: GPU Forward Pass**
+
+```
+function gpu_forward_pass(params, angles; device)
+    # Allocate all tensors on GPU
+    N = 2^(2p+1)
+    B = device_zeros(ComplexF64, N)           # branch tensor
+    kernel_hat = device_array(kernel_hat_cpu) # transfer once
+    f_table = device_array(f_table_cpu)       # transfer once
+
+    cache = []  # store on GPU for backward pass
+
+    for t in 1:p
+        child = f_table .* B
+        child_hat = gpu_wht!(child)
+        child_hat_power = child_hat .^ (k-1)    # element-wise, GPU
+        folded_hat = kernel_hat .* child_hat_power
+        folded = gpu_iwht!(folded_hat)
+        B_next = folded .^ (D-1)                 # element-wise, GPU
+        # Threshold normalization on GPU
+        max_val = maximum(abs.(B_next))
+        if max_val > THRESHOLD
+            B_next ./= max_val
+            log_scale += log(max_val)
+        end
+        push!(cache, (child_hat, folded, B_next))
+        B = B_next
+    end
+
+    # Root fold on GPU
+    root_msg = ...
+    root_msg_hat = gpu_wht!(root_msg)
+    root_msg_power = root_msg_hat .^ k
+    conv = gpu_iwht!(root_msg_power)
+    S = sum(root_kernel .* conv)  # reduction on GPU
+
+    return (S, cache, log_scale)
+end
+```
+
+**Layer 4: GPU Backward Pass**
+
+Same structure as CPU backward pass but operating on GPU arrays. The adjoint of WHT is WHT/N (same as iWHT up to scaling). The adjoint of element-wise power is element-wise multiply by (k-1) * x^(k-2). All operations are element-wise or WHT — fully GPU-able.
+
+### D.3 Memory Management
+
+At $p=13$, the adjoint cache is ~134 GB (Float64). GPU memory:
+- Apple M4 (unified): shares system 64 GB → p ≤ 12
+- NVIDIA A100: 80 GB → p ≤ 12
+- NVIDIA H100: 80 GB → p ≤ 12
+- NVIDIA A100 80GB × 2 (NVLink): 160 GB → p ≤ 13
+
+**Strategy**: For p ≤ 12, keep entire cache on GPU. For p ≥ 13, use gradient checkpointing (store every √p levels, recompute the rest).
+
+For the M4 Mac (unified memory architecture), GPU and CPU share the same physical RAM — no transfer overhead. The GPU just needs a different view of the same memory.
+
+### D.4 Testing Strategy
+
+**Level 1: Unit tests for GPU WHT**
+- Compare `gpu_wht(x)` vs `cpu_wht(x)` for random vectors of sizes 2^1 through 2^21
+- Tolerance: `≈ atol=1e-10` (Float64 associativity differences)
+- Test both forward and inverse: `gpu_iwht(gpu_wht(x)) ≈ x`
+- Test convolution theorem: `gpu_wht(a .* b) ≈ gpu_wht(a) ⊛ gpu_wht(b) / N`
+
+**Level 2: Unit tests for GPU element-wise operations**
+- `gpu_power(x, k)` vs `x .^ k` for k = 2, 3, 5, 7
+- `gpu_normalize(x, threshold)` vs CPU normalization
+- Edge cases: zero vectors, all-ones vectors, vectors with one huge element
+
+**Level 3: Integration tests for GPU forward pass**
+- Compare `gpu_forward_pass(params, angles)` vs `cpu_forward_pass(params, angles)` for:
+  - MaxCut (k=2, D=3) at p=1,2,3,5
+  - XORSAT (k=3, D=4) at p=1,2,3,5
+  - XORSAT (k=5, D=6) at p=1,2,3
+- Tolerance: `≈ atol=1e-8` (accumulated floating-point differences across p levels)
+
+**Level 4: Integration tests for GPU backward pass (gradient)**
+- Compare `gpu_gradient(params, angles)` vs `cpu_gradient(params, angles)` for same cases
+- Cross-validate: `gpu_gradient` vs finite-difference gradient at p=1,2,3
+- Tolerance: `≈ atol=1e-6` for gradient components
+
+**Level 5: End-to-end optimization test**
+- Run `optimize_angles(params; device=:gpu)` vs `optimize_angles(params; device=:cpu)` for (k=2, D=3, p=5)
+- Both should converge to the same c̃ within 1e-8
+- GPU version should be faster (benchmark)
+
+**Level 6: Performance regression tests**
+- Benchmark GPU WHT at sizes 2^15, 2^17, 2^19, 2^21, 2^23
+- Verify GPU speedup > 5× vs CPU for N ≥ 2^17
+- Verify GPU forward pass speedup > 3× vs CPU at p ≥ 8
+- Detect performance regressions across commits
+
+### D.5 Implementation Plan
+
+**Phase 1: GPU WHT kernel (2-3 days)**
+1. Add KernelAbstractions.jl, Metal.jl to Project.toml
+2. Implement `gpu_wht!` using KernelAbstractions
+3. Level 1 tests passing on Metal
+4. Benchmark vs CPU
+
+**Phase 2: GPU forward pass (2-3 days)**
+5. Implement `gpu_forward_pass` using GPU arrays
+6. Level 3 tests passing
+7. Benchmark forward pass
+
+**Phase 3: GPU backward pass (2-3 days)**
+8. Implement `gpu_backward_pass` (adjoint through cached GPU tensors)
+9. Level 4 tests passing
+10. End-to-end gradient validation
+
+**Phase 4: Integration with optimizer (1-2 days)**
+11. Add `device` parameter to `optimize_angles` and `swarm_optimize`
+12. Level 5 tests passing
+13. Full benchmark suite
+
+**Phase 5: CUDA backend (1-2 days, when cluster access available)**
+14. Add CUDA.jl dependency (optional)
+15. Verify all tests pass on CUDA backend
+16. Production benchmarks on NVIDIA hardware
+
+### D.6 Risks and Mitigations
+
+| Risk | Mitigation |
+|------|-----------|
+| WHT numerical differences (associativity) | Tolerance-based comparison, not bit-exact |
+| Metal.jl maturity/bugs | Fall back to CPU on Metal failures |
+| Double64 not supported on GPU | GPU uses Float64 only; D64 stays CPU-only |
+| Memory pressure on M4 (shared GPU/CPU) | Monitor with `Sys.free_memory()`, cap GPU allocation |
+| KernelAbstractions overhead for small N | Only use GPU for N ≥ 2^15 (p ≥ 7); CPU below |
+
 **Next-phase opportunities** focus on either **depth extension** (checkpointing, symmetry reduction to reach $p=16-18$) or **throughput acceleration** (GPU, bandit multi-start to explore broader instance spaces). The trade-offs between memory, precision, and wall time are well-understood and quantified, enabling data-driven decisions on optimization priority.
