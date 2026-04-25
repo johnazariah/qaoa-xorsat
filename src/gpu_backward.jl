@@ -61,6 +61,15 @@ end
     end
 end
 
+"""Root fan-out: f_bar[i] = conj(rp*B) * rmb; B_bar[i] = conj(rp*ft) * rmb"""
+@kernel function _root_fanout_kernel!(f_bar, B_bar, @Const(rp), @Const(ft), @Const(B), @Const(rmb))
+    i = @index(Global)
+    @inbounds begin
+        f_bar[i] = conj(rp[i] * B[i]) * rmb[i]
+        B_bar[i] = conj(rp[i] * ft[i]) * rmb[i]
+    end
+end
+
 # ── GPU forward+backward combined ─────────────────────────────────────
 
 """
@@ -228,13 +237,6 @@ function gpu_forward_backward(
     B_bar = similar(f_table_gpu)
 
     # f_table_bar = conj(root_parity .* B[p+1]) .* root_msg_bar
-    @kernel function _root_fanout_kernel!(f_bar, B_bar, @Const(rp), @Const(ft), @Const(B), @Const(rmb))
-        i = @index(Global)
-        @inbounds begin
-            f_bar[i] = conj(rp[i] * B[i]) * rmb[i]
-            B_bar[i] = conj(rp[i] * ft[i]) * rmb[i]
-        end
-    end
     rf_kernel! = _root_fanout_kernel!(backend)
     rf_kernel!(f_table_bar, B_bar, root_parity_gpu, f_table_gpu, B_history[p+1], root_msg_bar; ndrange=N)
     KernelAbstractions.synchronize(backend)
