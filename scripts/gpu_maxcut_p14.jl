@@ -1,12 +1,24 @@
 #!/usr/bin/env julia
-# GPU MaxCut sweep from p=12 to p=14 using checkpointed backward pass.
-# Warm-starts from p=11 CPU result.
+# GPU MaxCut sweep using the PRODUCTION optimizer with gpu_evaluator.
+# Uses warm-start chain from p=11, minimal restarts (MaxCut is single-basin).
 
 using QaoaXorsat, Metal, Printf, Random
-include(joinpath(@__DIR__, "..", "src", "gpu_optimizer.jl"))
 
-gpu_array(x::AbstractVector{<:Complex}) = MtlArray(ComplexF32.(x))
-gpu_array(x::AbstractVector{<:Real}) = MtlArray(ComplexF32.(complex.(x)))
+include(joinpath(@__DIR__, "..", "src", "gpu_checkpointed.jl"))
+
+gpu_array_fn(x::AbstractVector{<:Complex}) = MtlArray(ComplexF32.(x))
+gpu_array_fn(x::AbstractVector{<:Real}) = MtlArray(ComplexF32.(complex.(x)))
+
+# GPU evaluator closure for the production optimizer
+function make_gpu_evaluator(gpu_fn; checkpoint_interval=0)
+    function gpu_eval(params, angles; clause_sign)
+        gpu_checkpointed_forward_backward(params, angles, gpu_fn;
+            clause_sign, checkpoint_interval)
+    end
+    gpu_eval
+end
+
+gpu_eval = make_gpu_evaluator(gpu_array_fn)
 
 # p=11 optimal angles from CPU sweep
 γ11 = [0.25771657761408784, 0.5302956055768999, 3.7347249730268595,
@@ -22,21 +34,32 @@ global warm_angles = QAOAAngles(γ11, β11)
 
 for target_p in [12, 13, 14]
     println("=" ^ 60)
-    println("=== MaxCut D=3 p=$target_p (GPU, checkpointed) ===")
+    println("=== MaxCut D=3 p=$target_p (production optimizer + GPU) ===")
     println("=" ^ 60)
 
     params = TreeParams(2, 3, target_p)
     warm = [extend_angles(warm_angles, target_p)]
 
     t0 = time()
-    best_angles, best_val = gpu_optimize_angles(params, gpu_array;
-        clause_sign=-1, restarts=4, maxiters=200,
-        initial_guesses=warm, rng=MersenneTwister(42),
-        checkpoint_interval=0, verbose=true)
+    # Use the PRODUCTION optimizer with gpu_evaluator.
+    # Warm-start + 2 random restarts (MaxCut is single-basin, no need for swarm).
+    result = optimize_angles(params;
+        clause_sign=-1,
+        restarts=2,
+        maxiters=200,
+        initial_guesses=warm,
+        rng=MersenneTwister(42 + target_p),
+        g_abstol=1e-6,
+        gpu_evaluator=gpu_eval,
+    )
     dt = time() - t0
 
-    @printf("\np=%d  c̃=%.12f  time=%.1fs\n\n", target_p, best_val, dt)
+    @printf("\np=%d  c̃=%.12f  converged=%s  time=%.1fs  evals=%d\n",
+            target_p, result.value, result.converged, dt, result.evaluations)
+    @printf("γ = %s\n", join(string.(result.angles.γ), ";"))
+    @printf("β = %s\n\n", join(string.(result.angles.β), ";"))
     flush(stdout)
 
-    global warm_angles = best_angles
+    global warm_angles = result.angles
 end
+
