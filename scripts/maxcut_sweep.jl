@@ -85,25 +85,26 @@ for p in p_start:p_max
     params = TreeParams(k, D, p)
     ws = isempty(warm) ? QAOAAngles[] : [extend_angles(warm[1], p)]
 
-    # Cap restarts at high p to avoid OOM: each eval cache is ~8.5 GB at p=11
-    num_restarts = p ≤ 9 ? max(8, 2*p) :
-                   p ≤ 10 ? 4 :
-                            2  # p≥11: warm-start + 1 random
+    # Swarm: small population at high p (memory-bounded), with warm-start.
+    # MaxCut is single-basin so swarm exits early after 1-2 gens, then polishes.
+    pop = p ≤ 8 ? 50 : (p ≤ 11 ? 20 : 10)
 
     t0 = time()
     local result
     try
-        result = optimize_angles(
+        result = swarm_optimize(
             params;
             clause_sign,
-            restarts = num_restarts,
-            maxiters = 1280,
-            initial_guesses = ws,
+            population = pop,
+            generations = 5,
+            burst_iters = 20,
+            warm_starts = ws,
             rng = MersenneTwister(seed + p),
             g_abstol = 1e-8,
-            on_evaluation = (start_idx, evals, elapsed, val, gnorm) -> begin
-                @printf("  [start %d] %d evals, %.0fs, c̃=%.10f, |g|=%.2e\n",
-                        start_idx, evals, elapsed, val, gnorm)
+            on_generation = (gen, best, npop) -> begin
+                elapsed = time() - t0
+                @printf("  p=%d gen %d: best=%.10f pop=%d elapsed=%.0fs\n",
+                        p, gen, best, npop, elapsed)
                 flush(stdout)
             end,
         )
