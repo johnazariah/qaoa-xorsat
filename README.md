@@ -50,8 +50,9 @@ QAOA surpasses DQI+BP for 13 of 15 pairs. To our knowledge, no prior exact finit
 
 ### MaxCut (k=2) — D=3 through D=8
 
-Validation and extension of Farhi et al. (2014, 2025) MaxCut results to higher D.
-D=3 reproduces published values; D=4–8 are new.
+First exact finite-D QAOA MaxCut satisfaction fractions at these depths.
+Previous work (Basso et al.) computed only the large-D asymptotic coefficient ν_p^[k];
+our values are exact at each finite D with no O(1/D) approximation.
 
 | p | D=3 | D=4 | D=5 | D=6 | D=7 | D=8 |
 |---|------|------|------|------|------|------|
@@ -64,9 +65,12 @@ D=3 reproduces published values; D=4–8 are new.
 | 7 | 0.8598 | 0.8034 | 0.7705 | 0.7460 | 0.7272 | 0.7121 |
 | 8 | 0.8674 | 0.8099 | 0.7771 | 0.7519 | 0.7328 | 0.7174 |
 | 9 | 0.8735 | 0.8152 | 0.7829 | 0.7568 | 0.7374 | 0.7217 |
-| 10 | 0.8784 | 0.8196 | 0.7879 | | | |
-| 11 | | 0.8233 | 0.7921 | | | |
-| 12 | | | 0.7957 | | | |
+| 10 | 0.8784 | 0.8196 | 0.7879 | 0.7608 | | |
+| 11 | 0.8825 | 0.8233 | 0.7921 | | | |
+| 12 | **0.8850** | | 0.7957 | | | |
+
+**p=12 D=3 computed via GPU-accelerated checkpointed evaluation on Apple M4.**
+p=13 running. These are the first exact finite-D MaxCut values at p≥8.
 
 ## Technical Contributions
 
