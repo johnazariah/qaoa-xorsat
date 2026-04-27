@@ -810,6 +810,7 @@ function swarm_optimize(
     for gen in 1:generations
         # ── Local improvement: short L-BFGS burst on each candidate ───────
         new_candidates = Vector{SwarmCandidate}(undef, length(candidates))
+        candidates_done = Threads.Atomic{Int}(0)
         Threads.@threads for i in eachindex(candidates)
             angles_out, val_out, evals, _ = burst_optimize(candidates[i].angles)
             if is_valid_qaoa_value(val_out) && val_out > candidates[i].value
@@ -826,6 +827,11 @@ function swarm_optimize(
                 end
             end
             total_evaluations += evals
+            Threads.atomic_add!(candidates_done, 1)
+            done = candidates_done[]
+            if done % max(1, length(candidates) ÷ 5) == 0 || done == length(candidates)
+                @info "  gen $gen: $done/$(length(candidates)) candidates burst-optimized"
+            end
         end
         candidates = new_candidates
 
@@ -900,6 +906,7 @@ function swarm_optimize(
     # ── Polish: run a full L-BFGS on the best candidate found ───────────
     # The swarm finds the right basin; L-BFGS converges it properly.
     if is_valid_qaoa_value(best_ever.value) && best_ever.value > 0.501
+        @info "  Polishing best candidate (c̃=$(best_ever.value))..."
         polish_result = optimize_angles(
             params;
             clause_sign,
@@ -912,6 +919,9 @@ function swarm_optimize(
             g_abstol,
             eval_eltype,
             gpu_evaluator,
+            on_evaluation=(start_idx, evals, elapsed, val, gnorm) -> begin
+                @info "  polish: $(evals) evals, $(round(elapsed,digits=0))s, c̃=$(round(val,digits=10)), |g|=$(round(gnorm,sigdigits=2))"
+            end,
         )
         total_evaluations += polish_result.evaluations
         if is_valid_qaoa_value(polish_result.value) && polish_result.value > best_ever.value
