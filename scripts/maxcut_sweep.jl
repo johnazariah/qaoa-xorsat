@@ -101,7 +101,7 @@ for p in p_start:p_max
             warm_starts = ws,
             rng = MersenneTwister(seed + p),
             g_abstol = 1e-8,
-            on_generation = (gen, best, npop) -> begin
+            on_generation = (gen, best, npop, _angles) -> begin
                 elapsed = time() - t0
                 @printf("  p=%d gen %d: best=%.10f pop=%d elapsed=%.0fs\n",
                         p, gen, best, npop, elapsed)
