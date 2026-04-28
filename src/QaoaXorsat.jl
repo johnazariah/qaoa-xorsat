@@ -49,6 +49,10 @@ export parity_expectation, qaoa_expectation
 include("adjoint.jl")
 export basso_expectation_and_gradient, basso_expectation_normalized
 
+# CPU gradient checkpointing (√p memory for p≥13)
+include("checkpointed_adjoint.jl")
+export basso_expectation_and_gradient_checkpointed, basso_expectation_checkpointed
+
 # 4× reduced branch-tensor iteration
 include("reduced_basis.jl")
 export ReducedBasis, basso_branch_tensor_reduced, basso_expectation_reduced

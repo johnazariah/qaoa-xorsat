@@ -29,6 +29,7 @@ const RELAXED_G_ABSTOL_FLOOR = 1.0e-3
 const F_RELTOL = 1.0e-10
 const PLATEAU_CHECK_SECONDS = 300  # check plateau every 5 minutes wall time
 const PLATEAU_WINDOW_SIZE = 30     # rolling window of recent values for plateau detection
+const GRADIENT_PLATEAU_WINDOW = 20 # secondary: if gradient norm has been < 100×g_abstol for this many iters, exit
 
 """
     plateau_chunk_size(p) -> Int
@@ -286,6 +287,7 @@ function optimize_angles(
     on_chunk=nothing,
     eval_eltype::Type=Float64,
     gpu_evaluator::Union{Function,Nothing}=nothing,
+    checkpointed::Bool=false,
 )::AngleOptimizationResult
     validate_clause_sign(clause_sign)
     maxiters ≥ 1 || throw(ArgumentError("maxiters must be ≥ 1, got $maxiters"))
@@ -353,6 +355,8 @@ function optimize_angles(
                 candidate = _promote_angles(angles_from_vector(values, params.p), eval_eltype)
                 if gpu_evaluator !== nothing
                     val, _, _ = gpu_evaluator(params, candidate; clause_sign)
+                elseif checkpointed
+                    val = Float64(basso_expectation_checkpointed(params, candidate; clause_sign))
                 else
                     val = Float64(basso_expectation_normalized(params, candidate; clause_sign))
                 end
@@ -366,6 +370,8 @@ function optimize_angles(
                 candidate = _promote_angles(angles_from_vector(values, params.p), eval_eltype)
                 if gpu_evaluator !== nothing
                     _, γg, βg = gpu_evaluator(params, candidate; clause_sign)
+                elseif checkpointed
+                    _, γg, βg = basso_expectation_and_gradient_checkpointed(params, candidate; clause_sign)
                 else
                     _, γg, βg = basso_expectation_and_gradient(params, candidate; clause_sign)
                 end
@@ -386,6 +392,9 @@ function optimize_angles(
                 # GPU path: use gpu_evaluator if provided
                 if gpu_evaluator !== nothing
                     fval, γg, βg = gpu_evaluator(params, candidate; clause_sign)
+                elseif checkpointed
+                    val, γg, βg = basso_expectation_and_gradient_checkpointed(params, candidate; clause_sign)
+                    fval = Float64(val)
                 else
                     val, γg, βg = basso_expectation_and_gradient(params, candidate; clause_sign)
                     fval = Float64(val)
@@ -417,6 +426,7 @@ function optimize_angles(
             value_buffer = Float64[]
 
             iteration_count = Ref(0)
+            gnorm_buffer = Float64[]
 
             function plateau_callback(state)
                 iteration_count[] += 1
@@ -426,13 +436,17 @@ function optimize_angles(
 
                 push!(all_trace, OptimizationTraceEntry(iter, val, gnorm))
 
-                # Update circular buffer
+                # Update circular buffers
                 push!(value_buffer, val)
                 if length(value_buffer) > PLATEAU_WINDOW_SIZE
                     popfirst!(value_buffer)
                 end
+                push!(gnorm_buffer, gnorm)
+                if length(gnorm_buffer) > GRADIENT_PLATEAU_WINDOW
+                    popfirst!(gnorm_buffer)
+                end
 
-                # Check plateau every iteration once buffer is full
+                # Primary: value plateau (30 iters with range < g_abstol)
                 if length(value_buffer) == PLATEAU_WINDOW_SIZE
                     buffer_min = minimum(value_buffer)
                     buffer_max = maximum(value_buffer)
@@ -448,6 +462,26 @@ function optimize_angles(
                         end
                         converged_flag = true
                         return true  # stop Optim immediately
+                    end
+                end
+
+                # Secondary: gradient plateau (20 iters with all gnorms < 100×g_abstol
+                # AND value range < 10×g_abstol — gradient stuck but value converged)
+                if length(gnorm_buffer) == GRADIENT_PLATEAU_WINDOW &&
+                   length(value_buffer) >= GRADIENT_PLATEAU_WINDOW
+                    if maximum(gnorm_buffer) < 100 * g_abstol
+                        recent_vals = value_buffer[end-GRADIENT_PLATEAU_WINDOW+1:end]
+                        if maximum(recent_vals) - minimum(recent_vals) < 10 * g_abstol
+                            if !isnothing(on_chunk)
+                                try
+                                    on_chunk(i, iter, all_trace, state.x)
+                                catch e
+                                    @warn "on_chunk callback failed" exception=e
+                                end
+                            end
+                            converged_flag = true
+                            return true  # gradient plateau exit
+                        end
                     end
                 end
 
@@ -501,6 +535,9 @@ function optimize_angles(
             if gpu_evaluator !== nothing
                 candidate_value_start, _, _ = gpu_evaluator(params,
                     _promote_angles(candidate_angles_start, eval_eltype); clause_sign)
+            elseif checkpointed
+                candidate_value_start = Float64(basso_expectation_checkpointed(params,
+                    _promote_angles(candidate_angles_start, eval_eltype); clause_sign))
             else
                 candidate_value_start = Float64(basso_expectation_normalized(params,
                     _promote_angles(candidate_angles_start, eval_eltype); clause_sign))
