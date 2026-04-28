@@ -67,9 +67,7 @@ our values are exact at each finite D with no O(1/D) approximation.
 | 9 | 0.8735 | 0.8152 | 0.7829 | 0.7568 | 0.7374 | 0.7217 |
 | 10 | 0.8784 | 0.8196 | 0.7879 | 0.7608 | 0.7412 | |
 | 11 | 0.8825 | 0.8233 | 0.7921 | 0.7641 | | |
-| 12 | **0.8850**† | 0.8264 | 0.7957 | 0.7670 | | |
-
-†GPU Float32 value (Metal); CPU Float64 refinement in progress.
+| 12 | **0.8859** | 0.8264 | 0.7957 | 0.7670 | | |
 
 ## Technical Contributions
 

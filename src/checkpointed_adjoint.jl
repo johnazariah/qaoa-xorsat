@@ -7,7 +7,13 @@
 # Trade-off: ~2× backward compute for √p/3p memory reduction.
 # At p=13, N=2^27: full cache = ~42 GB, checkpointed = ~8 GB.
 #
-# This enables p=13 on a 64 GB machine in Float64.
+# Supports optional disk spillover: checkpoints that exceed a RAM cap
+# are serialised to disk and read back during backward. This enables
+# p=17 on a 1.4 TB machine (each checkpoint is 549 GB).
+#
+# This enables p=13 on a 64 GB machine, p=16 on 1.4 TB, p=17 with disk.
+
+using Serialization
 
 """
     CheckpointedForwardCache{T}
@@ -37,8 +43,9 @@ struct CheckpointedForwardCache{T<:Real}
 
     # Branch-tensor checkpoints: B at selected levels, with log-scale
     checkpoint_levels::Vector{Int}        # sorted levels where B is stored (1-indexed)
-    checkpoint_B::Dict{Int, Vector{Complex{T}}}
+    checkpoint_B::Dict{Int, Vector{Complex{T}}}  # RAM checkpoints
     checkpoint_log_s::Dict{Int, T}
+    checkpoint_disk_paths::Dict{Int, String}     # disk-spilled checkpoints
 
     # Root computation (always stored — needed for backward)
     root_msg::Vector{Complex{T}}
@@ -65,6 +72,8 @@ function _forward_pass_checkpointed(
     angles::QAOAAngles{T};
     clause_sign::Int=1,
     checkpoint_interval::Int=0,
+    disk_dir::Union{String,Nothing}=nothing,
+    max_ram_checkpoints::Int=typemax(Int),
 ) where T
     p = params.p
     k = params.k
@@ -99,16 +108,23 @@ function _forward_pass_checkpointed(
 
     checkpoint_B = Dict{Int, Vector{Complex{T}}}()
     checkpoint_log_s = Dict{Int, T}()
+    checkpoint_disk_paths = Dict{Int, String}()
     checkpoint_levels = Int[]
+    ram_count = 0
+
+    if disk_dir !== nothing
+        mkpath(disk_dir)
+    end
 
     B = ones(Complex{T}, N)
     log_s = zero(T)
     scratch = Vector{Complex{T}}(undef, N)
 
-    # Store initial checkpoint (level 1 = B[1])
+    # Store initial checkpoint (level 1 = B[1]) — always in RAM
     checkpoint_B[1] = copy(B)
     checkpoint_log_s[1] = log_s
     push!(checkpoint_levels, 1)
+    ram_count += 1
 
     for t in 1:p
         # child_weights = f_table .* B
@@ -154,9 +170,20 @@ function _forward_pass_checkpointed(
 
         # Store checkpoint at interval boundaries and at end
         if t % ci == 0 || t == p
-            checkpoint_B[t + 1] = copy(B)
             checkpoint_log_s[t + 1] = log_s
             push!(checkpoint_levels, t + 1)
+
+            if ram_count >= max_ram_checkpoints && disk_dir !== nothing
+                # Spill to disk
+                path = joinpath(disk_dir, "checkpoint_B_$(t+1).bin")
+                open(path, "w") do io
+                    serialize(io, B)
+                end
+                checkpoint_disk_paths[t + 1] = path
+            else
+                checkpoint_B[t + 1] = copy(B)
+                ram_count += 1
+            end
         end
     end
     sort!(checkpoint_levels)
@@ -204,7 +231,7 @@ function _forward_pass_checkpointed(
         copy(angles.β), gamma_full, trig_table,
         f_table, phase_args,
         kernel, kernel_hat,
-        checkpoint_levels, checkpoint_B, checkpoint_log_s,
+        checkpoint_levels, checkpoint_B, checkpoint_log_s, checkpoint_disk_paths,
         root_msg, root_parity_signs, root_kernel,
         msg_hat, mh_scale, msg_hat_power,
         copy(B),  # B_final
@@ -333,7 +360,16 @@ function _backward_pass_checkpointed(cache::CheckpointedForwardCache{T}) where T
         end
 
         # Recompute forward through this segment
-        B_start = cache.checkpoint_B[seg_start_level]
+        # Load checkpoint from RAM or disk
+        if haskey(cache.checkpoint_B, seg_start_level)
+            B_start = cache.checkpoint_B[seg_start_level]
+        elseif haskey(cache.checkpoint_disk_paths, seg_start_level)
+            B_start = open(cache.checkpoint_disk_paths[seg_start_level]) do io
+                deserialize(io)
+            end
+        else
+            error("No checkpoint at level $seg_start_level")
+        end
         B_seg, child_hat_seg, folded_seg, _, _ = _recompute_segment_cpu(
             B_start, from_t, to_t,
             cache.f_table, cache.kernel_hat,
@@ -436,22 +472,41 @@ end
 # ── Public API ────────────────────────────────────────────────────────
 
 """
-    basso_expectation_and_gradient_checkpointed(params, angles; clause_sign=1, checkpoint_interval=0)
+    _cleanup_checkpoints!(cache::CheckpointedForwardCache)
+
+Remove disk-spilled checkpoint files.
+"""
+function _cleanup_checkpoints!(cache::CheckpointedForwardCache)
+    for (_, path) in cache.checkpoint_disk_paths
+        rm(path; force=true)
+    end
+end
+
+"""
+    basso_expectation_and_gradient_checkpointed(params, angles;
+        clause_sign=1, checkpoint_interval=0, disk_dir=nothing, max_ram_checkpoints=typemax(Int))
         -> (value, γ_grad, β_grad)
 
 Same as `basso_expectation_and_gradient` but uses gradient checkpointing
 to reduce memory from O(p · N) to O(√p · N) at ~2× backward compute cost.
 
 Use this for p ≥ 13 on memory-limited hardware.
+
+`disk_dir`: if set, spill checkpoints to this directory when RAM cap is reached.
+`max_ram_checkpoints`: maximum number of checkpoints to keep in RAM.
 """
 function basso_expectation_and_gradient_checkpointed(
     params::TreeParams,
     angles::QAOAAngles;
     clause_sign::Int=1,
     checkpoint_interval::Int=0,
+    disk_dir::Union{String,Nothing}=nothing,
+    max_ram_checkpoints::Int=typemax(Int),
 )
-    cache = _forward_pass_checkpointed(params, angles; clause_sign, checkpoint_interval)
+    cache = _forward_pass_checkpointed(params, angles;
+        clause_sign, checkpoint_interval, disk_dir, max_ram_checkpoints)
     γ_grad, β_grad = _backward_pass_checkpointed(cache)
+    _cleanup_checkpoints!(cache)
     (cache.value, γ_grad, β_grad)
 end
 
@@ -466,5 +521,6 @@ function basso_expectation_checkpointed(
     clause_sign::Int=1,
 )
     cache = _forward_pass_checkpointed(params, angles; clause_sign)
+    _cleanup_checkpoints!(cache)
     cache.value
 end
