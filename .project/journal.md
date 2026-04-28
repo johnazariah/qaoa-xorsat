@@ -112,6 +112,145 @@ Double64 (valid).
 
 ---
 
+## Entry 32 — Q1: QAOA is *not* Trotterised adiabatic optimisation (29 April 2026)
+
+### Summary
+
+Executed all four experiments from `.project/SPEC-Q1-adiabatic.md` on the
+existing MaxCut sweeps (D=3..8, p ≤ 12).  Results land decisively against
+the Trotterised-adiabatic interpretation of QAOA on D-regular MaxCut on
+the infinite-girth tree.
+
+Branch: `q1-adiabatic`.  Source: `scripts/q1_*.jl`, plots in `figures/`.
+
+### Headline Numbers (Experiment 1: Adiabatic Fidelity)
+
+For each D at the deepest available p, evaluate c̃ at the linear
+adiabatic schedule γ_j = (j/p)·γ_max, β_j = (1-(j-1)/(p-1))·β_max with
+γ_max, β_max set to the magnitudes of the optimal angles:
+
+| D | p  | c̃_opt    | c̃_adi    | Δ        | rel. loss |
+|---|----|----------|----------|----------|-----------|
+| 3 | 12 | 0.88594  | 0.47008  | +0.4159  | 1.078     |
+| 4 | 11 | 0.82331  | 0.69118  | +0.1321  | 0.409     |
+| 5 | 12 | 0.79566  | 0.50396  | +0.2917  | 0.987     |
+| 6 | 12 | 0.76701  | 0.50405  | +0.2630  | 0.985     |
+| 7 | 10 | 0.74123  | 0.50009  | +0.2411  | 1.000     |
+| 8 |  9 | 0.72171  | 0.53003  | +0.1917  | 0.865     |
+
+The matched-magnitude linear schedule barely beats random guess (0.5)
+for D ≥ 5 and at D=3 falls *below* random.  "rel. loss" is
+(c̃_opt − c̃_adi)/(c̃_opt − 0.5): ≥ 0.86 for D ≥ 5 means the adiabatic
+schedule recovers < 14 % of the gap above random.
+
+### Experiment 2: Intermediate-Depth (Truncated) Performance
+
+Took the depth-p_max optimum and evaluated it as a depth-t QAOA for
+t = 1..p_max (using only the first t angle pairs).
+
+- The truncated schedule **is monotonic** in t at every D ∈ {3,4,5,6}.
+- However it is also **systematically far below** the depth-t global
+  optimum for small t.  Sample (D=3, p_max=12): c̃_truncated(t=1)=0.556
+  vs c̃_optimal(t=1)=0.692; the gap stays > 0.06 until t ≥ 11.
+- The linear-adiabatic-at-t curve oscillates around 0.5 for every D.
+
+Interpretation: the optimal depth-p schedule does not contain the
+optimal depth-t schedule as a prefix.  This is consistent with QAOA
+re-tuning every angle as p grows, not with adding incremental
+"adiabatic time" on top of a converged shorter schedule.
+
+### Experiment 3: Adiabatic-Initialised Optimisation
+
+For each D ∈ {3..8} at p=8, ran L-BFGS to convergence from each of 12
+linear-adiabatic seeds (4 γ_max ∈ {π/2, π, 3π/2, 2π} × 3 β_max ∈
+{π/4, π/2, 3π/4}).  Compared the *best-of-12* converged value against
+the warm-start optimum c̃_warm from the existing sweep.
+
+| D | warm c̃   | best adi-init c̃ | Δ        |
+|---|----------|-----------------|----------|
+| 3 | 0.86739  | 0.86127         | +0.00612 |
+| 4 | 0.80988  | 0.79750         | +0.01238 |
+| 5 | 0.77710  | 0.77302         | +0.00408 |
+| 6 | 0.75193  | 0.73863         | +0.01330 |
+| 7 | 0.73276  | 0.72306         | +0.00970 |
+| 8 | 0.71736  | 0.70797         | +0.00940 |
+
+L-BFGS converged in 80–340 iterations on every (D, seed) — the seeds
+*are* in the smooth basin of some local optimum.  The local optimum is
+just **not** the global warm-start basin.  All 72 runs converged
+(`converged=true`) except one D=8 (γ_max=π/2, β_max=π/4) point where
+L-BFGS terminated after 1 iteration at c̃ = 0.5000 — the gradient at
+the seed was below tolerance, so the linear-adiabatic point was already
+a saddle/local minimum at random performance.
+
+This is the strongest single piece of evidence: even when L-BFGS runs
+to convergence from the adiabatic seed, every D shows a > 0.004 gap
+below warm-start.  An adiabatic-style schedule does not lie in the
+optimal QAOA basin.
+
+### Experiment 4: Angle-Profile Curvature
+
+Polynomial fits to the unwrapped optimal angle profiles γ(j/p), β(j/p):
+
+| D | profile | r²(linear) | Δr² (→cubic) |
+|---|---------|------------|--------------|
+| 3 | γ       | 0.50       | +0.40        |
+| 3 | β       | 0.15       | +0.69        |
+| 4 | γ       | 0.89       | +0.09        |
+| 4 | β       | 0.93       | +0.07        |
+| 5 | γ       | 0.92       | +0.05        |
+| 5 | β       | 0.02       | +0.07        |
+| 6 | γ       | 0.89       | +0.09        |
+| 6 | β       | 0.96       | +0.04        |
+| 7 | γ       | 0.90       | +0.07        |
+| 7 | β       | 0.97       | +0.02        |
+| 8 | γ       | 0.90       | +0.07        |
+| 8 | β       | 0.98       | +0.02        |
+
+D=3 and D=5-β are extreme outliers — the optimal β profile at D=5,
+p=12 visibly **zigzags** between ~1.1 and ~2.1 from step to step (a
+bang-bang signature, not a smooth ramp).  Even the "linear-friendly"
+(D=4, 6, 7, 8) profiles always pick up ≥ 0.02 r² from the cubic term,
+so the schedule is not strictly linear at any D.
+
+### Conclusion (writeable for paper Section 5)
+
+> The optimal QAOA angle schedules on D-regular MaxCut on the
+> infinite-girth tree are inconsistent with a Trotterisation of linear
+> adiabatic optimisation.  The matched-magnitude linear schedule
+> recovers at most 14 % of the gap above random for D ≥ 5, the
+> depth-p optimum is *not* a prefix of the depth-(p+k) optimum, and
+> L-BFGS seeded from the linear schedule converges to a strictly
+> worse basin than warm-start.  This identifies QAOA as a
+> *variational* algorithm exploiting interference patterns rather
+> than a discretised annealing procedure.
+
+### Caveats
+
+- We compute exact expectation values on the infinite-girth tree, not
+  full quantum-state overlaps.  A statement that QAOA states do not
+  resemble adiabatic ground states would require finite-instance
+  simulation, which this codebase does not perform.
+- The "linear adiabatic" schedule we use matches the QAOA endpoint
+  magnitudes, not the true endpoint Hamiltonians.  A more sophisticated
+  comparator (eg., schedules from arXiv:2106.15645) is future work.
+
+### Artefacts (all under `qaoa-xorsat-q1` worktree only)
+
+- `scripts/q1_intermediate_depth.jl` (was already provided)
+- `scripts/q1_angle_schedules.jl`
+- `scripts/q1_adiabatic_init.jl`
+- `scripts/q1_angle_curvature.jl`
+- `scripts/q1_plots.py`
+- `results/q1-intermediate-depth.csv`
+- `results/q1-angle-schedules.csv`
+- `results/q1-adiabatic-fidelity.csv`
+- `results/q1-adiabatic-init.csv`
+- `results/q1-angle-curvature.csv`
+- `figures/q1-{angle-schedules,intermediate-depth,adiabatic-init,angle-curvature}.png`
+
+---
+
 ## Entry 31 — Double64 Precision Fix + Final Sweep (10 April 2026)
 
 ### Summary

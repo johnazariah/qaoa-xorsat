@@ -76,9 +76,29 @@ function main()
     println()
 
     mkpath(RESULTS_DIR)
-    open(OUT_FILE, "w") do io
-        println(io, "# Q1 Exp 3: Adiabatic-init vs warm-start optimization — $(now())")
-        println(io, "k,D,p,gamma_max,beta_max,ctilde_seed,ctilde_adi_opt,ctilde_warm,delta_warm_minus_adi,iterations,wall_seconds,converged")
+
+    # Resume support: scan existing rows so we skip already-completed combos.
+    # CSV stores γ/β to ~10 decimals so we key by rounded values to avoid Float64 mismatch.
+    rndkey(D, γ, β) = (D, round(γ; digits=8), round(β; digits=8))
+    done = Set{Tuple{Int,Float64,Float64}}()
+    if isfile(OUT_FILE)
+        for line in eachline(OUT_FILE)
+            (isempty(line) || startswith(line, '#') || startswith(line, "k,")) && continue
+            parts = split(line, ',')
+            length(parts) < 5 && continue
+            try
+                push!(done, rndkey(parse(Int, parts[2]),
+                                   parse(Float64, parts[4]),
+                                   parse(Float64, parts[5])))
+            catch
+            end
+        end
+        println("Resume: found ", length(done), " already-completed combos in $OUT_FILE")
+    else
+        open(OUT_FILE, "w") do io
+            println(io, "# Q1 Exp 3: Adiabatic-init vs warm-start optimization — $(now())")
+            println(io, "k,D,p,gamma_max,beta_max,ctilde_seed,ctilde_adi_opt,ctilde_warm,delta_warm_minus_adi,iterations,wall_seconds,converged")
+        end
     end
 
     rng = Random.MersenneTwister(20260429)
@@ -94,6 +114,10 @@ function main()
                 "γ_max", "β_max", "c̃(seed)", "c̃(adi-opt)", "warm-Δ", "iters", "secs")
 
         for γm in GAMMA_MAXES, βm in BETA_MAXES
+            if rndkey(D, γm, βm) in done
+                @printf("  %.4f  %.4f  (already done — skip)\n", γm, βm)
+                continue
+            end
             seed = linear_adi(p, γm, βm)
             c_seed = basso_expectation_normalized(params, seed; clause_sign=CLAUSE_SIGN)
 
