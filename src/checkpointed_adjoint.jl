@@ -505,13 +505,17 @@ function basso_expectation_and_gradient_checkpointed(
 )
     cache = _forward_pass_checkpointed(params, angles;
         clause_sign, checkpoint_interval, disk_dir, max_ram_checkpoints)
-    γ_grad, β_grad = _backward_pass_checkpointed(cache)
-    _cleanup_checkpoints!(cache)
-    (cache.value, γ_grad, β_grad)
+    try
+        γ_grad, β_grad = _backward_pass_checkpointed(cache)
+        (cache.value, γ_grad, β_grad)
+    finally
+        _cleanup_checkpoints!(cache)
+    end
 end
 
 """
-    basso_expectation_checkpointed(params, angles; clause_sign=1)
+    basso_expectation_checkpointed(params, angles;
+        clause_sign=1, checkpoint_interval=0, disk_dir=nothing, max_ram_checkpoints=typemax(Int))
 
 Forward-only checkpointed evaluation (no gradient, minimal memory).
 """
@@ -519,8 +523,15 @@ function basso_expectation_checkpointed(
     params::TreeParams,
     angles::QAOAAngles;
     clause_sign::Int=1,
+    checkpoint_interval::Int=0,
+    disk_dir::Union{String,Nothing}=nothing,
+    max_ram_checkpoints::Int=typemax(Int),
 )
-    cache = _forward_pass_checkpointed(params, angles; clause_sign)
-    _cleanup_checkpoints!(cache)
-    cache.value
+    cache = _forward_pass_checkpointed(params, angles;
+        clause_sign, checkpoint_interval, disk_dir, max_ram_checkpoints)
+    try
+        cache.value
+    finally
+        _cleanup_checkpoints!(cache)
+    end
 end

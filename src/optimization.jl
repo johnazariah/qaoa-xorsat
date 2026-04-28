@@ -267,6 +267,9 @@ Keyword arguments:
 - `on_evaluation`: optional callback `(start_index, evaluations, elapsed_seconds, value, g_norm) -> nothing` throttled to at most once per 30 seconds per start
 - `on_chunk`: optional callback `(start_index, iterations, trace_entries, current_angles_vector) -> nothing` called after each plateau-detection chunk for incremental trace flushing
 - `eval_eltype`: element type for evaluation arithmetic (default: `Float64`; use `Double64` for k≥6)
+- `checkpointed`: use the CPU gradient checkpointer for adjoint evaluations
+- `checkpoint_disk_dir`: optional parent directory for spilled checkpoint tensors
+- `checkpoint_max_ram_checkpoints`: maximum branch-tensor checkpoints to keep in RAM when spilling
 """
 # Promote angles to a different precision for evaluation.
 # Optim.jl works in Float64; this promotes to e.g. Double64 for the evaluator.
@@ -288,6 +291,8 @@ function optimize_angles(
     eval_eltype::Type=Float64,
     gpu_evaluator::Union{Function,Nothing}=nothing,
     checkpointed::Bool=false,
+    checkpoint_disk_dir::Union{String,Nothing}=nothing,
+    checkpoint_max_ram_checkpoints::Int=typemax(Int),
 )::AngleOptimizationResult
     validate_clause_sign(clause_sign)
     maxiters ≥ 1 || throw(ArgumentError("maxiters must be ≥ 1, got $maxiters"))
@@ -312,13 +317,17 @@ function optimize_angles(
     per_start_results = Vector{Tuple{QAOAAngles,Float64,AngleOptimizationStartResult}}(undef, length(guesses))
     Threads.@threads for i in eachindex(guesses)
         Base.acquire(sem)
+        local_checkpoint_dir = nothing
         try
-        guess = guesses[i]
-        local_evaluations = Ref(0)
-        last_progress_at = Ref(time_ns())
-        started_at = time_ns()
-        last_value = Ref(NaN)
-        last_g_norm = Ref(NaN)
+            guess = guesses[i]
+            local_evaluations = Ref(0)
+            last_progress_at = Ref(time_ns())
+            started_at = time_ns()
+            last_value = Ref(NaN)
+            last_g_norm = Ref(NaN)
+            local_checkpoint_dir = checkpointed && checkpoint_disk_dir !== nothing ?
+                                   mktempdir(checkpoint_disk_dir; prefix="qaoa-start$(i)-") :
+                                   nothing
 
         function maybe_report_progress!()
             isnothing(on_evaluation) && return
@@ -356,7 +365,10 @@ function optimize_angles(
                 if gpu_evaluator !== nothing
                     val, _, _ = gpu_evaluator(params, candidate; clause_sign)
                 elseif checkpointed
-                    val = Float64(basso_expectation_checkpointed(params, candidate; clause_sign))
+                    val = Float64(basso_expectation_checkpointed(params, candidate;
+                        clause_sign,
+                        disk_dir=local_checkpoint_dir,
+                        max_ram_checkpoints=checkpoint_max_ram_checkpoints))
                 else
                     val = Float64(basso_expectation_normalized(params, candidate; clause_sign))
                 end
@@ -371,7 +383,10 @@ function optimize_angles(
                 if gpu_evaluator !== nothing
                     _, γg, βg = gpu_evaluator(params, candidate; clause_sign)
                 elseif checkpointed
-                    _, γg, βg = basso_expectation_and_gradient_checkpointed(params, candidate; clause_sign)
+                    _, γg, βg = basso_expectation_and_gradient_checkpointed(params, candidate;
+                        clause_sign,
+                        disk_dir=local_checkpoint_dir,
+                        max_ram_checkpoints=checkpoint_max_ram_checkpoints)
                 else
                     _, γg, βg = basso_expectation_and_gradient(params, candidate; clause_sign)
                 end
@@ -393,7 +408,10 @@ function optimize_angles(
                 if gpu_evaluator !== nothing
                     fval, γg, βg = gpu_evaluator(params, candidate; clause_sign)
                 elseif checkpointed
-                    val, γg, βg = basso_expectation_and_gradient_checkpointed(params, candidate; clause_sign)
+                    val, γg, βg = basso_expectation_and_gradient_checkpointed(params, candidate;
+                        clause_sign,
+                        disk_dir=local_checkpoint_dir,
+                        max_ram_checkpoints=checkpoint_max_ram_checkpoints)
                     fval = Float64(val)
                 else
                     val, γg, βg = basso_expectation_and_gradient(params, candidate; clause_sign)
@@ -537,7 +555,10 @@ function optimize_angles(
                     _promote_angles(candidate_angles_start, eval_eltype); clause_sign)
             elseif checkpointed
                 candidate_value_start = Float64(basso_expectation_checkpointed(params,
-                    _promote_angles(candidate_angles_start, eval_eltype); clause_sign))
+                    _promote_angles(candidate_angles_start, eval_eltype);
+                    clause_sign,
+                    disk_dir=local_checkpoint_dir,
+                    max_ram_checkpoints=checkpoint_max_ram_checkpoints))
             else
                 candidate_value_start = Float64(basso_expectation_normalized(params,
                     _promote_angles(candidate_angles_start, eval_eltype); clause_sign))
@@ -598,6 +619,7 @@ function optimize_angles(
             per_start_results[i] = (candidate_angles, candidate_value, start_result)
         end
         finally
+            local_checkpoint_dir !== nothing && rm(local_checkpoint_dir; force=true, recursive=true)
             Base.release(sem)
         end
     end
@@ -663,6 +685,11 @@ function optimize_depth_sequence(
     on_evaluation=nothing,
     on_chunk=nothing,
     warm_start::Union{Nothing,QAOAAngles}=nothing,
+    eval_eltype::Type=Float64,
+    gpu_evaluator::Union{Function,Nothing}=nothing,
+    checkpointed::Bool=false,
+    checkpoint_disk_dir::Union{String,Nothing}=nothing,
+    checkpoint_max_ram_checkpoints::Int=typemax(Int),
 )::Vector{AngleOptimizationResult}
     validate_clause_sign(clause_sign)
     validated_p_values = validate_depth_sequence(collect(Int, p_values))
@@ -685,6 +712,11 @@ function optimize_depth_sequence(
             g_abstol=start_tol,
             on_evaluation,
             on_chunk,
+            eval_eltype,
+            gpu_evaluator,
+            checkpointed,
+            checkpoint_disk_dir,
+            checkpoint_max_ram_checkpoints,
         )
 
         if !isnothing(warm_start) && !result.converged
@@ -708,6 +740,11 @@ function optimize_depth_sequence(
                     g_abstol=escalated_tol,
                     on_evaluation,
                     on_chunk,
+                    eval_eltype,
+                    gpu_evaluator,
+                    checkpointed,
+                    checkpoint_disk_dir,
+                    checkpoint_max_ram_checkpoints,
                 )
                 result = merge_optimization_results(result, retry_result)
             end
@@ -782,6 +819,8 @@ L-BFGS effort on promising regions.
 - `clause_sign`, `autodiff`, `rng`, `g_abstol`: as in `optimize_angles`
 - `on_generation`: optional callback `(gen, best_value, population_size, best_angles) -> nothing`
 - `warm_starts`: optional initial angles to seed the population
+- `checkpointed`, `checkpoint_disk_dir`, `checkpoint_max_ram_checkpoints`: CPU checkpointing controls passed to `optimize_angles`
+- `candidate_concurrency`: maximum number of swarm candidates to burst-optimise at once (`0` = thread count)
 """
 function swarm_optimize(
     params::TreeParams;
@@ -798,10 +837,17 @@ function swarm_optimize(
     warm_starts::AbstractVector{<:QAOAAngles}=QAOAAngles[],
     eval_eltype::Type=Float64,
     gpu_evaluator::Union{Function,Nothing}=nothing,
+    checkpointed::Bool=false,
+    checkpoint_disk_dir::Union{String,Nothing}=nothing,
+    checkpoint_max_ram_checkpoints::Int=typemax(Int),
+    candidate_concurrency::Int=0,
 )::AngleOptimizationResult
     p = params.p
     started_at = time_ns()
     total_evaluations = 0
+    total_evaluations_lock = ReentrantLock()
+    burst_concurrency = candidate_concurrency > 0 ? candidate_concurrency : Threads.nthreads()
+    burst_semaphore = Base.Semaphore(max(1, burst_concurrency))
 
     # ── Evaluate a single candidate with a short L-BFGS burst ────────────
     function burst_optimize(angles::QAOAAngles)
@@ -817,6 +863,9 @@ function swarm_optimize(
             g_abstol,
             eval_eltype,
             gpu_evaluator,
+            checkpointed,
+            checkpoint_disk_dir,
+            checkpoint_max_ram_checkpoints,
         )
         (result.angles, result.value, result.evaluations, result.converged)
     end
@@ -829,6 +878,17 @@ function swarm_optimize(
         depth(ws) == p || continue
         if gpu_evaluator !== nothing
             val, _, _ = gpu_evaluator(params, _promote_angles(ws, eval_eltype); clause_sign)
+        elseif checkpointed
+            warm_checkpoint_dir = checkpoint_disk_dir === nothing ? nothing :
+                                  mktempdir(checkpoint_disk_dir; prefix="qaoa-warm-")
+            try
+                val = Float64(basso_expectation_checkpointed(params, _promote_angles(ws, eval_eltype);
+                    clause_sign,
+                    disk_dir=warm_checkpoint_dir,
+                    max_ram_checkpoints=checkpoint_max_ram_checkpoints))
+            finally
+                warm_checkpoint_dir !== nothing && rm(warm_checkpoint_dir; force=true, recursive=true)
+            end
         else
             val = Float64(basso_expectation_normalized(params, _promote_angles(ws, eval_eltype); clause_sign))
         end
@@ -849,25 +909,32 @@ function swarm_optimize(
         new_candidates = Vector{SwarmCandidate}(undef, length(candidates))
         candidates_done = Threads.Atomic{Int}(0)
         Threads.@threads for i in eachindex(candidates)
-            angles_out, val_out, evals, _ = burst_optimize(candidates[i].angles)
-            if is_valid_qaoa_value(val_out) && val_out > candidates[i].value
-                new_candidates[i] = SwarmCandidate(angles_out, val_out)
-            else
-                # Keep the original if burst didn't improve
-                orig_val = candidates[i].value
-                if orig_val == -Inf
-                    # First evaluation — use burst result even if mediocre
-                    new_candidates[i] = SwarmCandidate(angles_out,
-                        is_valid_qaoa_value(val_out) ? val_out : -Inf)
+            Base.acquire(burst_semaphore)
+            try
+                angles_out, val_out, evals, _ = burst_optimize(candidates[i].angles)
+                if is_valid_qaoa_value(val_out) && val_out > candidates[i].value
+                    new_candidates[i] = SwarmCandidate(angles_out, val_out)
                 else
-                    new_candidates[i] = candidates[i]
+                    # Keep the original if burst didn't improve
+                    orig_val = candidates[i].value
+                    if orig_val == -Inf
+                        # First evaluation — use burst result even if mediocre
+                        new_candidates[i] = SwarmCandidate(angles_out,
+                            is_valid_qaoa_value(val_out) ? val_out : -Inf)
+                    else
+                        new_candidates[i] = candidates[i]
+                    end
                 end
-            end
-            total_evaluations += evals
-            Threads.atomic_add!(candidates_done, 1)
-            done = candidates_done[]
-            if done % max(1, length(candidates) ÷ 5) == 0 || done == length(candidates)
-                @info "  gen $gen: $done/$(length(candidates)) candidates burst-optimized"
+                lock(total_evaluations_lock) do
+                    total_evaluations += evals
+                end
+                Threads.atomic_add!(candidates_done, 1)
+                done = candidates_done[]
+                if done % max(1, length(candidates) ÷ 5) == 0 || done == length(candidates)
+                    @info "  gen $gen: $done/$(length(candidates)) candidates burst-optimized"
+                end
+            finally
+                Base.release(burst_semaphore)
             end
         end
         candidates = new_candidates
@@ -956,6 +1023,9 @@ function swarm_optimize(
             g_abstol,
             eval_eltype,
             gpu_evaluator,
+            checkpointed,
+            checkpoint_disk_dir,
+            checkpoint_max_ram_checkpoints,
             on_evaluation=(start_idx, evals, elapsed, val, gnorm) -> begin
                 @info "  polish: $(evals) evals, $(round(elapsed,digits=0))s, c̃=$(round(val,digits=10)), |g|=$(round(gnorm,sigdigits=2))"
             end,

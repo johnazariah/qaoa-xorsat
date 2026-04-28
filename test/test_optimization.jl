@@ -1,4 +1,5 @@
 using QaoaXorsat
+using DoubleFloats
 using Random
 using Test
 
@@ -70,6 +71,27 @@ using Test
         @test result.retry_count == 0
         @test result.best_start_kind == :seeded
         @test length(result.start_results) == 1
+    end
+
+    @testset "optimize_angles checkpointed Double64" begin
+        mktempdir() do dir
+            result = optimize_angles(
+                TreeParams(2, 3, 1);
+                clause_sign=-1,
+                restarts=0,
+                maxiters=5,
+                initial_guesses=[QAOAAngles([0.7], [0.3])],
+                rng=MersenneTwister(31),
+                eval_eltype=Double64,
+                checkpointed=true,
+                checkpoint_disk_dir=dir,
+                checkpoint_max_ram_checkpoints=1,
+            )
+
+            @test QaoaXorsat.is_valid_qaoa_value(result.value)
+            @test depth(result.angles) == 1
+            @test isempty(readdir(dir))
+        end
     end
 
     @testset "optimize_angles start telemetry" begin

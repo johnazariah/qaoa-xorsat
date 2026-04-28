@@ -1,4 +1,5 @@
 using QaoaXorsat, Test, Random, Printf
+using DoubleFloats
 
 println("=== CPU Checkpointing Correctness Tests ===")
 flush(stdout)
@@ -46,6 +47,30 @@ end
         @test γg ≈ γ_ref atol=1e-10
         @test βg ≈ β_ref atol=1e-10
         @printf("  ci=%d: ok ✓\n", ci)
+    end
+end
+
+@testset "Double64 checkpointing with disk spillover" begin
+    params = TreeParams(3, 4, 2)
+    angles64 = random_angles(2; rng=MersenneTwister(91))
+    angles = QAOAAngles(Double64.(angles64.γ), Double64.(angles64.β))
+
+    v_ref, γ_ref, β_ref = basso_expectation_and_gradient(params, angles; clause_sign=1)
+
+    mktempdir() do dir
+        v_ckpt, γ_ckpt, β_ckpt = basso_expectation_and_gradient_checkpointed(
+            params,
+            angles;
+            clause_sign=1,
+            checkpoint_interval=1,
+            disk_dir=dir,
+            max_ram_checkpoints=1,
+        )
+
+        @test Float64(v_ref) ≈ Float64(v_ckpt) atol=1e-12
+        @test Float64.(γ_ref) ≈ Float64.(γ_ckpt) atol=1e-10
+        @test Float64.(β_ref) ≈ Float64.(β_ckpt) atol=1e-10
+        @test isempty(readdir(dir))
     end
 end
 
