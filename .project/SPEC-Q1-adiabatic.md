@@ -1,5 +1,35 @@
 # Q1: Is QAOA a Trotterised Adiabatic Optimisation?
 
+## Agent Instructions
+
+This spec is for autonomous execution. The worktree is at
+`/Users/johnaz/PhD/qaoa-xorsat-q1` on branch `q1-adiabatic`.
+
+**Codebase**: Julia package `QaoaXorsat` in `src/`. Run with
+`julia --project=. -t 16` from the worktree root.
+
+**Key functions**:
+- `basso_expectation_normalized(TreeParams(k, D, p), QAOAAngles(γ, β); clause_sign=-1)` → Float64
+- `basso_expectation_and_gradient(...)` → (value, γ_grad, β_grad)
+- `optimize_angles(TreeParams(k,D,p); clause_sign, initial_guesses, restarts, ...)` → result
+
+**Existing data**: `results/maxcut-k2-d{3..8}-sweep.csv` — columns:
+`k,D,p,ctilde,wall_seconds,gamma_semicolon_separated,beta_semicolon_separated`
+
+**Starter script**: `scripts/q1_intermediate_depth.jl` — runs Experiment 2
+(intermediate-depth truncated performance). Execute it first.
+
+**Workflow**:
+1. Read the two papers linked below
+2. Run `scripts/q1_intermediate_depth.jl` to get Experiment 2 data
+3. Implement Experiments 1, 3, 4 as additional scripts in `scripts/`
+4. Write results to `results/q1-*.csv`
+5. Generate plots (Julia or Python) in `figures/`
+6. Commit results on the `q1-adiabatic` branch
+
+**Tests**: `julia --project=. -e 'using Pkg; Pkg.test()'` — 1741 tests must pass.
+Do not modify `src/` unless you need a new analysis function.
+
 ## Motivation
 
 A common claim in the QAOA literature is that the optimal angle
