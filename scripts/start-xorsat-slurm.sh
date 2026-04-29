@@ -50,7 +50,21 @@ if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
 fi
 
 echo "Checking Julia environment..."
-julia --project=. -e 'using Pkg; Pkg.instantiate(); using DoubleFloats, QaoaXorsat; println("Environment ready.")'
+julia --project=. -e '
+using Pkg
+Pkg.instantiate()
+# Auto-install CUDA if a NVIDIA GPU is detected (no-op on non-CUDA hosts).
+try
+    if success(`nvidia-smi -L`) && !haskey(Pkg.project().dependencies, "CUDA")
+        @info "NVIDIA GPU detected — installing CUDA.jl"
+        Pkg.add("CUDA")
+    end
+catch
+    # nvidia-smi not present; CPU-only environment is fine.
+end
+using DoubleFloats, QaoaXorsat
+println("Environment ready.")
+'
 echo ""
 
 JOBID=$(sbatch --parsable "$SUBMIT_SCRIPT")

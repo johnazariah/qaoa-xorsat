@@ -12,6 +12,11 @@ Optim = "429524aa-4258-5aef-a3af-852621145aeb"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Serialization = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
 
+# CUDA is an optional GPU backend (NVIDIA / SLURM cluster).
+# To enable on a CUDA-capable machine:
+#   julia --project=. -e 'using Pkg; Pkg.add("CUDA"); Pkg.instantiate()'
+# The runtime detector in src/gpu_backend.jl will auto-select CUDA when present.
+
 [compat]
 ADTypes = "1.21.0"
 DoubleFloats = "1.6.2"

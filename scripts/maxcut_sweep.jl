@@ -7,17 +7,18 @@
 # Supports resume: reads existing CSV and continues from last completed p.
 #
 # Optimizations enabled unconditionally on all platforms:
-#   - Metal GPU evaluator (auto-detected on Mac; falls back to CPU otherwise)
+#   - GPU evaluator auto-detected: CUDA (NVIDIA) > Metal (Mac) > CPU
 #   - CPU gradient checkpointing (√p memory) with disk spillover
 #   - Double64 evaluation precision for k ≥ 6
 #   - Memetic swarm + L-BFGS polish via swarm_optimize
 
 using QaoaXorsat
-using Metal
 using DoubleFloats
 using Printf
 using Random
 using Dates
+
+include(joinpath(@__DIR__, "..", "src", "gpu_backend.jl"))
 
 D = parse(Int, get(ARGS, 1, "3"))
 p_max = parse(Int, get(ARGS, 2, "13"))
@@ -71,19 +72,9 @@ function resume_from_csv(results_file, k, D)
     return (max_p + 1, best_warm)
 end
 
-# ── Auto-detect GPU evaluator (Metal on Mac, otherwise CPU) ─────────────
-gpu_evaluator = nothing
-gpu_status = "off (CPU checkpointed path)"
-if Metal.functional()
-    include(joinpath(@__DIR__, "..", "src", "gpu_checkpointed.jl"))
-    _gpu_array_fn(x) = MtlArray(x)
-    function _gpu_eval(params, angles; clause_sign)
-        gpu_checkpointed_forward_backward(params, angles, _gpu_array_fn;
-            clause_sign, checkpoint_interval=0)
-    end
-    global gpu_evaluator = _gpu_eval
-    global gpu_status = "Metal GPU"
-end
+# ── Auto-detect GPU evaluator (CUDA > Metal > CPU) ──────────────────────
+gpu_evaluator = make_gpu_evaluator()
+gpu_status = GPU_BACKEND.label
 
 # ── Disk spillover for high-p checkpoint storage ────────────────────────
 tmp_root = joinpath(@__DIR__, "..", "tmp")
