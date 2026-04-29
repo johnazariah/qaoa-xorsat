@@ -5,8 +5,16 @@
 #
 # Results written to results/maxcut-k2-dD-sweep.csv
 # Supports resume: reads existing CSV and continues from last completed p.
+#
+# Optimizations enabled unconditionally on all platforms:
+#   - Metal GPU evaluator (auto-detected on Mac; falls back to CPU otherwise)
+#   - CPU gradient checkpointing (√p memory) with disk spillover
+#   - Double64 evaluation precision for k ≥ 6
+#   - Memetic swarm + L-BFGS polish via swarm_optimize
 
 using QaoaXorsat
+using Metal
+using DoubleFloats
 using Printf
 using Random
 using Dates
@@ -63,6 +71,29 @@ function resume_from_csv(results_file, k, D)
     return (max_p + 1, best_warm)
 end
 
+# ── Auto-detect GPU evaluator (Metal on Mac, otherwise CPU) ─────────────
+gpu_evaluator = nothing
+gpu_status = "off (CPU checkpointed path)"
+if Metal.functional()
+    include(joinpath(@__DIR__, "..", "src", "gpu_checkpointed.jl"))
+    _gpu_array_fn(x) = MtlArray(x)
+    function _gpu_eval(params, angles; clause_sign)
+        gpu_checkpointed_forward_backward(params, angles, _gpu_array_fn;
+            clause_sign, checkpoint_interval=0)
+    end
+    global gpu_evaluator = _gpu_eval
+    global gpu_status = "Metal GPU"
+end
+
+# ── Disk spillover for high-p checkpoint storage ────────────────────────
+tmp_root = joinpath(@__DIR__, "..", "tmp")
+mkpath(tmp_root)
+checkpoint_dir = mktempdir(tmp_root; prefix="qaoa-d$(D)-")
+atexit(() -> try rm(checkpoint_dir; force=true, recursive=true) catch end)
+
+# ── Evaluation precision: Double64 for k ≥ 6, Float64 otherwise ──────────
+eval_eltype = k ≥ 6 ? Double64 : Float64
+
 p_start = 1
 warm = QAOAAngles[]
 
@@ -76,8 +107,11 @@ else
 end
 
 println("=== MaxCut (k=$k, D=$D) sweep p=$p_start..$p_max ===")
-println("Threads: $(Threads.nthreads())")
-println("Start: $(now())")
+println("Threads:        $(Threads.nthreads())")
+println("GPU:            $gpu_status")
+println("eval_eltype:    $eval_eltype")
+println("Checkpoint dir: $checkpoint_dir")
+println("Start:          $(now())")
 println()
 flush(stdout)
 
@@ -101,6 +135,11 @@ for p in p_start:p_max
             warm_starts = ws,
             rng = MersenneTwister(seed + p),
             g_abstol = 1e-8,
+            gpu_evaluator,
+            checkpointed = true,
+            checkpoint_disk_dir = checkpoint_dir,
+            checkpoint_max_ram_checkpoints = 4,
+            eval_eltype,
             on_generation = (gen, best, npop, _angles) -> begin
                 elapsed = time() - t0
                 @printf("  p=%d gen %d: best=%.10f pop=%d elapsed=%.0fs\n",
