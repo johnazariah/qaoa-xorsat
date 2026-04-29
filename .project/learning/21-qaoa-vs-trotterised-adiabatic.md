@@ -260,11 +260,151 @@ test:
 This is a tractable extension and would close the loop on Stephen's
 question.  It belongs in a follow-up Q1.5 spec.
 
+→ See §4 below: Q1.5 was executed and the W–L construction (both
+forward and reverse) fails on this problem class.
+
 ---
 
-## 4. Synthesis
+## 4. Q1.5 — Direct Test of Wurtz–Love CD-QAOA
 
-### 4.1 What Q1 establishes (cleanly)
+We implemented and tested the Wurtz–Love construction directly.  Two
+approaches: a *forward* map (build CD-QAOA angles from a smooth
+$(\bar\lambda, \bar s)$ schedule and measure $\tilde c$) and a
+*reverse* map (take the warm-start optimum and read off the
+$(\bar\lambda_q, \bar s_q)$ it implies via W–L Eq. (29) /
+Eq. (45)).  Both are decisive.
+
+Spec: [`.project/SPEC-Q15-cd-qaoa.md`](../SPEC-Q15-cd-qaoa.md).
+Scripts: [`scripts/q15_cd_qaoa_tier1.jl`](../../scripts/q15_cd_qaoa_tier1.jl),
+[`scripts/q15_cd_qaoa_tier2.jl`](../../scripts/q15_cd_qaoa_tier2.jl),
+[`scripts/q15_cd_qaoa_reverse.jl`](../../scripts/q15_cd_qaoa_reverse.jl).
+Data: [`results/q15-cd-qaoa-reverse.csv`](../../results/q15-cd-qaoa-reverse.csv).
+Plots: [`figures/q15-induced-protocols.png`](../../figures/q15-induced-protocols.png),
+[`figures/q15-diagnostics.png`](../../figures/q15-diagnostics.png).
+
+### 4.1 Tier 1 — optimal-$T$ linear LR-QAOA (sanity baseline)
+
+Linear schedule $\bar\lambda_q = (q-\tfrac12)/p$,
+$\gamma_q = T \bar\lambda_q / p$, $\beta_q = T(1-\bar\lambda_q)/p$,
+optimised over a single scalar $T$ (40-point grid + Brent refine).
+At $D=3$ this reaches $\tilde c$ within $\sim$4% of warm-start at
+$p\geq 5$ — reproducing the Wurtz–Love-style "linear ramp + tuned
+total time" performance — but does **not** close the gap.  We did
+not extend Tier 1 beyond $D=3$ since Tier 2 + the reverse map
+already settle the question.
+
+### 4.2 Tier 2 forward — lowest-order BCH map (Eq. 29)
+
+The W–L lowest-order forward map demands
+
+$$\tau_q^2(\bar\lambda_{q-1}+\bar\lambda_q)(2-\bar\lambda_{q-1}-\bar\lambda_q)
+   = -8(\bar\lambda_q - \bar\lambda_{q-1})\,\alpha(\bar\lambda_q;D),$$
+
+with $\bar s_q\equiv 0$ on a smooth ramp $\bar\lambda_0=0$,
+$\bar\lambda_p=1$, and $\alpha$ given by W–L Eq. 45.  On D-regular
+MaxCut on the infinite-girth tree this constraint **has no
+solution**: $|\alpha(\bar\lambda; D)|$ is too small relative to the
+$(\bar\lambda_q-\bar\lambda_{q-1})$ jumps a smooth ramp must take,
+so no $\tau_q>0$ satisfies the equation as $\bar\lambda_q\to 1$.
+The "literal" lowest-order CD-QAOA prescription is therefore
+infeasible on this problem class — itself a finding.
+
+### 4.3 Tier 2 reverse — induced $(\bar\lambda_q, \bar s_q)$ from the warm-start optimum
+
+The cleanest test: assume the QAOA optimum *is* a Trotterised CD
+evolution and read off the $(\bar\lambda_q, \bar s_q)$ that W–L
+Eq. (29) implies, given the optimal $(\gamma_q^*, \beta_q^*)$.  If
+the hypothesis holds, $\bar\lambda$ should be a smooth monotone
+ramp $0\to 1$ and $\bar s$ should be small.
+
+Concretely, from $\tau_q = \gamma_q+\beta_q$ and
+$\bar\lambda_q = \gamma_q/\tau_q$ we get $\bar\lambda_q$ for free.
+Then $\bar s_q$ is the residual that would have to be added to
+account for the discrepancy between W–L's
+$\bar s\!=\!0$ ansatz and the actual angles:
+
+$$\bar s_q\;=\;-\frac{\gamma_q\beta_q}{2\tau_q}
+   \;-\;\frac{\bar\lambda_q-\bar\lambda_{q-1}}{\tau_q}\,\alpha(\bar\lambda_q;D).$$
+
+Result for $p=12$, all $D\in\{3,\dots,8\}$ (full table in
+`results/q15-cd-qaoa-reverse.csv`, plot in
+`figures/q15-induced-protocols.png`):
+
+| $D$ | $\tilde c^*$ | descents in $\bar\lambda$ | sign-flips in $\bar s$ | $\max_q \lvert\bar s_q\rvert$ |
+|---:|---:|---:|---:|---:|
+| 3 | 0.8859 | 1/11 | 0 | 0.769 |
+| 4 | 0.8264 | 0/11 | 0 | 0.668 |
+| 5 | 0.7957 | 6/11 | 0 | 0.658 |
+| 6 | 0.7670 | 0/11 | 0 | 0.269 |
+| 7 | 0.7475 | **11/11** | 0 | 0.997 |
+| 8 | 0.7311 | 0/11 | 0 | 0.196 |
+
+Interpretations across the full $p\in\{1,\dots,12\}$ grid are
+consistent.  Three observations:
+
+1. **$\bar\lambda$ is non-monotone whenever $D$ is odd and
+   intermediate.**  $D=5$ zigzags ($\sim$50% descents at every $p$);
+   $D=7$ at $p\!\geq\!3$ has $\bar\lambda$ *decreasing
+   monotonically* (every step descends).  Whatever the warm-start
+   optimum is at $D=7$, it is **not** an adiabatic ramp that
+   gradually "turns on" the cost Hamiltonian — its W–L-induced
+   schedule turns the cost Hamiltonian *off*.  $D=3$ shows
+   non-monotone behaviour at small $p$ that fades by $p\!=\!12$.
+2. **The induced auxiliary field $\bar s$ is not small.**  At
+   $D=3,4,5,7$ we find $\max_q|\bar s_q|\!\in\![0.66,1.0]$,
+   comparable to or larger than $\bar\lambda$ itself.  W–L derive
+   their construction under the assumption $\bar s$ is the small
+   counterdiabatic correction to a smooth $\bar\lambda$ ramp; the
+   warm-start optimum violates that assumption catastrophically.
+   $\bar s$ is also of *uniform sign* across $q$ (zero sign-flips
+   in every $(D,p)$ tested), so this is not high-frequency
+   "compensating noise" — it is a large DC-offset auxiliary field
+   the protocol relies on.
+3. **The pathology does not heal as $p$ grows.**  For each $D$ the
+   descent fraction in $\bar\lambda$ and $\max|\bar s|$ are
+   essentially flat from $p\!=\!4$ to $p\!=\!12$ (see
+   `figures/q15-diagnostics.png`).  The $p\to\infty$ limit, if it
+   exists, does not look like W–L's adiabatic ramp.
+
+### 4.4 Why W–L's own $\nu=3$ data does not contradict ours
+
+W–L test their construction on a 3-regular instance (their Fig. 6)
+and report decent agreement.  Three reasons our results are
+consistent with theirs:
+
+* They optimise from a CD-derived initial condition; we optimise
+  from warm-start.  These are different basins (Q1's E2/E3 already
+  showed adiabatic and warm-start optima are not in the same
+  basin).
+* Their $\nu=3$ is the most benign case in our scan: $\bar\lambda$
+  becomes nearly monotone by $p=12$ ($1/11$ descents).  They do
+  not test odd intermediate $\nu$.
+* They measure performance against their own initial condition;
+  the QAOA-as-CD claim was always "for this construction with
+  this init", not "the global optimum is CD."  Our reverse map
+  asks the latter, stronger question.
+
+### 4.5 Bottom line for Q1.5
+
+The Wurtz–Love CD-QAOA construction:
+
+* in its **forward** form does not produce feasible angles on
+  D-regular MaxCut on the infinite-girth tree;
+* in its **reverse** form, applied to the warm-start optimum,
+  produces a non-smooth $\bar\lambda$ schedule (monotonically
+  *decreasing* at $D=7$) and a large uniform-sign auxiliary field
+  $\bar s$.
+
+Combined with Q1's E1–E4 results, the QAOA optimum on this problem
+class is decisively not a Trotterised counterdiabatic adiabatic
+evolution in the W–L sense.  Whatever the QAOA optimum *is*, it
+needs a different theoretical frame.
+
+---
+
+## 5. Synthesis
+
+### 5.1 What Q1 + Q1.5 establish (cleanly)
 
 1. **The strawman version is dead** on D-regular MaxCut on the
    infinite-girth tree.  Linear adiabatic schedules, even with
@@ -281,29 +421,40 @@ question.  It belongs in a follow-up Q1.5 spec.
    $D$.**  In particular, $D=5$ at $p=12$ shows step-to-step
    bang-bang oscillation in $\beta$, anticipated by Pontryagin's
    minimum principle (which Wurtz–Love themselves cite).
+4. **The Wurtz–Love CD-QAOA construction fails directly** on this
+   problem class (§4).  The lowest-order forward map admits no
+   feasible $T$ on D-regular MaxCut; the reverse map applied to
+   warm-start optima produces non-monotone $\bar\lambda$ (extreme
+   at $D=7$: $\bar\lambda$ *decreases* monotonically) and a large
+   uniform-sign auxiliary field $\bar s$ comparable to $\bar\lambda$
+   itself.  W–L's small-$\bar s$ hypothesis is violated
+   catastrophically.
 
-### 4.2 What Q1 does *not* establish (yet)
+### 5.2 What we still have not established
 
-1. We have not directly tested the Wurtz–Love CD-QAOA construction.
-   That requires implementing their Eq. (29)/(45) on the
-   infinite-girth tree and comparing.
-2. We have not measured the "fidelity" of intermediate QAOA states
+1. We have not measured the "fidelity" of intermediate QAOA states
    with adiabatic-path ground states (Stephen's first concrete
    suggestion).  That is harder for us because we work on the
    infinite tree where there is no global state — only marginals.
    On a finite-instance simulator we could measure
    $|\langle \psi_q^\text{QAOA} | \psi^\text{ground}(s_q)\rangle|^2$
    directly.
-3. We have not tested at $p \to \infty$.  Wurtz–Love's claim is
-   asymptotic, ours is at $p \leq 12$ (D-dependent).  The scaling of
+2. We have not tested at $p \to \infty$.  Wurtz–Love's claim is
+   asymptotic, ours is at $p \leq 12$ (D-uniform).  The scaling of
    the gap between warm-start and adiabatic-init with $p$ would be
-   informative.
+   informative — though Q1.5 §4.3's diagnostics show no sign of
+   $\bar\lambda$ healing or $\bar s$ shrinking with $p$ in the
+   range we cover.
+3. We have not gone beyond W–L's lowest-order BCH expansion.
+   Higher-order terms could in principle change the picture, but
+   the size and uniform sign of the induced $\bar s$ at lowest
+   order makes that unlikely.
 
-### 4.3 Recommendation for the paper
+### 5.3 Recommendation for the paper
 
 Frame the contribution as: **"We provide the first direct numerical
 test of the QAOA-is-Trotterised-adiabatic hypothesis on D-regular
-MaxCut, and find it fails by a wide margin in three independent
+MaxCut, and find it fails by a wide margin in four independent
 ways."**
 
 Cite both papers.  Cite Paper 1 as the type of work that motivates
@@ -311,28 +462,32 @@ the question (it builds on the failed premise).  Cite Paper 2
 respectfully — they were honest about the caveats and our results
 align with their own caveat ("optimal QAOA angles may be highly
 non-adiabatic") — but note that the constructive CD-QAOA story they
-tell is not our story.
+tell does not survive direct numerical test on this problem class
+(neither forward nor reverse, §4).
 
 ---
 
-## 5. Action Items
+## 6. Action Items
 
-- [ ] **Q1.5 spike**: implement Wurtz–Love's CD-QAOA forward map on
-  the infinite-girth tree for $\nu \in \{3..8\}$, $p \in \{1..12\}$.
-  Compare $\tilde c[\text{CD-QAOA}]$ to $\tilde c[\text{warm-start}]$.
-  Cost: ~2 days (their Eqs. 27–29 and 45 are explicit).
+- [x] **Q1.5 spike (DONE)**: implemented Wurtz–Love's CD-QAOA
+  forward and reverse maps on the infinite-girth tree for
+  $D \in \{3..8\}$, $p \in \{1..12\}$.  Forward map infeasible;
+  reverse map decisive.  See §4 above.
 - [ ] **Q1.6 spike (harder)**: pick a finite 3-regular instance
   (~14 vertices like Wurtz–Love's example), simulate full state
   vectors, measure $|\langle\psi_q^\text{QAOA} | \psi^\text{gs}(s_q)\rangle|^2$
   step-by-step.  Tests Stephen's first suggestion directly.  Outside
   this codebase's competence (we work on trees only) — would need a
   different simulator.
-- [x] **Done**: write up Q1 results and reference these papers in the
-  paper draft.
+- [ ] **Q1.7 (deferred)**: extend the W–L reverse map to higher BCH
+  order to confirm the lowest-order pathology is not an artefact
+  of truncation.
+- [x] **Done**: write up Q1 + Q1.5 results and reference these
+  papers in the paper draft.
 
 ---
 
-## 6. Reference Notes
+## 7. Reference Notes
 
 - Paper 1 (SGIR-QAOA) is unpublished as of writing (arXiv preprint
   Apr 2026).  Cite as preprint.  Their LR-QAOA reference is

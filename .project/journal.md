@@ -112,7 +112,94 @@ Double64 (valid).
 
 ---
 
-## Entry 33 — Critical analysis of Stephen's two papers (29 April 2026)
+## Entry 34 — Q1.5: Wurtz–Love CD-QAOA fails on D-regular MaxCut (29 April 2026)
+
+Followup to Entry 33: Stephen's question
+"is QAOA Trotterised adiabatic?" demanded a direct test of the
+Wurtz–Love construction.  Done.
+
+**Spec**: [`.project/SPEC-Q15-cd-qaoa.md`](SPEC-Q15-cd-qaoa.md).
+**Scripts**: `scripts/q15_cd_qaoa_{tier1,tier2,reverse}.jl` and
+`scripts/q15_plots.py`.
+**Data**: `results/q15-cd-qaoa-reverse.csv` (full $D\!\in\!\{3..8\}$,
+$p\!\in\!\{1..12\}$ grid).
+**Plots**: `figures/q15-induced-protocols.png`,
+`figures/q15-diagnostics.png`.
+**Writeup**: §4 of
+[learning/21-qaoa-vs-trotterised-adiabatic.md](learning/21-qaoa-vs-trotterised-adiabatic.md).
+
+### Three approaches, three negative results
+
+1. **Tier 1 — optimal-$T$ linear LR-QAOA.**  At $D=3$, even with $T$
+   tuned per $p$, plateaus $\sim$4% below warm-start at $p\geq 5$
+   and the gap doesn't close.  Confirms the simple LR ramp is
+   suboptimal.  Did not extend beyond $D=3$ since Tier 2 + reverse
+   already settle the question.
+
+2. **Tier 2 forward — W–L Eq. 29 + Eq. 45.**  The lowest-order BCH
+   constraint
+   $\tau_q^2(\bar\lambda_{q-1}+\bar\lambda_q)(2-\bar\lambda_{q-1}-\bar\lambda_q)
+   = -8(\bar\lambda_q-\bar\lambda_{q-1})\alpha(\bar\lambda_q;D)$
+   has **no solution** on D-regular MaxCut on the infinite-girth
+   tree: $|\alpha|$ is too small relative to the jumps a smooth
+   ramp $\bar\lambda:0\to 1$ must take.  The literal lowest-order
+   forward CD-QAOA prescription is infeasible on this problem
+   class.  Itself a finding.
+
+3. **Tier 2 reverse — induced protocol from warm-start optima.**
+   This is the principal deliverable.  Take the optimised
+   $(\gamma_q^*, \beta_q^*)$, read off $\bar\lambda_q = \gamma_q/\tau_q$
+   and the residual $\bar s_q$ that W–L Eq. 29 implies if the
+   ansatz is to hold.  If QAOA were Trotterised CD, $\bar\lambda$
+   should be smooth-monotone $0\to 1$ and $\bar s$ should be small.
+   At $p=12$:
+
+   | $D$ | descents in $\bar\lambda$ | $\max|\bar s|$ | sign-flips $\bar s$ |
+   |---:|---:|---:|---:|
+   | 3 | 1/11 | 0.77 | 0 |
+   | 4 | 0/11 | 0.67 | 0 |
+   | 5 | 6/11 | 0.66 | 0 |
+   | 6 | 0/11 | 0.27 | 0 |
+   | 7 | **11/11** | **1.00** | 0 |
+   | 8 | 0/11 | 0.20 | 0 |
+
+   $D=7$ is the headline: $\bar\lambda$ *decreases* monotonically
+   step-by-step, and $|\bar s|\!\approx\!1$ uniformly negative.
+   The "induced CD interpretation" of the warm-start optimum at
+   $D=7$ is a protocol that turns the cost Hamiltonian *off* with
+   a saturated counterdiabatic field — the opposite of an
+   adiabatic ramp.  $D=5$ zigzags; $D=3,4$ have monotone
+   $\bar\lambda$ but $\bar s$ comparable in magnitude to
+   $\bar\lambda$.  No sign-flips anywhere — $\bar s$ is a uniform
+   DC field, not high-frequency compensation.  No healing as
+   $p$ grows: the $(\bar\lambda, \bar s)$ pathologies are flat in
+   $p$ from $p=4$ onward (see `figures/q15-diagnostics.png`).
+
+### Bottom line
+
+The W–L hypothesis "QAOA = Trotterised CD" requires $(\bar\lambda,
+\bar s)$ to be a smooth ramp + small auxiliary correction.  Both
+conditions fail decisively on D-regular MaxCut on the
+infinite-girth tree.  The warm-start optimum is *not* a
+counterdiabatic adiabatic protocol in the W–L sense.  Whatever the
+QAOA optimum is, it needs a different theoretical frame.
+
+Combined with Q1's E1–E4, the MaxCut paper now has four
+independent disproofs of the Trotterised-adiabatic story on this
+problem class.
+
+### Ops notes
+
+- macOS detach for long Julia jobs: `nohup`/`setsid`/`disown` from
+  agent terminals all die with the parent shell.  Workaround: run
+  the agent in `mode=async` or in the user's foreground terminal.
+- Tier 1 at $D=3$ p=12 was OS-killed once with a 40-point grid;
+  reduce grid or accept partial.  Tier 2 reverse is cheap (<1 min
+  full grid).
+
+---
+
+
 
 Stephen replied to the methods + maxcut paper drafts.  Key feedback:
 
