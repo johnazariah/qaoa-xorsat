@@ -112,6 +112,49 @@ Double64 (valid).
 
 ---
 
+## Entry 33 — Critical analysis of Stephen's two papers (29 April 2026)
+
+Stephen replied to the methods + maxcut paper drafts.  Key feedback:
+
+- **Drop the methods paper** — fold methods into the MaxCut paper.
+- The MaxCut paper is publishable as-is, but he recommends extending
+  it to address QAOA's "is QAOA Trotterised adiabatic?" question
+  directly.  Two papers flagged:
+  - arXiv:2604.24580 (McDowall, Georgopoulos, Wallden, Apr 2026) —
+    "A Spectral Gap Informed Parameter Schedule for QAOA"
+  - arXiv:2106.15645 (Wurtz & Love, Quantum 6:635 (2022)) —
+    "Counterdiabaticity and the QAOA"
+
+Wrote
+[learning/21-qaoa-vs-trotterised-adiabatic.md](learning/21-qaoa-vs-trotterised-adiabatic.md)
+with a critical reading of both against our E1–E4 evidence.
+
+**Bottom line**:
+
+1. **Paper 1 (SGIR-QAOA)** explicitly asserts "QAOA is a Trotterised
+   discretisation of the QAA."  Our E1+E3 disprove the assertion on
+   D-regular MaxCut on the infinite tree.  Their Grover/MIS results
+   may still hold — those problems have spectral-gap closings the
+   tree does not.
+
+2. **Paper 2 (Wurtz–Love CD-QAOA)** is more sophisticated.  They
+   themselves write: *"Matching QAOA with a simple Trotterized
+   adiabatic path is inadequate"* and *"An optimal protocol for a
+   given p may be highly non-adiabatic ... and angles being highly
+   nontrivial."*  Our D=5 β bang-bang in E4 is exactly that.  Our
+   results align with their caveats but don't directly test their
+   *non-linear* CD-QAOA prescription.
+
+3. **Cleanest direct test = Q1.5**: implement Wurtz–Love Eq. 45 +
+   forward map for ν-regular triangle-free graphs on the infinite
+   tree, plot against our warm-start curve.  Logged as action item.
+
+Papers downloaded to `.project/papers/`.  No new code in this entry —
+all critical reading and writeup, ready to be cited in the MaxCut
+paper's "QAOA-vs-adiabatic" section.
+
+---
+
 ## Entry 32 — Q1: QAOA is *not* Trotterised adiabatic optimisation (29 April 2026)
 
 ### Summary

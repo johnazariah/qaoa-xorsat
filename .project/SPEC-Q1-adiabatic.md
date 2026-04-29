@@ -54,6 +54,9 @@ parameter?
 3. **Basso et al. (2021)** — Source of the "universal curves" angle
    schedules that are implicitly assumed to come from an adiabatic path.
 
+**Critical analysis of papers 1 and 2 against our results**:
+[learning/21-qaoa-vs-trotterised-adiabatic.md](learning/21-qaoa-vs-trotterised-adiabatic.md).
+
 ## What We Can Compute
 
 We have exact QAOA evaluations at finite D on the infinite-girth tree.
