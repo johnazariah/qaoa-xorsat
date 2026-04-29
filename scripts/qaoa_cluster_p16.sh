@@ -5,8 +5,8 @@
 # results/cluster-p16-k{K}d{D}.csv and uses existing swarm/warm-start CSVs
 # only as read-only seeds.
 #
-# Submit from the cluster repo checkout:
-#   sbatch scripts/qaoa_cluster_p16.sh
+# Submit from the cluster repo checkout via the canonical startup wrapper:
+#   bash scripts/start-xorsat-slurm.sh
 #
 # Optional overrides:
 #   QAOA_REPO=$HOME/qaoa-xorsat
