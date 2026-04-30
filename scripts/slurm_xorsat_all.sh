@@ -130,6 +130,9 @@ for p in 1:P_MAX
     use_ckpt = p >= CHECKPOINT_FROM
     eltype = use_d64 ? Double64 : Float64
 
+    # Swarm at p≤12 where evals are cheap; warm-start only at p≥13
+    use_swarm = p <= 12
+
     warm_starts = QAOAAngles[]
     if p > 1
         pv, pg, pb = get_warm_start(K, D, p - 1)
@@ -140,25 +143,47 @@ for p in 1:P_MAX
     end
 
     params = TreeParams(K, D, p)
-    @printf(\"  ▶ k=%d D=%d p=%d D64=%s ckpt=%s at %s\\n\",
-            K, D, p, use_d64, use_ckpt, Dates.format(now(), \"HH:MM:SS\"))
+    @printf(\"  ▶ k=%d D=%d p=%d D64=%s ckpt=%s swarm=%s at %s\\n\",
+            K, D, p, use_d64, use_ckpt, use_swarm, Dates.format(now(), \"HH:MM:SS\"))
     flush(stdout)
 
     t0 = time()
     try
-        result = optimize_angles(params;
-            clause_sign,
-            initial_guesses = warm_starts,
-            restarts = p <= 8 ? 4 : 0,
-            g_abstol = 1e-6,
-            eval_eltype = eltype,
-            checkpointed = use_ckpt,
-            on_evaluation = (chunk, evals, elapsed, val, gnorm) -> begin
-                @printf(\"    [k=%d D=%d p=%d] eval %d: c̃=%.10f |∇|=%.2e %s\\n\",
-                        K, D, p, evals, val, gnorm, fmt_time(elapsed))
-                flush(stdout)
-            end
-        )
+        if use_swarm
+            # Swarm: population search to find the right basin
+            pop = p <= 6 ? 50 : (p <= 9 ? 30 : 15)
+            result = swarm_optimize(params;
+                clause_sign,
+                population = pop,
+                generations = 5,
+                burst_iters = 30,
+                warm_starts = warm_starts,
+                rng = Random.MersenneTwister(42 + p),
+                g_abstol = 1e-6,
+                eval_eltype = eltype,
+                on_generation = (gen, best, npop, _angles) -> begin
+                    elapsed = time() - t0
+                    @printf(\"    [k=%d D=%d p=%d] gen %d: best=%.10f pop=%d %s\\n\",
+                            K, D, p, gen, best, npop, fmt_time(elapsed))
+                    flush(stdout)
+                end,
+            )
+        else
+            # High-p: single L-BFGS warm-start with checkpointing
+            result = optimize_angles(params;
+                clause_sign,
+                initial_guesses = warm_starts,
+                restarts = 0,
+                g_abstol = 1e-6,
+                eval_eltype = eltype,
+                checkpointed = use_ckpt,
+                on_evaluation = (chunk, evals, elapsed, val, gnorm) -> begin
+                    @printf(\"    [k=%d D=%d p=%d] eval %d: c̃=%.10f |∇|=%.2e %s\\n\",
+                            K, D, p, evals, val, gnorm, fmt_time(elapsed))
+                    flush(stdout)
+                end
+            )
+        end
         dt = time() - t0
         gs = join(string.(result.angles.γ), ';')
         bs = join(string.(result.angles.β), ';')
