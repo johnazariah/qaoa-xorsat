@@ -1,27 +1,31 @@
 #!/bin/bash
 #SBATCH --job-name=xorsat-all-p16
-#SBATCH --array=0-14
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=32
-#SBATCH --mem=1400G
+#SBATCH --exclusive
 #SBATCH --time=504:00:00
 #SBATCH --output=logs/xorsat-%a-%j.out
 #SBATCH --error=logs/xorsat-%a-%j.err
 #SBATCH --requeue
 #
 # Full XORSAT sweep: all 15 (k,D) pairs to max feasible depth
-# 15 nodes, one per pair, all running in parallel
+# Submit via tiered partitions (command-line args override #SBATCH):
+#
+#   sbatch --partition=c3dssd --mem=1400G --cpus-per-task=176 --array=0-4  scripts/slurm_xorsat_all.sh
+#   sbatch --partition=n2     --mem=850G  --cpus-per-task=124 --array=5-8  scripts/slurm_xorsat_all.sh
+#   sbatch --partition=c2     --mem=235G  --cpus-per-task=56  --array=9-14 scripts/slurm_xorsat_all.sh
+#
+# Tier 1 (k=3, IDs 0-4):  c3dssd — 1440GB, 180 CPUs, local SSD, $11.68/hr
+# Tier 2 (k=4, IDs 5-8):  n2    —  864GB, 128 CPUs, $6.17/hr
+# Tier 3 (k≥5, IDs 9-14): c2    —  240GB,  60 CPUs, $3.13/hr
 #
 # All optimizations enabled:
 #   - CPU gradient checkpointing (√p memory, p≥13)
-#   - Disk spillover (p≥16 in D64)
+#   - Disk spillover (p≥16 in D64, uses local SSD on c3dssd)
 #   - Double64 past Float64 precision wall
 #   - Gradient plateau detection
 #   - Warm-start chain
 #   - Verbose progress logging
-#
-# Usage: sbatch scripts/slurm_xorsat_all.sh
 
 set -euo pipefail
 
@@ -40,7 +44,15 @@ P_MAX=${P_MAX_VALUES[$IDX]}
 F64_WALL=${F64_WALL_VALUES[$IDX]}
 CLAUSE_SIGN=1
 CHECKPOINT_FROM=13
-DISK_DIR="/tmp/qaoa-checkpoints-k${K}-d${D}"
+
+# Prefer local SSD (c3dssd nodes) for disk checkpoint spillover
+if [[ -d /mnt/disks/local-ssd-0 ]]; then
+    DISK_DIR="/mnt/disks/local-ssd-0/qaoa-checkpoints-k${K}-d${D}"
+elif [[ -d /local_ssd ]]; then
+    DISK_DIR="/local_ssd/qaoa-checkpoints-k${K}-d${D}"
+else
+    DISK_DIR="/tmp/qaoa-checkpoints-k${K}-d${D}"
+fi
 
 echo "╔══════════════════════════════════════════════════════════╗"
 echo "║  XORSAT k=$K D=$D sweep p=1..$P_MAX                    ║"

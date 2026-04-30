@@ -1,8 +1,8 @@
 # Cluster Instructions for Stephen — April 30, 2026
 
-## TL;DR — Clean Run
+## TL;DR — Clean Run (3 Tiered Submissions)
 
-**This is a clean run. Please delete all old results before starting.**
+**This is a clean run. Delete all old results before starting.**
 
 ```bash
 git pull origin main
@@ -12,11 +12,28 @@ rm -rf results/slurm-*.csv results/*.csv results/*.machine logs/
 
 # Fresh start
 mkdir -p logs
-sbatch scripts/slurm_xorsat_all.sh
+
+# Tier 1: k=3 (5 jobs) → c3dssd — 1440GB RAM, 180 CPUs, local SSD for spillover
+sbatch --partition=c3dssd --mem=1400G --cpus-per-task=176 --array=0-4  scripts/slurm_xorsat_all.sh
+
+# Tier 2: k=4 (4 jobs) → n2 — 864GB RAM, 128 CPUs
+sbatch --partition=n2     --mem=850G  --cpus-per-task=124 --array=5-8  scripts/slurm_xorsat_all.sh
+
+# Tier 3: k≥5 (6 jobs) → c2 — 240GB RAM, 60 CPUs
+sbatch --partition=c2     --mem=235G  --cpus-per-task=56  --array=9-14 scripts/slurm_xorsat_all.sh
 ```
 
-This launches **15 SLURM array jobs** (one per (k,D) pair), all running in parallel.
-Every (k,D) pair starts from p=1 — no warm-starting from previous runs.
+This launches **15 jobs** across 3 partitions. Every (k,D) pair starts from p=1.
+
+### Why these partitions?
+
+This is **CPU-only** code — no GPU needed. Don't use a2ugpu machines.
+
+| Tier | Queue | RAM | CPUs | $/hr | Why |
+|------|-------|-----|------|------|-----|
+| k=3 (p→16) | c3dssd | 1440GB | 180 | $11.68 | Local SSD for disk spillover at p≥16 |
+| k=4 (p→14) | n2 | 864GB | 128 | $6.17 | Best value, ~120GB needed at p=14 |
+| k≥5 (p→12-13) | c2 | 240GB | 60 | $3.13 | Cheapest, ~34GB needed at p=13 |
 
 ## What's new since last run
 
@@ -59,7 +76,13 @@ Every (k,D) pair starts from p=1 — no warm-starting from previous runs.
 | 13 | (6,8) | 12 | D64 from p=9 |
 | 14 | (7,8) | 12 | D64 from p=8 |
 
-## Resources: 1400G RAM, 32 CPUs, 504h wall time per node
+## Resources per tier
+
+| Tier | Partition | Nodes needed | RAM/node | CPUs/node | Wall time |
+|------|-----------|-------------|----------|-----------|-----------|
+| k=3 | c3dssd | 5 | 1400G | 176 | 504h |
+| k=4 | n2 | 4 | 850G | 124 | 504h |
+| k≥5 | c2 | 6 | 235G | 56 | 504h |
 
 ## Monitoring
 
