@@ -76,6 +76,9 @@ mkdir -p logs
 LOCKFILE="/tmp/qaoa-precompile.lock"
 (
     flock -w 600 200 || { echo "Precompile lock timeout"; exit 1; }
+    # Clean corrupted package caches if present
+    rm -rf ~/.julia/packages/KernelAbstractions
+    rm -rf ~/.julia/packages/Metal
     julia --project=. -e 'using Pkg; Pkg.instantiate(); using QaoaXorsat; println("Precompiled OK")'
 ) 200>$LOCKFILE
 
