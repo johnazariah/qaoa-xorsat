@@ -11,9 +11,12 @@
 # Full XORSAT sweep: all 15 (k,D) pairs to max feasible depth
 # Submit via tiered partitions (command-line args override #SBATCH):
 #
-#   sbatch --partition=c3dssd --mem=1400G --cpus-per-task=176 --array=0-4  scripts/slurm_xorsat_all.sh
-#   sbatch --partition=n2     --mem=850G  --cpus-per-task=124 --array=5-8  scripts/slurm_xorsat_all.sh
-#   sbatch --partition=c2     --mem=235G  --cpus-per-task=56  --array=9-14 scripts/slurm_xorsat_all.sh
+#   sbatch --partition=c3dssd --array=0-4  scripts/slurm_xorsat_all.sh
+#   sbatch --partition=n2     --array=5-8  scripts/slurm_xorsat_all.sh
+#   sbatch --partition=c2 --mem=238160M --cpus-per-task=56 --array=9-14 scripts/slurm_xorsat_all.sh
+#
+# c3dssd and n2 are exclusive — SLURM gives the whole node automatically.
+# c2 is non-exclusive — must specify --mem and --cpus-per-task explicitly.
 #
 # Tier 1 (k=3, IDs 0-4):  c3dssd — 1440GB, 180 CPUs, local SSD, $11.68/hr
 # Tier 2 (k=4, IDs 5-8):  n2    —  864GB, 128 CPUs, $6.17/hr

@@ -13,14 +13,14 @@ rm -rf results/slurm-*.csv results/*.csv results/*.machine logs/
 # Fresh start
 mkdir -p logs
 
-# Tier 1: k=3 (5 jobs) → c3dssd — 1440GB RAM, 180 CPUs, local SSD for spillover
-sbatch --partition=c3dssd --mem=1400G --cpus-per-task=176 --array=0-4  scripts/slurm_xorsat_all.sh
+# Tier 1: k=3 (5 jobs) → c3dssd (exclusive, full node: 1440GB, 180 CPUs)
+sbatch --partition=c3dssd --array=0-4  scripts/slurm_xorsat_all.sh
 
-# Tier 2: k=4 (4 jobs) → n2 — 864GB RAM, 128 CPUs
-sbatch --partition=n2     --mem=850G  --cpus-per-task=124 --array=5-8  scripts/slurm_xorsat_all.sh
+# Tier 2: k=4 (4 jobs) → n2 (exclusive, full node: 864GB, 128 CPUs)
+sbatch --partition=n2     --array=5-8  scripts/slurm_xorsat_all.sh
 
-# Tier 3: k≥5 (6 jobs) → c2 — 240GB RAM, 60 CPUs
-sbatch --partition=c2     --mem=235G  --cpus-per-task=56  --array=9-14 scripts/slurm_xorsat_all.sh
+# Tier 3: k≥5 (6 jobs) → c2 (non-exclusive, must specify resources)
+sbatch --partition=c2 --mem=238160M --cpus-per-task=56 --array=9-14 scripts/slurm_xorsat_all.sh
 ```
 
 This launches **15 jobs** across 3 partitions. Every (k,D) pair starts from p=1.
@@ -78,11 +78,11 @@ This is **CPU-only** code — no GPU needed. Don't use a2ugpu machines.
 
 ## Resources per tier
 
-| Tier | Partition | Nodes needed | RAM/node | CPUs/node | Wall time |
-|------|-----------|-------------|----------|-----------|-----------|
-| k=3 | c3dssd | 5 | 1400G | 176 | 504h |
-| k=4 | n2 | 4 | 850G | 124 | 504h |
-| k≥5 | c2 | 6 | 235G | 56 | 504h |
+| Tier | Partition | Nodes | Exclusive? | RAM/node | CPUs/node | Wall time |
+|------|-----------|-------|------------|----------|-----------|----------|
+| k=3 | c3dssd | 5 | Yes | 1440GB | 180 | 504h |
+| k=4 | n2 | 4 | Yes | 864GB | 128 | 504h |
+| k≥5 | c2 | 6 | No | 238160M | 56 | 504h |
 
 ## Monitoring
 
