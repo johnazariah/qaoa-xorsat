@@ -72,11 +72,11 @@ echo "╚═══════════════════════�
 cd $HOME/qaoa-xorsat
 mkdir -p logs
 
-# Precompile with lockfile
+# Instantiate and precompile with lockfile
 LOCKFILE="/tmp/qaoa-precompile.lock"
 (
     flock -w 600 200 || { echo "Precompile lock timeout"; exit 1; }
-    julia --project=. -e 'using QaoaXorsat; println("Precompiled OK")'
+    julia --project=. -e 'using Pkg; Pkg.instantiate(); using QaoaXorsat; println("Precompiled OK")'
 ) 200>$LOCKFILE
 
 julia --project=. -t $NCPUS -e "
