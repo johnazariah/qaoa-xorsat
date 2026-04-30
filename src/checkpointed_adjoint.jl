@@ -240,12 +240,12 @@ function _forward_pass_checkpointed(
 end
 
 """
-    _recompute_segment_cpu(B_start, from_t, to_t, f_table, kernel_hat, arity, degree, N, T)
+    _recompute_B_only(B_start, from_t, to_t, f_table, kernel_hat, arity, degree, N, T)
 
-Recompute forward pass from level `from_t` to `to_t`, returning per-step
-intermediates (B, child_hat, folded, scales) needed for backward.
+Recompute forward pass storing only B tensors (not child_hat or folded).
+Memory: (seg_len+1) × N instead of 3×seg_len × N.
 """
-function _recompute_segment_cpu(
+function _recompute_B_only(
     B_start::Vector{Complex{T}},
     from_t::Int, to_t::Int,
     f_table::Vector{Complex{T}},
@@ -257,11 +257,6 @@ function _recompute_segment_cpu(
     seg_len = to_t - from_t + 1
 
     B_seg = Vector{Vector{Complex{T}}}(undef, seg_len + 1)
-    child_hat_seg = Vector{Vector{Complex{T}}}(undef, seg_len)
-    folded_seg = Vector{Vector{Complex{T}}}(undef, seg_len)
-    child_hat_scales_seg = Vector{T}(undef, seg_len)
-    folded_scales_seg = Vector{T}(undef, seg_len)
-
     B_seg[1] = copy(B_start)
     scratch = Vector{Complex{T}}(undef, N)
 
@@ -273,15 +268,10 @@ function _recompute_segment_cpu(
 
         ch_scale = maximum(abs, scratch)
         if ch_scale > _NORM_THRESHOLD
-            inv_ch = one(T) / ch_scale
             @inbounds @simd for j in 1:N
-                scratch[j] *= inv_ch
+                scratch[j] *= one(T) / ch_scale
             end
-        else
-            ch_scale = one(T)
         end
-        child_hat_scales_seg[i] = ch_scale
-        child_hat_seg[i] = copy(scratch)
 
         @inbounds @simd for j in 1:N
             scratch[j] = kernel_hat[j] * _fast_pow(scratch[j], arity)
@@ -290,15 +280,10 @@ function _recompute_segment_cpu(
 
         fld_scale = maximum(abs, scratch)
         if fld_scale > _NORM_THRESHOLD
-            inv_fld = one(T) / fld_scale
             @inbounds @simd for j in 1:N
-                scratch[j] *= inv_fld
+                scratch[j] *= one(T) / fld_scale
             end
-        else
-            fld_scale = one(T)
         end
-        folded_scales_seg[i] = fld_scale
-        folded_seg[i] = copy(scratch)
 
         new_B = Vector{Complex{T}}(undef, N)
         @inbounds @simd for j in 1:N
@@ -307,7 +292,53 @@ function _recompute_segment_cpu(
         B_seg[i + 1] = new_B
     end
 
-    (B_seg, child_hat_seg, folded_seg, child_hat_scales_seg, folded_scales_seg)
+    B_seg
+end
+
+"""
+    _recompute_step_intermediates(B_t, f_table, kernel_hat, arity, N, T)
+
+Recompute child_hat and folded for a single step from B[t].
+Returns (child_hat, folded) — exactly two vectors, freed after use.
+"""
+function _recompute_step_intermediates(
+    B_t::Vector{Complex{T}},
+    f_table::Vector{Complex{T}},
+    kernel_hat::Vector{Complex{T}},
+    arity::Int,
+    N::Int,
+) where T
+    _NORM_THRESHOLD = T(1e30)
+
+    child_hat = Vector{Complex{T}}(undef, N)
+    @inbounds @simd for j in 1:N
+        child_hat[j] = f_table[j] * B_t[j]
+    end
+    wht!(child_hat)
+
+    ch_scale = maximum(abs, child_hat)
+    if ch_scale > _NORM_THRESHOLD
+        inv_ch = one(T) / ch_scale
+        @inbounds @simd for j in 1:N
+            child_hat[j] *= inv_ch
+        end
+    end
+
+    folded = Vector{Complex{T}}(undef, N)
+    @inbounds @simd for j in 1:N
+        folded[j] = kernel_hat[j] * _fast_pow(child_hat[j], arity)
+    end
+    iwht!(folded)
+
+    fld_scale = maximum(abs, folded)
+    if fld_scale > _NORM_THRESHOLD
+        inv_fld = one(T) / fld_scale
+        @inbounds @simd for j in 1:N
+            folded[j] *= inv_fld
+        end
+    end
+
+    (child_hat, folded)
 end
 
 """
@@ -359,7 +390,7 @@ function _backward_pass_checkpointed(cache::CheckpointedForwardCache{T}) where T
             continue
         end
 
-        # Recompute forward through this segment
+        # Recompute forward through this segment — B tensors only
         # Load checkpoint from RAM or disk
         if haskey(cache.checkpoint_B, seg_start_level)
             B_start = cache.checkpoint_B[seg_start_level]
@@ -370,27 +401,33 @@ function _backward_pass_checkpointed(cache::CheckpointedForwardCache{T}) where T
         else
             error("No checkpoint at level $seg_start_level")
         end
-        B_seg, child_hat_seg, folded_seg, _, _ = _recompute_segment_cpu(
+
+        # Phase 1: recompute only B history (not child_hat/folded)
+        B_seg = _recompute_B_only(
             B_start, from_t, to_t,
             cache.f_table, cache.kernel_hat,
             cache.arity, cache.degree, N,
         )
 
-        # Backward through this segment (same as _backward_pass loop body)
+        # Phase 2: backward, recomputing child_hat/folded one step at a time
         for local_t in seg_len:-1:1
+            # Recompute child_hat and folded for this step from B_seg[local_t]
+            child_hat_t, folded_t = _recompute_step_intermediates(
+                B_seg[local_t], cache.f_table, cache.kernel_hat, cache.arity, N)
+
             # B[t+1] = folded[t] .^ degree
             @inbounds @simd for i in 1:N
-                scratch[i] = cache.degree * conj(_fast_pow(folded_seg[local_t][i], cache.degree - 1)) * B_bar[i]
+                scratch[i] = cache.degree * conj(_fast_pow(folded_t[i], cache.degree - 1)) * B_bar[i]
             end
 
             iwht!(scratch)
 
             @inbounds @simd for i in 1:N
-                kernel_hat_bar[i] += conj(_fast_pow(child_hat_seg[local_t][i], cache.arity)) * scratch[i]
+                kernel_hat_bar[i] += conj(_fast_pow(child_hat_t[i], cache.arity)) * scratch[i]
             end
 
             @inbounds @simd for i in 1:N
-                scratch[i] = cache.arity * conj(_fast_pow(child_hat_seg[local_t][i], cache.arity - 1)) *
+                scratch[i] = cache.arity * conj(_fast_pow(child_hat_t[i], cache.arity - 1)) *
                              conj(cache.kernel_hat[i]) * scratch[i]
             end
 
@@ -400,6 +437,7 @@ function _backward_pass_checkpointed(cache::CheckpointedForwardCache{T}) where T
                 f_table_bar[i] += conj(B_seg[local_t][i]) * scratch[i]
                 B_bar[i] = conj(cache.f_table[i]) * scratch[i]
             end
+            # child_hat_t and folded_t go out of scope here — GC can free them
         end
     end
 
