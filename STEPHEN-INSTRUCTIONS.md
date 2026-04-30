@@ -1,14 +1,22 @@
 # Cluster Instructions for Stephen — April 30, 2026
 
-## TL;DR
+## TL;DR — Clean Run
+
+**This is a clean run. Please delete all old results before starting.**
 
 ```bash
 git pull origin main
+
+# Clean out ALL old results and logs
+rm -rf results/slurm-*.csv results/*.csv results/*.machine logs/
+
+# Fresh start
 mkdir -p logs
 sbatch scripts/slurm_xorsat_all.sh
 ```
 
 This launches **15 SLURM array jobs** (one per (k,D) pair), all running in parallel.
+Every (k,D) pair starts from p=1 — no warm-starting from previous runs.
 
 ## What's new since last run
 
