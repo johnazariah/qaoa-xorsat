@@ -5,11 +5,20 @@
 #
 # Results written to results/maxcut-k2-dD-sweep.csv
 # Supports resume: reads existing CSV and continues from last completed p.
+#
+# Optimizations enabled unconditionally on all platforms:
+#   - GPU evaluator auto-detected: CUDA (NVIDIA) > Metal (Mac) > CPU
+#   - CPU gradient checkpointing (√p memory) with disk spillover
+#   - Double64 evaluation precision for k ≥ 6
+#   - Memetic swarm + L-BFGS polish via swarm_optimize
 
 using QaoaXorsat
+using DoubleFloats
 using Printf
 using Random
 using Dates
+
+include(joinpath(@__DIR__, "..", "src", "gpu_backend.jl"))
 
 D = parse(Int, get(ARGS, 1, "3"))
 p_max = parse(Int, get(ARGS, 2, "13"))
@@ -63,6 +72,19 @@ function resume_from_csv(results_file, k, D)
     return (max_p + 1, best_warm)
 end
 
+# ── Auto-detect GPU evaluator (CUDA > Metal > CPU) ──────────────────────
+gpu_evaluator = make_gpu_evaluator()
+gpu_status = GPU_BACKEND.label
+
+# ── Disk spillover for high-p checkpoint storage ────────────────────────
+tmp_root = joinpath(@__DIR__, "..", "tmp")
+mkpath(tmp_root)
+checkpoint_dir = mktempdir(tmp_root; prefix="qaoa-d$(D)-")
+atexit(() -> try rm(checkpoint_dir; force=true, recursive=true) catch end)
+
+# ── Evaluation precision: Double64 for k ≥ 6, Float64 otherwise ──────────
+eval_eltype = k ≥ 6 ? Double64 : Float64
+
 p_start = 1
 warm = QAOAAngles[]
 
@@ -76,8 +98,11 @@ else
 end
 
 println("=== MaxCut (k=$k, D=$D) sweep p=$p_start..$p_max ===")
-println("Threads: $(Threads.nthreads())")
-println("Start: $(now())")
+println("Threads:        $(Threads.nthreads())")
+println("GPU:            $gpu_status")
+println("eval_eltype:    $eval_eltype")
+println("Checkpoint dir: $checkpoint_dir")
+println("Start:          $(now())")
 println()
 flush(stdout)
 
@@ -101,6 +126,11 @@ for p in p_start:p_max
             warm_starts = ws,
             rng = MersenneTwister(seed + p),
             g_abstol = 1e-8,
+            gpu_evaluator,
+            checkpointed = true,
+            checkpoint_disk_dir = checkpoint_dir,
+            checkpoint_max_ram_checkpoints = 4,
+            eval_eltype,
             on_generation = (gen, best, npop, _angles) -> begin
                 elapsed = time() - t0
                 @printf("  p=%d gen %d: best=%.10f pop=%d elapsed=%.0fs\n",
