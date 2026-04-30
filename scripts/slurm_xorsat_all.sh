@@ -57,10 +57,13 @@ else
     DISK_DIR="/tmp/qaoa-checkpoints-k${K}-d${D}"
 fi
 
+# Detect available CPUs: prefer SLURM_CPUS_PER_TASK, fall back to nproc
+NCPUS=${SLURM_CPUS_PER_TASK:-$(nproc)}
+
 echo "╔══════════════════════════════════════════════════════════╗"
 echo "║  XORSAT k=$K D=$D sweep p=1..$P_MAX                    ║"
 echo "║  Node: $(hostname)                                      ║"
-echo "║  CPUs: $SLURM_CPUS_PER_TASK                             ║"
+echo "║  CPUs: $NCPUS                                           ║"
 echo "║  RAM:  $(free -g | awk '/^Mem:/{print $2}')G             ║"
 echo "║  F64 wall: p=$F64_WALL                                  ║"
 echo "║  Started: $(date)                                       ║"
@@ -76,7 +79,7 @@ LOCKFILE="/tmp/qaoa-precompile.lock"
     julia --project=. -e 'using QaoaXorsat; println("Precompiled OK")'
 ) 200>$LOCKFILE
 
-julia --project=. -t $SLURM_CPUS_PER_TASK -e "
+julia --project=. -t $NCPUS -e "
 using QaoaXorsat, Printf, Dates, Random
 using DoubleFloats
 
