@@ -1,15 +1,20 @@
 # QAOA-XORSAT
 
-**Exact QAOA performance on D-regular Max-k-XORSAT via generic tree folding**
+**Exact QAOA performance on D-regular Max-k-XORSAT via tensor network contraction on the light-cone tree**
 
 *John S Azariah — Centre for Quantum Software and Information, UTS*\
 *ORCID: [0009-0007-9870-1970](https://orcid.org/0009-0007-9870-1970)*
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19211958.svg)](https://doi.org/10.5281/zenodo.19211958)
+[![CI](https://github.com/johnazariah/qaoa-xorsat/actions/workflows/ci.yml/badge.svg)](https://github.com/johnazariah/qaoa-xorsat/actions/workflows/ci.yml)
 ![Tests](https://img.shields.io/badge/tests-1741%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
-![Julia](https://img.shields.io/badge/Julia-1.12+-purple)
+![Julia](https://img.shields.io/badge/Julia-1.11+-purple)
 ![License](https://img.shields.io/badge/license-MIT-blue)
+
+Reference implementation accompanying Shutty, Azariah & Jordan, *"Quantum Approximate Optimization Algorithm for D-Regular Max-k-XORSAT"* ([arXiv:2604.24633](https://arxiv.org/abs/2604.24633)).
+
+This code computes **exact** QAOA satisfaction fractions $\tilde{c}(p)$ for depth-$p$ QAOA on $D$-regular Max-$k$-XORSAT, using tensor network contraction on the light-cone tree. The key algorithmic innovation — a Walsh-Hadamard factorisation of the $k$-body constraint fold — reduces the cost from $O(4^{kp})$ to $O(p^2 \cdot 4^p)$ for any $k$, making depths $p \leq 12$ tractable on a single workstation.
 
 ---
 
@@ -48,7 +53,7 @@ Best-found QAOA satisfaction fractions at finite D, computed on Apple M4 Mac Stu
 
 QAOA surpasses DQI+BP for 13 of 15 pairs. To our knowledge, no prior exact finite-D QAOA evaluation has been performed for k ≥ 3.
 
-### MaxCut (k=2) — D=3 through D=8
+### MaxCut (k=2) Validation — D=3 through D=8
 
 First exact finite-D QAOA MaxCut satisfaction fractions at these depths.
 Previous work (Basso et al.) computed only the large-D asymptotic coefficient ν_p^[k];
@@ -86,7 +91,7 @@ our values are exact at each finite D with no O(1/D) approximation.
 ## Quick Start
 
 ```bash
-# Install Julia 1.12+ via juliaup
+# Install Julia 1.11+ via juliaup
 curl -fsSL https://install.julialang.org | sh
 
 # Clone and set up
@@ -97,7 +102,7 @@ julia --project=. -e 'using Pkg; Pkg.instantiate()'
 # Run tests (1741 tests, 100% coverage)
 julia --project=. -t auto -e 'using Pkg; Pkg.test()'
 
-# Smoke test
+# Quick evaluation
 julia --project=. -e '
 using QaoaXorsat
 result = basso_expectation(TreeParams(3, 4, 1), QAOAAngles([0.3], [0.5]))
@@ -105,7 +110,35 @@ println("k=3, D=4, p=1: $result")
 '
 ```
 
-## Running Experiments
+## Usage
+
+Two clean entry-point scripts are provided:
+
+### MaxCut (k=2)
+
+```bash
+# D=3, sweep p=1..12 (validates against Farhi et al. 2025)
+julia --project=. -t auto scripts/run_maxcut.jl 3 12
+
+# D=4, sweep p=1..10
+julia --project=. -t auto scripts/run_maxcut.jl 4 10
+```
+
+Output: `results/maxcut-k2-d<D>-sweep.csv`
+
+### Max-k-XORSAT
+
+```bash
+# k=3, D=4, sweep p=1..12 (primary paper target)
+julia --project=. -t auto scripts/run_xorsat.jl 3 4 12
+
+# k=4, D=5, sweep p=1..10
+julia --project=. -t auto scripts/run_xorsat.jl 4 5 10
+```
+
+Output: `results/xorsat-k<K>-d<D>-sweep.csv`
+
+### Advanced: TOML Config + General Purpose Script
 
 ```bash
 # Single (k,D) pair with CLI args
@@ -114,38 +147,61 @@ julia --project=. -t 12 scripts/optimize_qaoa.jl 3 4 1 12 2 320 1234 true adjoin
 # TOML config with resume from previous run
 julia --project=. -t 12 scripts/optimize_qaoa.jl experiments/single-pair.toml
 
-# Full 15-pair table at p=11
-julia --project=. -t 12 scripts/run_full_table.jl 11
-
-# Deploy script (handles logging, caffeinate, thread detection)
-./scripts/deploy.sh experiments/full-table.toml 16
+# Full 15-pair table
+julia --project=. -t 12 scripts/run_full_table.jl 12
 ```
+
+All scripts support **resume**: if interrupted, re-running reads the existing CSV and continues from the last completed depth.
 
 ### Docker
 
 ```bash
 docker build -t qaoa-xorsat .
-docker run --rm -v $(pwd)/results:/workspace/results qaoa-xorsat \
-  scripts/optimize_qaoa.jl experiments/full-table.toml
+docker run --rm qaoa-xorsat julia --project=. -t auto scripts/run_maxcut.jl 3 8
 ```
 
-### Memory Requirements
+### Memory and Hardware Requirements
 
-| p | Vector size | Adjoint cache | Minimum RAM |
-|---|-----------|--------------|-------------|
-| ≤10 | ≤2M | ≤2 GB | 8 GB |
-| 11 | 8M | 8 GB | 16 GB |
-| 12 | 33M | 19 GB | 32 GB |
-| 13 | 134M | 84 GB | 128 GB |
-| 14 | 537M | 394 GB | 512 GB |
+| p | Vector size | Adjoint cache | Minimum RAM | Suitable hardware |
+|---|-----------|--------------|-------------|-------------------|
+| ≤10 | ≤2M | ≤2 GB | 8 GB | Any laptop |
+| 11 | 8M | 8 GB | 16 GB | Any desktop |
+| 12 | 33M | 19 GB | 32 GB | Mac Studio, gaming PC |
+| 13 | 134M | 84 GB | 128 GB | Cloud VM |
+| 14 | 537M | 394 GB | 512 GB | Large cloud VM |
+
+All results through p=12 across all 15 (k,D) pairs were computed on an Apple M4 Mac Studio (64 GB). See [docs/computational-limits.md](docs/computational-limits.md) for a detailed scaling analysis.
+
+## Reproducing Paper Results
+
+See [docs/reproducing-results.md](docs/reproducing-results.md) for step-by-step instructions.
+
+**Table 1** — (k=3, D=4) through p=12:
+```bash
+julia --project=. -t auto scripts/run_xorsat.jl 3 4 12    # ~40 min
+```
+
+**Table 2** — All 15 (k,D) pairs:
+```bash
+julia --project=. -t auto scripts/run_full_table.jl 12     # ~7 hr
+```
+
+**Table 3** — MaxCut validation (D=3..8):
+```bash
+for D in 3 4 5 6 7 8; do
+    julia --project=. -t auto scripts/run_maxcut.jl $D 12
+done
+```
 
 ## Documentation
 
-See [`docs/learning/`](docs/learning/) for background material and design notes:
+- [Computational limits](docs/computational-limits.md) — what drives the cost, what the WHT fixed, what still blows up
+- [Reproducing results](docs/reproducing-results.md) — step-by-step guide for all paper tables
 - [Problem statement](docs/learning/problem-statement.md) — what we're solving and why
+- [Foundations](docs/learning/foundations.md) — prerequisites for understanding the code
 - [WHT factorisation](docs/learning/wht-factorisation.md) — the core algorithmic insight
-- [Performance optimization](docs/learning/performance-optimization.md) — 100× in 11 stages
-- [Differentiation strategies](docs/learning/differentiation-strategies.md) — why manual adjoint
+- [Performance optimization](docs/learning/performance-optimization.md) — the 100× optimisation journey
+- [Differentiation strategies](docs/learning/differentiation-strategies.md) — why manual adjoint, not AD
 
 ## Architecture
 
@@ -154,16 +210,51 @@ src/
   QaoaXorsat.jl          # Module entry point
   tree.jl                # Tree structure (k, D, p parameters)
   tensors.jl             # QAOAAngles{T}, hyperindex operations
-  basso_finite_d.jl      # Tier 2: exact finite-D evaluator + WHT
-  wht.jl                 # Walsh-Hadamard transform (generic, in-place)
+  basso_finite_d.jl      # Exact finite-D evaluator + WHT
+  wht.jl                 # Walsh-Hadamard transform (cache-oblivious, in-place)
   adjoint.jl             # Manual reverse-mode differentiation
-  optimization.jl        # L-BFGS optimizer with thread-parallel restarts
-  qaoa.jl                # Public API: parity_expectation, qaoa_expectation
+  checkpointed_adjoint.jl # √p-memory checkpointed adjoint for high p
+  cost_algebra.jl        # MaxCut / XORSAT algebra dispatch
+  optimization.jl        # L-BFGS + swarm optimizer, warm-start, plateau detection
+  qaoa.jl                # Public API: evaluate_qaoa, optimize_angles
+  reduced_basis.jl       # Spectral truncation for large (k,D)
+  spectral_analysis.jl   # Effective rank analysis
   transfer_oracles.jl    # Raw transfer matrix oracles
   maxcut_transfer.jl     # MaxCut-specific transfer recursion
+  gpu_*.jl               # GPU acceleration (Metal/CUDA, auto-detected)
+
+test/                    # 21 test files, 1741 tests, 100% coverage
+
+scripts/
+  run_maxcut.jl          # Clean MaxCut entry point
+  run_xorsat.jl          # Clean Max-k-XORSAT entry point
+  optimize_qaoa.jl       # General-purpose optimizer (CLI args or TOML)
+  run_full_table.jl      # All 15 (k,D) pairs
+
+experiments/             # TOML configs for reproducible runs
+results/                 # Curated CSV data (canonical results)
+docs/                    # Public documentation
 ```
 
 The evaluator is generic over the angle element type `T <: Real` via `QAOAAngles{T}`, enabling ForwardDiff dual numbers to propagate through the full pipeline.
+
+## Testing
+
+```bash
+julia --project=. -t auto -e 'using Pkg; Pkg.test()'
+```
+
+21 test files covering:
+- Tree structure and node counting
+- Tensor primitives and hyperindex operations
+- Brute-force oracle validation against known results
+- WHT correctness (round-trip, convolution theorem)
+- Manual adjoint vs finite-difference gradients (< 1e-8)
+- Checkpointed adjoint matching full adjoint (< 1e-12)
+- Optimizer convergence to known optima
+- Cost algebra dispatch (MaxCut and XORSAT)
+- Overflow protection and normalization
+- GPU kernels (forward, backward, WHT, checkpointed)
 
 ## Key Design Decisions
 
@@ -174,15 +265,27 @@ The evaluator is generic over the angle element type `T <: Real` via `QAOAAngles
 
 ## References
 
-1. Farhi, Goldstone, Gutmann (2014) — [arXiv:1411.4028](https://arxiv.org/abs/1411.4028) — Original QAOA
-2. Basso, Farhi, Marwaha, Villalonga, Zhou (2021) — [arXiv:2110.14206](https://arxiv.org/abs/2110.14206) — Branch-tensor recurrence
-3. Farhi, Gutmann, Ranard, Villalonga (2025) — [arXiv:2503.12789](https://arxiv.org/abs/2503.12789) — Exact MaxCut evaluator
-4. Jordan et al. (2025) — [Nature 646:831-836](https://doi.org/10.1038/s41586-024-08033-4) — DQI comparison target
+1. Shutty, Azariah, Jordan (2026) — [arXiv:2604.24633](https://arxiv.org/abs/2604.24633) — **This paper**: QAOA for D-regular Max-k-XORSAT
+2. Farhi, Goldstone, Gutmann (2014) — [arXiv:1411.4028](https://arxiv.org/abs/1411.4028) — Original QAOA
+3. Basso, Farhi, Marwaha, Villalonga, Zhou (2021) — [arXiv:2110.14206](https://arxiv.org/abs/2110.14206) — Branch-tensor recurrence
+4. Farhi, Gutmann, Ranard, Villalonga (2025) — [arXiv:2503.12789](https://arxiv.org/abs/2503.12789) — Exact MaxCut evaluator
+5. Jordan et al. (2025) — [Nature 646:831-836](https://doi.org/10.1038/s41586-024-08033-4) — DQI comparison target
 
 ## Citation
 
+If you use this software, please cite:
+
 ```bibtex
-@software{azariah2026qaoa,
+@article{shutty2026qaoa,
+  author = {Shutty, Noah and Azariah, John S and Jordan, Stephen P},
+  title = {Quantum Approximate Optimization Algorithm for D-Regular Max-k-XORSAT},
+  year = {2026},
+  eprint = {2604.24633},
+  archivePrefix = {arXiv},
+  primaryClass = {quant-ph}
+}
+
+@software{azariah2026qaoa_code,
   author = {Azariah, John S},
   title = {QAOA-XORSAT: Exact QAOA Performance on D-Regular Max-k-XORSAT},
   year = {2026},
