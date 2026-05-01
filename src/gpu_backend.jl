@@ -32,9 +32,8 @@ function detect_gpu_backend()
     # ── CUDA (NVIDIA) ────────────────────────────────────────────────
     try
         @eval Main using CUDA
-        if Base.invokelatest(getfield(Main.CUDA, :functional))
-            cu_array = getfield(Main.CUDA, :CuArray)
-            fn(x) = Base.invokelatest(cu_array, x)
+        if Base.invokelatest(() -> Main.CUDA.functional())
+            fn(x) = Base.invokelatest(Main.CUDA.CuArray, x)
             return GPUBackend(:cuda, fn, ComplexF64, "CUDA GPU (ComplexF64)")
         end
     catch
@@ -44,11 +43,10 @@ function detect_gpu_backend()
     # ── Metal (Apple Silicon) ────────────────────────────────────────
     try
         @eval Main using Metal
-        if Base.invokelatest(getfield(Main.Metal, :functional))
-            mtl_array = getfield(Main.Metal, :MtlArray)
+        if Base.invokelatest(() -> Main.Metal.functional())
             # Metal requires Float32; we narrow on the way to the GPU.
-            fn(x::AbstractArray{<:Complex}) = Base.invokelatest(mtl_array, ComplexF32.(x))
-            fn(x::AbstractArray{<:Real})    = Base.invokelatest(mtl_array, ComplexF32.(complex.(x)))
+            fn(x::AbstractArray{<:Complex}) = Base.invokelatest(Main.Metal.MtlArray, ComplexF32.(x))
+            fn(x::AbstractArray{<:Real})    = Base.invokelatest(Main.Metal.MtlArray, ComplexF32.(complex.(x)))
             return GPUBackend(:metal, fn, ComplexF32, "Metal GPU (ComplexF32)")
         end
     catch
