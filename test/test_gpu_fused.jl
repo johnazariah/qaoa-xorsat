@@ -5,16 +5,11 @@ unfused sequence of operations.
 """
 
 using Test
-using Metal
 using QaoaXorsat
 
+include(joinpath(@__DIR__, "gpu_test_utils.jl"))
 include(joinpath(@__DIR__, "..", "src", "gpu_fused.jl"))
 include(joinpath(@__DIR__, "..", "src", "gpu_forward.jl"))
-
-const GPU_OK = Metal.functional()
-
-gpu_array(x::AbstractVector{<:Complex}) = MtlArray(ComplexF32.(x))
-gpu_array(x::AbstractVector{<:Real}) = MtlArray(ComplexF32.(complex.(x)))
 
 @testset "Fused Branch Step" begin
     if !GPU_OK
@@ -29,8 +24,8 @@ gpu_array(x::AbstractVector{<:Real}) = MtlArray(ComplexF32.(complex.(x)))
         arity = k - 1
         degree = D - 1
         N = QaoaXorsat.basso_configuration_count(p)
-        GT = ComplexF32
-        threshold = Float32(1e15)
+        GT = GPU_CT
+        threshold = GPU_RT(1e15)
 
         # Random tensors
         B = gpu_array(randn(ComplexF64, N))
@@ -44,7 +39,7 @@ gpu_array(x::AbstractVector{<:Real}) = MtlArray(ComplexF32.(complex.(x)))
 
         ch_scale_u = Float64(maximum(abs.(scratch_u)))
         if ch_scale_u > Float64(threshold)
-            scratch_u .*= Float32(1.0 / ch_scale_u)
+            scratch_u .*= GPU_RT(1.0 / ch_scale_u)
         else
             ch_scale_u = 1.0
         end
@@ -55,7 +50,7 @@ gpu_array(x::AbstractVector{<:Real}) = MtlArray(ComplexF32.(complex.(x)))
 
         fld_scale_u = Float64(maximum(abs.(scratch_u)))
         if fld_scale_u > Float64(threshold)
-            scratch_u .*= Float32(1.0 / fld_scale_u)
+            scratch_u .*= GPU_RT(1.0 / fld_scale_u)
         else
             fld_scale_u = 1.0
         end
@@ -102,7 +97,7 @@ gpu_array(x::AbstractVector{<:Real}) = MtlArray(ComplexF32.(complex.(x)))
 
         f_gpu = gpu_array(f_table_cpu)
         kh_gpu = gpu_array(kernel_hat_cpu)
-        threshold = Float32(1e15)
+        threshold = GPU_RT(1e15)
 
         B = gpu_array(ones(ComplexF64, N))
         B_next = similar(B)
@@ -130,7 +125,7 @@ gpu_array(x::AbstractVector{<:Real}) = MtlArray(ComplexF32.(complex.(x)))
         gpu_wht!(root_msg)
         mh_scale = Float64(maximum(abs.(root_msg)))
         if mh_scale > Float64(threshold)
-            root_msg .*= Float32(1.0 / mh_scale)
+            root_msg .*= GPU_RT(1.0 / mh_scale)
         else
             mh_scale = 1.0
         end
@@ -158,7 +153,7 @@ gpu_array(x::AbstractVector{<:Real}) = MtlArray(ComplexF32.(complex.(x)))
         params = TreeParams(2, 3, p)
         N = QaoaXorsat.basso_configuration_count(p)
         arity, degree = 1, 2
-        threshold = Float32(1e15)
+        threshold = GPU_RT(1e15)
 
         B = gpu_array(randn(ComplexF64, N))
         f_table = gpu_array(randn(ComplexF64, N))

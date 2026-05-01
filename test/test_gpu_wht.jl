@@ -4,50 +4,16 @@ GPU WHT tests — Level 1 (unit) and Level 2 (element-wise ops).
 Tests the GPU Walsh-Hadamard transform against the CPU implementation
 for correctness, and verifies element-wise GPU operations.
 
-Runs on whatever GPU backend is available (Metal on Mac, CUDA on cluster,
+Runs on whatever GPU backend is available (CUDA on NVIDIA, Metal on Mac,
 CPU fallback otherwise).
 """
 
 using Test
 using QaoaXorsat
 
-# ── Detect available GPU backend ──────────────────────────────────
+include(joinpath(@__DIR__, "gpu_test_utils.jl"))
 
-using Metal
-
-const GPU_AVAILABLE = Metal.functional()
-const GPU_ARRAY_TYPE = GPU_AVAILABLE ? MtlArray : nothing
-
-if GPU_AVAILABLE
-    @info "GPU tests using Metal backend"
-else
-    @warn "Metal GPU not functional — GPU tests will be skipped"
-end
-
-# ── Helper: convert to GPU-compatible element type ────────────────
-
-# Metal requires Float32; CUDA supports Float64
-function gpu_complex_type()
-    if GPU_ARRAY_TYPE === nothing
-        return ComplexF64
-    end
-    try
-        # Test if Float64 is supported
-        x = GPU_ARRAY_TYPE(ComplexF64[1.0 + 0im])
-        return ComplexF64
-    catch
-        return ComplexF32
-    end
-end
-
-function to_gpu(x::AbstractVector)
-    T = gpu_complex_type()
-    GPU_ARRAY_TYPE(T.(x))
-end
-
-function from_gpu(x)
-    Array(x)
-end
+const GPU_AVAILABLE = GPU_OK
 
 # ── Include GPU WHT code ──────────────────────────────────────────
 
@@ -62,7 +28,7 @@ include(joinpath(@__DIR__, "..", "src", "gpu_wht.jl"))
         return
     end
 
-    CT = gpu_complex_type()
+    CT = GPU_CT
     # Tolerance: Float32 has ~7 digits, Float64 has ~15
     atol = CT == ComplexF32 ? 1f-4 : 1e-10
 

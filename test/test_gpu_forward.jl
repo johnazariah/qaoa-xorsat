@@ -6,17 +6,10 @@ for multiple (k, D, p) combinations.
 """
 
 using Test
-using Metal
 using QaoaXorsat
 
+include(joinpath(@__DIR__, "gpu_test_utils.jl"))
 include(joinpath(@__DIR__, "..", "src", "gpu_forward.jl"))
-
-const GPU_OK = Metal.functional()
-GPU_OK || @warn "Metal not functional — skipping GPU forward tests"
-
-# Helper to create MtlArray with auto-conversion to ComplexF32
-gpu_array(x::AbstractVector{<:Complex}) = MtlArray(ComplexF32.(x))
-gpu_array(x::AbstractVector{<:Real}) = MtlArray(ComplexF32.(complex.(x)))
 
 @testset "GPU Forward Pass" begin
     if !GPU_OK

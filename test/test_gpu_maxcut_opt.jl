@@ -3,17 +3,12 @@ Test the optimized MaxCut GPU forward pass against the generic one.
 """
 
 using Test
-using Metal
 using QaoaXorsat
 using Statistics, Printf
 
+include(joinpath(@__DIR__, "gpu_test_utils.jl"))
 include(joinpath(@__DIR__, "..", "src", "gpu_maxcut_opt.jl"))
 include(joinpath(@__DIR__, "..", "src", "gpu_forward.jl"))
-
-const GPU_OK = Metal.functional()
-
-gpu_array(x::AbstractVector{<:Complex}) = MtlArray(ComplexF32.(x))
-gpu_array(x::AbstractVector{<:Real}) = MtlArray(ComplexF32.(complex.(x)))
 
 @testset "Optimized MaxCut Forward" begin
     if !GPU_OK

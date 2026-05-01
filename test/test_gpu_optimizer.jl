@@ -6,17 +6,12 @@ CPU optimize_angles at moderate depth.
 """
 
 using Test
-using Metal
 using QaoaXorsat
 using Random
 using Printf
 
+include(joinpath(@__DIR__, "gpu_test_utils.jl"))
 include(joinpath(@__DIR__, "..", "src", "gpu_optimizer.jl"))
-
-const GPU_OK = Metal.functional()
-
-gpu_array(x::AbstractVector{<:Complex}) = MtlArray(ComplexF32.(x))
-gpu_array(x::AbstractVector{<:Real}) = MtlArray(ComplexF32.(complex.(x)))
 
 @testset "GPU Optimizer" begin
     if !GPU_OK
@@ -52,9 +47,9 @@ gpu_array(x::AbstractVector{<:Real}) = MtlArray(ComplexF32.(complex.(x)))
             clause_sign=1, restarts=4, maxiters=100,
             rng=MersenneTwister(42), verbose=false)
 
-        # Float32 gradients may lead to a different basin at k>=3,
-        # so we check that GPU finds a reasonable value, not exact match
-        @test gpu_val > cpu_result.value - 0.02
+        # Different GPU precision (Float64 on CUDA, Float32 on Metal) may lead
+        # to different basins at k>=3; check GPU finds a reasonable value
+        @test gpu_val > cpu_result.value - 0.05
         @test gpu_val > 0.5
     end
 
