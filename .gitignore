@@ -31,8 +31,38 @@ Thumbs.db
 # Jupyter
 .ipynb_checkpoints/
 
-# Generated local machine-state capture artefacts
-/results/
+# Private / operational content (migrated to qaoa-xorsat-research)
 .project/
+archive/
+cluster-logs/
+logs/
+infra/
+spike/
+1
+STEPHEN-INSTRUCTIONS.md
+DEPLOYMENT.md
+SLURM.md
+RELEASE-PLAN.md
+
+# Workflow automation (migrated to qaoa-xorsat-research)
+.github/agents/
+.github/skills/
+.github/prompts/
+.github/instructions/
+.github/copilot-instructions.md
+.github/workflows/optimize.yml
+.github/workflows/reproduce.yml
+
+# Build artefacts
+*.tar.gz
+qaoa-d64_*.out
+.venv/
 .devcontainer.archived/
 .worktree/
+
+# Generated images (reproducible from data)
+results/angle-plots/*.png
+results/maxcut-plots/
+
+# Python plotting scripts (migrated)
+scripts/plot_*.py

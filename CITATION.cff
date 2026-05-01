@@ -7,8 +7,8 @@ authors:
     orcid: "https://orcid.org/0009-0007-9870-1970"
     affiliation: "Centre for Quantum Software and Information, School of Computer Science, Faculty of Engineering & Information Technology, University of Technology Sydney, NSW 2007, Australia"
     email: "john.azariah@student.uts.edu.au"
-version: 0.1.0
-date-released: 2026-03-25
+version: 1.0.0
+date-released: 2026-05-01
 doi: 10.5281/zenodo.19211958
 license: MIT
 repository-code: https://github.com/johnazariah/qaoa-xorsat
@@ -20,3 +20,19 @@ keywords:
   - tensor network
   - Julia
 type: software
+preferred-citation:
+  type: article
+  title: "Quantum Approximate Optimization Algorithm for D-Regular Max-k-XORSAT"
+  authors:
+    - family-names: Shutty
+      given-names: Noah
+    - family-names: Azariah
+      given-names: "John S"
+    - family-names: Jordan
+      given-names: "Stephen P"
+  year: 2026
+  journal: "arXiv preprint"
+  identifiers:
+    - type: other
+      value: "arXiv:2604.24633"
+      description: "arXiv preprint"

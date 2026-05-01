@@ -1,9 +1,0 @@
-preserved run_id=20260408T041948-k3-d6-p15-15-r2-i1280-s1234
-preserved directory=/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260408T041948-k3-d6-p15-15-r2-i1280-s1234
-resuming from: /home/stephenjordan_google_com/qaoa-xorsat/scripts/../experiments/warmstart/ws-k3d6
-warm-start from p=14: c̃=0.770589130208
-[ Info: JIT warmup...
-[ Info: JIT warmup complete, starting sweep
-  p=15 start 1: 2 evals, 8711.5s elapsed, c̃=0.6580956983, g_norm=2.07e+02
-/var/spool/slurmd/job1098085/slurm_script: line 49:  9457 Killed                  julia --project=. -t ${SLURM_CPUS_PER_TASK:-28} scripts/optimize_qaoa.jl "$CONFIG"
-slurmstepd: error: Detected 1 oom_kill event in StepId=1098085.batch. Some of the step tasks have been OOM Killed.

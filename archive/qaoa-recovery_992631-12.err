@@ -1,6 +1,0 @@
-preserved run_id=20260403T034418-k5-d8-p12-15-r2-i320-s1234
-preserved directory=/home/stephenjordan_google_com/qaoa-xorsat/scripts/../.project/results/optimization/runs/20260403T034418-k5-d8-p12-15-r2-i320-s1234
-resuming from: /home/stephenjordan_google_com/qaoa-xorsat/.project/results/optimization/runs/20260401T041836-k5-d8-p11-11-r2-i320-s1234
-warm-start from p=11: c̃=0.500796533935
-[ Info: JIT warmup...
-[ Info: JIT warmup complete, starting sweep
