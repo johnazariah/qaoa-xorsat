@@ -195,13 +195,9 @@ done
 
 ## Documentation
 
+- **[Ten innovations](docs/innovations.md)** — the full technical story: WHT factorisation, manual adjoint, normalisation, cost algebra, swarm optimizer, gradient checkpointing, and the correctness framework that makes the results trustworthy
 - [Computational limits](docs/computational-limits.md) — what drives the cost, what the WHT fixed, what still blows up
 - [Reproducing results](docs/reproducing-results.md) — step-by-step guide for all paper tables
-- [Problem statement](docs/learning/problem-statement.md) — what we're solving and why
-- [Foundations](docs/learning/foundations.md) — prerequisites for understanding the code
-- [WHT factorisation](docs/learning/wht-factorisation.md) — the core algorithmic insight
-- [Performance optimization](docs/learning/performance-optimization.md) — the 100× optimisation journey
-- [Differentiation strategies](docs/learning/differentiation-strategies.md) — why manual adjoint, not AD
 
 ## Architecture
 
