@@ -1,0 +1,8 @@
+# MaxCut p=13 per-D timing -- 2026-04-30T06:36:30.138
+# checkpointed=true; autodiff=:adjoint; warm-started from p=12
+D,p,ctilde,wall_seconds,evaluations,starts,iterations,converged,restarts,maxiters,g_abstol,best_start_kind,best_start_seconds,checkpointed,started_at,finished_at
+3,13,0.888870518623,17823.4,86,1,29,true,0,800,1.0e-04,warm,17768.9,true,2026-04-30T17:20:14.054,2026-04-30T22:17:17.601
+4,13,0.829161160603,12926.4,64,1,23,true,0,800,1.0e-04,warm,12870.4,true,2026-04-30T22:18:19.763,2026-05-01T01:53:46.289
+5,13,0.798666883161,17010.8,84,1,28,true,0,800,1.0e-04,warm,16957.4,true,2026-05-01T01:54:21.104,2026-05-01T06:37:52.062
+6,13,0.769480355340,14771.6,73,1,25,true,0,800,1.0e-04,warm,14706.7,true,2026-05-01T06:38:25.434,2026-05-01T10:44:37.199
+7,13,0.750051934207,42661.4,216,1,21,true,0,800,1.0e-04,warm,42606.3,true,2026-05-01T10:45:08.918,2026-05-01T22:36:10.674

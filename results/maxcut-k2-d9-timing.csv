@@ -1,0 +1,15 @@
+# MaxCut k=2 D=9 per-depth timing — 2026-04-29T20:25:56.525
+# all optimized production settings: adjoint gradients, depth budgets, plateau detection, memory-bounded restarts
+D,p,ctilde,delta,depth_seconds,cumulative_seconds,evaluations,starts,iterations,converged,restarts,maxiters,g_abstol,best_start_kind,best_start_seconds,checkpointed
+9,1,0.604049179495,0.104049179495,1.8,1.9,106,9,8,true,8,200,1.0e-06,random,1.0,false
+9,2,0.639127540895,0.035078361400,0.1,2.6,504,9,15,true,8,200,1.0e-06,random,0.0,false
+9,3,0.660899758035,0.021772217140,0.0,2.6,491,9,11,true,8,200,1.0e-06,warm,0.0,false
+9,4,0.675074718101,0.014174960066,0.0,2.6,553,5,14,true,4,400,1.0e-06,warm,0.0,false
+9,5,0.685547154805,0.010472436704,0.2,2.8,511,3,16,true,2,800,1.0e-06,warm,0.0,false
+9,6,0.693442369430,0.007895214625,0.4,3.2,312,3,18,true,2,800,1.0e-06,warm,0.2,false
+9,7,0.699645853664,0.006203484234,5.1,8.3,777,3,23,true,2,800,1.0e-06,warm,0.8,false
+9,8,0.704664206358,0.005018352694,51.8,60.2,1664,3,27,true,2,800,1.0e-06,warm,5.1,false
+9,9,0.708790775946,0.004126569589,170.7,230.9,1168,3,32,true,2,800,1.0e-06,warm,25.9,false
+9,10,0.712253815894,0.003463039948,539.0,769.9,1002,3,40,true,2,800,1.0e-06,warm,129.9,false
+9,11,0.715201598948,0.002947783054,3036.3,3806.2,603,1,33,true,0,800,1.0e-05,warm,3033.5,false
+9,12,0.717763513540,0.002561914592,9711.1,13517.3,512,1,22,true,0,800,1.0e-04,warm,9701.7,false
