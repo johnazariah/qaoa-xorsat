@@ -295,27 +295,25 @@ against `basso_parity_expectation`:
 
 | k | D | p | Basso (ms) | Charge (ms) | Speedup |
 |---|---|---|-----------|------------|---------|
-| 2 | 3 | 3 | 0.09 | 0.04 | 2.3× |
-| 2 | 3 | 5 | 0.37 | 0.38 | 1.0× |
-| 2 | 3 | 7 | 7.7 | 5.3 | 1.4× |
-| 2 | 3 | 9 | 265 | 146 | 1.8× |
-| 2 | 3 | 11 | 4199 | 2515 | 1.7× |
-| 3 | 4 | 3 | 0.10 | 0.04 | 2.4× |
-| 3 | 4 | 5 | 0.43 | 0.40 | 1.1× |
-| 3 | 4 | 7 | 7.7 | 5.4 | 1.4× |
-| 3 | 4 | 9 | 271 | 148 | 1.8× |
+| 2 | 3 | 3 | 0.09 | 0.014 | 6.6× |
+| 2 | 3 | 5 | 0.38 | 0.065 | 5.8× |
+| 2 | 3 | 7 | 7.5 | 0.71 | 10.6× |
+| 2 | 3 | 9 | 285 | 12.6 | 22.6× |
+| 2 | 3 | 11 | 4076 | 407 | 10.0× |
+| 3 | 4 | 3 | 0.09 | 0.015 | 5.9× |
+| 3 | 4 | 5 | 0.43 | 0.076 | 5.7× |
+| 3 | 4 | 7 | 7.5 | 0.82 | 9.1× |
+| 3 | 4 | 9 | 262 | 16.3 | 16.1× |
 
-The speedup grows with p (as expected from the O(p) improvement) but is
-below the theoretical p× due to:
+The speedup exceeds the theoretical p× factor at moderate depths because
+the charge evaluator also benefits from:
 
-1. **Higher constant factors** — the `_reshape_c`/`_vec_c` layout adapters
-   and `permutedims` calls add overhead absent from the Basso path
-2. **Optimised Basso WHT** — the existing WHT uses SIMD, cache-oblivious
-   recursion, and in-place mutation, while the charge code allocates
-   temporaries at each step
-3. **Same dominant term** — at moderate p, the O(4^p) branch power
-   dominates both implementations; the p× saving in WHT overhead only
-   shows at higher p
+1. **Smaller working set** — 4^ℓ entries at level ℓ vs 2^(2p+1) throughout
+   in Basso, giving better cache utilisation for inner levels
+2. **In-place operations** — flat-vector WHT butterfly and mode products
+   use double-buffering with no intermediate allocations
+3. **No WHT on large vectors** — the Basso WHT operates on 2^(2p+1)-entry
+   vectors; the charge decomposition avoids this entirely
 
 ### 6.3 Theoretical Speedup Factor
 
