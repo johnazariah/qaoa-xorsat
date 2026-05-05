@@ -332,46 +332,40 @@ function _charge_root_contract(
     rb::AbstractVector{CT},
     γs::AbstractVector{T},
     βs::AbstractVector{T},
-    p::Int, D::Int, k::Int,
+    p::Int, D::Int, k::Int;
+    scratch::Union{Nothing, AbstractVector{CT}}=nothing,
 ) where {T<:Real, CT<:Complex{T}}
     coeffs = CT[CT(0.5)^k]
     factor = copy(rb)
     R = 1
     N = length(rb)  # = 4^p
 
-    # Scratch buffer: large enough for all intermediate rounds.
-    # After wht_charge_contract, output is 4 channels of R*4*rest each = 4*R*4*rest = R*16*rest.
-    # But the output is contiguous as 4*channel_size where channel_size = R*4*rest.
-    # The total size is 4 * R * 4 * rest.  Since R*16*rest = R*entries_per_row = N,
-    # the output is always exactly 4*N/16*4 = N.  Actually let me think...
-    # At round ℓ: R = 4^(ℓ-1), entries_per_row = N/R = 4^(p-ℓ+1), rest = entries_per_row/16 = 4^(p-ℓ-1)
-    # channel_size = R * 4 * rest = 4^(ℓ-1) * 4 * 4^(p-ℓ-1) = 4^(p-1)
-    # total output = 4 * channel_size = 4^p = N
-    # So scratch is always length N — perfect, we can double-buffer.
-    scratch = similar(factor)
+    # Double buffer — reuse caller's scratch if provided
+    buf = scratch !== nothing && length(scratch) == N ? scratch : similar(factor)
+
+    # Pre-allocate coefficient double buffer (max size = 4^(p-1))
+    max_R = 4^(p - 1)
+    coeffs_a = Vector{CT}(undef, max_R)
+    coeffs_a[1] = CT(0.5)^k
+    coeffs_b = Vector{CT}(undef, max_R)
 
     for ℓ in 1:p-1
         M = doubled_mixer(βs[ℓ])
         u = root_charge_weights(γs[ℓ])
         entries_per_row = div(N, R)
 
-        _wht_charge_contract_flat!(scratch, M, factor, R, entries_per_row)
+        _wht_charge_contract_flat!(buf, M, factor, R, entries_per_row)
+        factor, buf = buf, factor
 
-        # scratch now holds [channel0 | channel1 | channel2 | channel3]
-        # each channel has R*4*rest entries in C-order
-        # Next round's factor = vcat(channels...) which is already the layout in scratch
-        factor, scratch = scratch, factor
-
-        # Expand coefficients: new_coeffs[a*R+1 : (a+1)*R] = u[a+1] * coeffs
-        new_coeffs = Vector{CT}(undef, 4R)
+        # Expand coefficients using double buffer
         @inbounds for a in 1:4
             ua = u[a]
             for i in 1:R
-                new_coeffs[(a-1)*R + i] = ua * coeffs[i]
+                coeffs_b[(a-1)*R + i] = ua * coeffs_a[i]
             end
         end
-        coeffs = new_coeffs
         R *= 4
+        coeffs_a, coeffs_b = coeffs_b, coeffs_a
     end
 
     # Final round + Z measurement
@@ -390,7 +384,7 @@ function _charge_root_contract(
         for i in 0:R-1
             base = i * entries_per_row
             z = factor[base+1]*tv1 + factor[base+2]*tv2 + factor[base+3]*tv3 + factor[base+4]*tv4
-            s += coeffs[i+1] * z ^ k
+            s += coeffs_a[i+1] * z ^ k
         end
         result += u[a] * s
     end
@@ -450,8 +444,8 @@ function charge_parity_expectation(
     end
     rb = F .^ (D - 1)
 
-    # Root contraction
-    raw = _charge_root_contract(rb, γs, βs, p, D, k)
+    # Root contraction — pass F as scratch buffer to avoid extra allocation
+    raw = _charge_root_contract(rb, γs, βs, p, D, k; scratch=F)
 
     # Apply accumulated scale
     raw * exp(k * log_scale)
