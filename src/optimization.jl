@@ -133,6 +133,168 @@ function extend_angles(
     )
 end
 
+# ── Chebyshev warm-start (Zhou et al. 2020 INTERP) ──────────────────────
+
+"""
+    _chebyshev_basis(t, deg)
+
+Evaluate Chebyshev polynomials T₀..T_deg at points `t ∈ [0, 1]`.
+Returns a `(length(t), deg+1)` matrix.
+"""
+function _chebyshev_basis(t::AbstractVector{<:Real}, deg::Int)
+    n = length(t)
+    B = Matrix{Float64}(undef, n, deg + 1)
+    # Map [0,1] → [-1,1]
+    u = @. 2.0 * t - 1.0
+    @inbounds for i in 1:n
+        B[i, 1] = 1.0
+        if deg ≥ 1
+            B[i, 2] = u[i]
+        end
+        for j in 3:deg+1
+            B[i, j] = 2.0 * u[i] * B[i, j-1] - B[i, j-2]
+        end
+    end
+    B
+end
+
+"""
+    _chebyshev_interp(angles_src, p_tgt; num_coeffs=nothing)
+
+Interpolate/extrapolate angles from depth `p_src` to `p_tgt` via Chebyshev
+polynomial fitting.
+
+Positions angles at `t_i = (i - 0.5) / p` on `[0, 1]`, fits a Chebyshev
+polynomial, and evaluates at `p_tgt` positions.  When `num_coeffs` is given,
+the polynomial degree is clamped to `min(num_coeffs - 1, p_src - 1)`,
+acting as regularization.
+"""
+function _chebyshev_interp(
+    angles_src::AbstractVector{<:Real},
+    p_tgt::Int;
+    num_coeffs::Union{Nothing,Int}=nothing,
+)
+    p_src = length(angles_src)
+    p_src ≥ 1 || throw(ArgumentError("need at least 1 source angle"))
+    p_tgt ≥ 1 || throw(ArgumentError("target depth must be ≥ 1"))
+
+    # Sample positions: midpoints of equal-width bins on [0, 1]
+    t_src = [(i - 0.5) / p_src for i in 1:p_src]
+    t_tgt = [(i - 0.5) / p_tgt for i in 1:p_tgt]
+
+    # Polynomial degree, optionally truncated
+    deg = p_src - 1
+    if num_coeffs !== nothing
+        deg = min(deg, max(num_coeffs - 1, 0))
+    end
+
+    # Fit: least-squares Chebyshev coefficients
+    B_src = _chebyshev_basis(t_src, deg)
+    coeffs = B_src \ Float64.(angles_src)
+
+    # Evaluate at target positions
+    B_tgt = _chebyshev_basis(t_tgt, deg)
+    B_tgt * coeffs
+end
+
+"""
+    chebyshev_extend_angles(previous, target_depth) -> QAOAAngles
+
+Chebyshev-interpolated warm-start: extrapolate optimal angles from depth `p`
+to `target_depth` using Chebyshev polynomial fitting.
+
+Uses the regularized extrapolation from Zhou et al. (2020) INTERP strategy
+with truncated degree `max(3, floor(2√(p-1)))` coefficients.
+
+This works best when the angle curve is smooth as a function of
+normalised position `t = (i-0.5)/p`. For angles with mod-2π
+discontinuities, consider using `interp_extend_angles` instead.
+"""
+function chebyshev_extend_angles(
+    previous::QAOAAngles,
+    target_depth::Int=depth(previous) + 1,
+)
+    p_src = depth(previous)
+    target_depth ≥ p_src || throw(ArgumentError(
+        "target_depth must be ≥ $(p_src), got $target_depth",
+    ))
+    target_depth == p_src && return QAOAAngles(previous.γ, previous.β)
+
+    # Truncated number of Chebyshev coefficients (regularization)
+    num_coeffs = max(3, floor(Int, 2 * sqrt(p_src - 1)))
+
+    if p_src == 1
+        return QAOAAngles(
+            fill(previous.γ[1], target_depth),
+            fill(previous.β[1], target_depth),
+        )
+    end
+
+    γ_ext = _chebyshev_interp(previous.γ, target_depth; num_coeffs)
+    β_ext = _chebyshev_interp(previous.β, target_depth; num_coeffs)
+
+    QAOAAngles(γ_ext, β_ext)
+end
+
+"""
+    interp_extend_angles(previous, target_depth) -> QAOAAngles
+
+Linear-interpolation warm-start: resample angles from depth `p` to
+`target_depth` by linearly interpolating on a normalised grid.
+
+Maps source positions `t_i = (i-0.5)/p_src` to target positions
+`t_j = (j-0.5)/p_tgt` and linearly interpolates between nearest
+neighbours. At the boundaries, the first and last angles are preserved.
+
+This is more robust than Chebyshev extrapolation for angles with
+discontinuities (e.g., from mod-2π canonicalization) and more informative
+than the constant-padding of `extend_angles`.
+"""
+function interp_extend_angles(
+    previous::QAOAAngles,
+    target_depth::Int=depth(previous) + 1,
+)
+    p_src = depth(previous)
+    target_depth ≥ p_src || throw(ArgumentError(
+        "target_depth must be ≥ $(p_src), got $target_depth",
+    ))
+    target_depth == p_src && return QAOAAngles(previous.γ, previous.β)
+
+    if p_src == 1
+        return QAOAAngles(
+            fill(previous.γ[1], target_depth),
+            fill(previous.β[1], target_depth),
+        )
+    end
+
+    γ_ext = _linear_resample(previous.γ, target_depth)
+    β_ext = _linear_resample(previous.β, target_depth)
+
+    QAOAAngles(γ_ext, β_ext)
+end
+
+"""Resample `src` from `p_src` to `p_tgt` positions via linear interpolation."""
+function _linear_resample(src::AbstractVector{<:Real}, p_tgt::Int)
+    p_src = length(src)
+    t_src = [(i - 0.5) / p_src for i in 1:p_src]
+    t_tgt = [(i - 0.5) / p_tgt for i in 1:p_tgt]
+
+    result = Vector{Float64}(undef, p_tgt)
+    for (j, t) in enumerate(t_tgt)
+        if t ≤ t_src[1]
+            result[j] = src[1]
+        elseif t ≥ t_src[end]
+            result[j] = src[end]
+        else
+            # Find bracketing interval
+            idx = searchsortedlast(t_src, t)
+            α = (t - t_src[idx]) / (t_src[idx+1] - t_src[idx])
+            result[j] = (1 - α) * src[idx] + α * src[idx+1]
+        end
+    end
+    result
+end
+
 function build_initial_guesses(
     p::Int,
     initial_guesses::AbstractVector{<:QAOAAngles},
@@ -685,6 +847,7 @@ function optimize_depth_sequence(
     on_evaluation=nothing,
     on_chunk=nothing,
     warm_start::Union{Nothing,QAOAAngles}=nothing,
+    warm_start_strategy::Symbol=:linear,
     eval_eltype::Type=Float64,
     gpu_evaluator::Union{Function,Nothing}=nothing,
     checkpointed::Bool=false,
@@ -693,13 +856,23 @@ function optimize_depth_sequence(
 )::Vector{AngleOptimizationResult}
     validate_clause_sign(clause_sign)
     validated_p_values = validate_depth_sequence(collect(Int, p_values))
+    warm_start_strategy in (:linear, :chebyshev, :interp) || throw(ArgumentError(
+        "warm_start_strategy must be :linear, :chebyshev, or :interp, got :$warm_start_strategy",
+    ))
 
     results = AngleOptimizationResult[]
 
     for p in validated_p_values
         budget = depth_optimization_budget(p, restarts, maxiters)
         start_tol = depth_g_abstol(p)
-        initial_guesses = isnothing(warm_start) ? QAOAAngles[] : [extend_angles(warm_start, p)]
+        initial_guesses = if isnothing(warm_start)
+            QAOAAngles[]
+        else
+            extender = warm_start_strategy === :chebyshev ? chebyshev_extend_angles :
+                   warm_start_strategy === :interp   ? interp_extend_angles :
+                                                       extend_angles
+            [extender(warm_start, p)]
+        end
         result = optimize_angles(
             TreeParams(k, D, p);
             clause_sign,
