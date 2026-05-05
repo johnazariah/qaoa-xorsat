@@ -261,7 +261,7 @@ Keyword arguments:
 - `restarts`: number of additional random starts beyond any supplied seeds
 - `maxiters`: per-start optimiser iteration cap
 - `initial_guesses`: optional seeded starting points of depth `p`
-- `autodiff`: gradient method — `:adjoint` (default, fastest), `:forward` (ForwardDiff), or `:finite` (finite differences)
+- `autodiff`: gradient method — `:adjoint` (default, fastest), `:charge` (charge evaluator + ForwardDiff, lower memory), `:forward` (ForwardDiff on raw evaluator), or `:finite` (finite differences)
 - `rng`: random number generator for restart sampling
 - `g_abstol`: gradient absolute tolerance for convergence (default: `DEFAULT_G_ABSTOL`)
 - `on_evaluation`: optional callback `(start_index, evaluations, elapsed_seconds, value, g_norm) -> nothing` throttled to at most once per 30 seconds per start
@@ -584,7 +584,11 @@ function optimize_angles(
                 local_evaluations[] += 1
                 maybe_report_progress!()
                 candidate = angles_from_vector(values, params.p)
-                -qaoa_expectation(params, candidate; clause_sign)
+                if autodiff == :charge
+                    -charge_expectation(params, candidate; clause_sign)
+                else
+                    -qaoa_expectation(params, candidate; clause_sign)
+                end
             end
 
             result = Optim.optimize(
@@ -592,12 +596,16 @@ function optimize_angles(
                 angle_vector(guess.angles),
                 Optim.LBFGS(),
                 Optim.Options(iterations=maxiters, g_abstol=g_abstol, f_reltol=F_RELTOL, store_trace=true, show_trace=false);
-                autodiff=autodiff == :forward ? AutoForwardDiff() : :finite,
+                autodiff=AutoForwardDiff(),
             )
 
             elapsed_seconds = (time_ns() - started_at) / 1.0e9
             candidate_angles = angles_from_vector(Optim.minimizer(result), params.p) |> canonicalize_angles
-            candidate_value = basso_expectation_normalized(params, candidate_angles; clause_sign)
+            candidate_value = if autodiff == :charge
+                charge_expectation(params, candidate_angles; clause_sign)
+            else
+                basso_expectation_normalized(params, candidate_angles; clause_sign)
+            end
             if !is_valid_qaoa_value(candidate_value)
                 @warn "start $(i) ($(guess.kind), non-adjoint) produced invalid value $(candidate_value); marking failed"
                 candidate_value = -Inf
