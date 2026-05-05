@@ -239,6 +239,33 @@ internal charge routines:
 The `clause_sign` multiplier (±1) is folded into γ here, which flips the
 phase gate direction for MaxCut (clause_sign = -1).
 
+### 3.4 Phase 1 Coupled Contractions (p ≥ 4)
+
+**Problem:** Phase 1 of `_charge_hyperedge_branch` activates when
+`child_rounds ≥ 2` (i.e., p ≥ 4).  It iteratively applies
+`wht_charge_contract` to the child branch, producing intermediate `V`
+vectors.  Between iterations, the output channels must be flattened back
+to a single C-order vector for the next iteration's `_reshape_c`.
+
+The initial implementation used Julia's `reshape(ch, n_ch, :)` to flatten
+each channel — but this is F-order, while the next `_reshape_c` expects
+C-order input.  The mismatch corrupted the intermediate factor matrix.
+
+**Symptom:** Correct at p=1–3, wrong at p=4+.  Values diverged
+progressively at higher p (e.g., p=5: charge=3.25 vs basso=0.57).
+
+**Fix:** Maintain `V` as a single flat C-order vector throughout Phase 1.
+Use `_vec_c(ch)` to flatten each WHT channel to C-order, then concatenate.
+The final `V → (n_ch, 4)` reshape also uses `_reshape_c`:
+
+```julia
+V_flat = vcat([_vec_c(ch) for ch in channels]...)  # C-order concat
+V = _reshape_c(V_flat, n_ch, 4)                    # C-order final reshape
+```
+
+This was later optimised to use `_wht_charge_contract_flat!` directly,
+avoiding the 4D intermediate entirely.
+
 ---
 
 ## 4. Public API
@@ -315,7 +342,36 @@ the charge evaluator also benefits from:
 3. **No WHT on large vectors** — the Basso WHT operates on 2^(2p+1)-entry
    vectors; the charge decomposition avoids this entirely
 
-### 6.3 Theoretical Speedup Factor
+### 6.3 Memory Profile
+
+At high p, memory is dominated by the root contraction's `factor` and
+double-buffer vectors (each 4^p × 16 bytes = 4^p ComplexF64 entries):
+
+| p | factor (MB) | scratch (MB) | coeffs (MB) | Total (MB) | Feasible on |
+|---|------------|-------------|-------------|-----------|-------------|
+| 11 | 67 | 67 | 17 | ~150 | Laptop |
+| 12 | 268 | 268 | 67 | ~600 | Laptop |
+| 13 | 1,074 | 1,074 | 268 | ~2,400 | Workstation |
+| 14 | 4,295 | 4,295 | 1,074 | ~9,700 | Workstation (≥16 GB) |
+| 15 | 17,180 | 17,180 | 4,295 | ~38,000 | HPC node |
+| 16 | 68,719 | 68,719 | 17,180 | ~155,000 | Large HPC / GPU |
+
+**Optimizations applied:**
+- Branch `F` buffer is reused as root scratch (saves one 4^p allocation)
+- Coefficient expansion uses pre-allocated double buffer (zero per-round allocs)
+
+**Symmetries discovered but not yet exploited:**
+- **Complement invariance** (`F[i] = F[N-1-i]`): the branch tensor is a
+  palindrome in the flat C-order vector.  Verified exact to machine precision.
+  Could halve branch storage.  Does NOT survive the root contraction's
+  WHT charge contraction (verified: palindrome breaks after round 1).
+- **Ket↔bra conjugation** (`F[σ] = conj(F[swap(σ)])`): swapping ket/bra
+  bits within each doubled index gives the complex conjugate.  Combined
+  with complement, this generates a Z₂ × Z₂ symmetry group of order 4.
+  Orbit structure at p=8: 16,512 orbits (16,256 of size 4, 256 of size 2),
+  ratio → 4× at large p.  Not yet exploited.
+
+### 6.4 Theoretical Speedup Factor
 
 The improvement is approximately **p×** at each evaluation.  For the
 target case (k=3, D=4):
@@ -326,13 +382,47 @@ target case (k=3, D=4):
 | 12 | 144 · 4^12 | 12 · 4^12 | 12× |
 | 16 | 256 · 4^16 | 16 · 4^16 | 16× |
 
-### 6.3 Future Work
+### 6.5 Performance Optimization Journey
+
+The initial translation matched QOKit's clean multi-dimensional style but
+was **only 1.0–1.8× faster** than Basso due to allocation overhead.
+Profiling revealed that ~95% of time was spent in memory allocation
+(`permutedims`, broadcast `materialize`, `vcat`), not computation.
+
+Three targeted optimizations brought this to **5–23×**:
+
+1. **In-place flat WHT butterfly** (`_wht_charge_contract_flat!`):
+   Replaced the 4D-array `wht_charge_contract` in the root contraction
+   with a flat-vector kernel using explicit C-order stride arithmetic.
+   Eliminates all `_reshape_c` / `_vec_c` / `vcat` allocations in the
+   hot loop.  Uses double-buffering (factor ↔ scratch swap).
+
+2. **Stride-based mode products** (`_mode_product_flat!`):
+   Replaced `permutedims` → `reshape` → matmul → `reshape` → `permutedims`
+   (5 allocations per axis per level) with a direct flat-vector kernel.
+   C-axis `ℓ` has stride `4^(num_rounds-ℓ)` in the flat vector.
+
+3. **Buffer reuse**: The branch tensor `F` (4^p entries) is passed as the
+   root contraction's scratch buffer, avoiding a second 4^p allocation.
+   Coefficient expansion uses pre-allocated double buffers.
+
+The multi-dimensional `wht_charge_contract` is retained for the branch
+construction's Phase 1 (cold path, small tensors), keeping that code
+readable.
+
+### 6.6 Future Work
 
 - **Adjoint differentiation** for the charge evaluator (would give O(p·4^p)
   gradient, matching QOKit's forward-mode JVP but with our memory-efficient
   reverse-mode approach)
-- **GPU acceleration** of the branch tensor construction (the WHT butterfly
-  and mode products are naturally parallelisable)
+- **Exploit Z₂×Z₂ symmetry** for ~4× memory reduction on branch tensors
+  (complement + ket↔bra conjugation); requires reworking the root contraction
+  to operate in the quotient space
+- **Checkpointed root contraction** to trade compute for memory: split p-1
+  root rounds into segments of size s, recompute rather than store; reduces
+  coeffs from 4^(p-1) to 4^s at cost of recomputation
+- **GPU offload** of the WHT butterfly and mode products (embarrassingly
+  parallel; A100 has 80 GB VRAM for p≥15)
 - **Integration with the optimizer** as an alternative backend for
   `optimize_angles`
 
