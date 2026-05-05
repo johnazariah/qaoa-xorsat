@@ -133,6 +133,30 @@ function extend_angles(
     )
 end
 
+# ── Chebyshev polynomial helpers ─────────────────────────────────────────
+
+"""
+    _chebyshev_basis(t, deg)
+
+Evaluate Chebyshev polynomials T₀..T_deg at points `t ∈ [0, 1]`.
+Returns a `(length(t), deg+1)` matrix.
+"""
+function _chebyshev_basis(t::AbstractVector{<:Real}, deg::Int)
+    n = length(t)
+    B = Matrix{Float64}(undef, n, deg + 1)
+    u = @. 2.0 * t - 1.0  # map [0,1] → [-1,1]
+    @inbounds for i in 1:n
+        B[i, 1] = 1.0
+        if deg ≥ 1
+            B[i, 2] = u[i]
+        end
+        for j in 3:deg+1
+            B[i, j] = 2.0 * u[i] * B[i, j-1] - B[i, j-2]
+        end
+    end
+    B
+end
+
 function build_initial_guesses(
     p::Int,
     initial_guesses::AbstractVector{<:QAOAAngles},
@@ -246,6 +270,164 @@ function merge_optimization_results(
         best.best_start_kind,
         best.g_abstol,
         vcat(primary.start_results, secondary.start_results),
+    )
+end
+
+# ── Chebyshev reparameterized optimization ───────────────────────────────
+
+"""
+    _angles_to_cheb_coeffs(angles, n_c)
+
+Project `p` angles into `n_c` Chebyshev coefficients via least-squares fit
+at positions `t_i = (i-0.5)/p` on `[0,1]`.
+"""
+function _angles_to_cheb_coeffs(angles::AbstractVector{<:Real}, n_c::Int)
+    p = length(angles)
+    t = [(i - 0.5) / p for i in 1:p]
+    deg = min(n_c - 1, p - 1)
+    B = _chebyshev_basis(t, deg)
+    c = B \ Float64.(angles)
+    # Pad with zeros if n_c > p
+    n_c > length(c) ? vcat(c, zeros(n_c - length(c))) : c[1:n_c]
+end
+
+"""
+    _cheb_coeffs_to_angles(coeffs, p)
+
+Reconstruct `p` angles from Chebyshev coefficients at positions `t_i = (i-0.5)/p`.
+"""
+function _cheb_coeffs_to_angles(coeffs::AbstractVector{<:Real}, p::Int)
+    n_c = length(coeffs)
+    t = [(i - 0.5) / p for i in 1:p]
+    B = _chebyshev_basis(t, n_c - 1)
+    B * coeffs
+end
+
+"""
+    optimize_angles_chebyshev(params; n_coeffs=nothing, kwargs...) -> AngleOptimizationResult
+
+Optimize QAOA angles using Chebyshev reparameterization.
+
+Instead of optimizing `2p` angle parameters directly, optimizes `2·n_c`
+Chebyshev coefficients, where `n_c ≪ p`.  The angles are reconstructed as
+`γᵢ = Σⱼ cⱼ · Tⱼ(tᵢ)` with `tᵢ = (i-0.5)/p` on `[0,1]`.
+
+This reduces the search space dimensionality from `2p` to `2·n_c`, making
+the optimizer converge faster and more reliably at high depth.  The
+Chebyshev basis naturally produces smooth angle curves.
+
+Uses the charge evaluator with ForwardDiff for gradient computation.
+
+# Keywords
+- `n_coeffs`: number of Chebyshev coefficients per angle array
+  (default: `max(3, ceil(Int, 2√p))`)
+- `clause_sign`: ±1 (default by problem type)
+- `restarts`: number of random restarts
+- `maxiters`: per-start iteration cap
+- `initial_guess`: optional `QAOAAngles` starting point (projected to Chebyshev basis)
+- `g_abstol`: gradient tolerance
+"""
+function optimize_angles_chebyshev(
+    params::TreeParams;
+    n_coeffs::Union{Nothing,Int}=nothing,
+    clause_sign::Int=default_clause_sign(params.k),
+    restarts::Int=4,
+    maxiters::Int=400,
+    initial_guess::Union{Nothing,QAOAAngles}=nothing,
+    rng=Random.default_rng(),
+    g_abstol::Float64=DEFAULT_G_ABSTOL,
+)::AngleOptimizationResult
+    p = params.p
+    validate_clause_sign(clause_sign)
+
+    # Default n_coeffs: enough to capture the angle structure, not too many
+    nc = n_coeffs !== nothing ? n_coeffs : max(3, ceil(Int, 2 * sqrt(p)))
+
+    # Build Chebyshev basis matrix (p × nc)
+    t = [(i - 0.5) / p for i in 1:p]
+    B = _chebyshev_basis(t, nc - 1)
+
+    # Objective: coeffs (2·nc vector) → -c̃
+    function objective(x)
+        γ_coeffs = @view x[1:nc]
+        β_coeffs = @view x[nc+1:2nc]
+        γ = B * γ_coeffs
+        β = B * β_coeffs
+        angles = QAOAAngles(γ, β)
+        -charge_expectation(params, angles; clause_sign)
+    end
+
+    # Initial point
+    if initial_guess !== nothing
+        γ0 = _angles_to_cheb_coeffs(initial_guess.γ, nc)
+        β0 = _angles_to_cheb_coeffs(initial_guess.β, nc)
+    else
+        γ0 = zeros(nc)
+        β0 = zeros(nc)
+    end
+
+    started_at = time_ns()
+    best_value = -Inf
+    best_x = [γ0; β0]
+    best_result = nothing
+    all_start_results = AngleOptimizationStartResult[]
+
+    for start_idx in 1:(1 + restarts)
+        x0 = if start_idx == 1 && initial_guess !== nothing
+            [γ0; β0]
+        else
+            # Random start in Chebyshev coefficient space
+            # Scale: first few coefficients larger (they set the mean/slope)
+            scale = [1.0 / (1 + 0.5j) for j in 0:nc-1]
+            [2π .* scale .* randn(rng, nc); π .* scale .* randn(rng, nc)]
+        end
+
+        local_result = Optim.optimize(
+            objective,
+            x0,
+            Optim.LBFGS(),
+            Optim.Options(iterations=maxiters, g_abstol=g_abstol, f_reltol=F_RELTOL,
+                          store_trace=true, show_trace=false);
+            autodiff=AutoForwardDiff(),
+        )
+
+        val = -Optim.minimum(local_result)
+        elapsed = (time_ns() - started_at) / 1.0e9
+        kind = (start_idx == 1 && initial_guess !== nothing) ? :warm : :random
+        optim_trace = Optim.trace(local_result)
+        trace = [OptimizationTraceEntry(s.iteration, s.value, s.g_norm) for s in optim_trace]
+        push!(all_start_results, AngleOptimizationStartResult(
+            kind, val, elapsed, Optim.f_calls(local_result),
+            Optim.iterations(local_result), Optim.converged(local_result), trace))
+
+        if is_valid_qaoa_value(val) && val > best_value
+            best_value = val
+            best_x = Optim.minimizer(local_result)
+            best_result = local_result
+        end
+    end
+
+    # Reconstruct best angles
+    γ_best = B * best_x[1:nc]
+    β_best = B * best_x[nc+1:2nc]
+    best_angles = QAOAAngles(γ_best, β_best) |> canonicalize_angles
+
+    # Re-evaluate at best point for consistency
+    final_value = charge_expectation(params, best_angles; clause_sign)
+
+    total_elapsed = (time_ns() - started_at) / 1.0e9
+    total_evals = sum(r.evaluations for r in all_start_results)
+    total_iters = sum(r.iterations for r in all_start_results)
+    any_converged = any(r.converged for r in all_start_results)
+    best_start_idx = argmax(r.value for r in all_start_results)
+
+    AngleOptimizationResult(
+        best_angles, final_value, total_elapsed,
+        all_start_results[best_start_idx].wall_time_seconds,
+        total_evals, 1 + restarts, total_iters,
+        any_converged, restarts, maxiters, 0,
+        all_start_results[best_start_idx].kind, g_abstol,
+        all_start_results,
     )
 end
 
