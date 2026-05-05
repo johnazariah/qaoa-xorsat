@@ -170,21 +170,25 @@ function _charge_hyperedge_branch(
 
     # ── Phase 1: coupled contractions consuming child branch ──
     if child_branch !== nothing && child_rounds ≥ 2
-        V = CT(0.5) .* child_branch
-        V = reshape(V, 1, :)
+        # V is a matrix (n_ch, entries_per_row) stored as a flat C-order vector.
+        # Each iteration of the loop applies wht_charge_contract to expand
+        # n_ch by 4× while shrinking entries_per_row by 4×.
+        V_flat = CT(0.5) .* copy(child_branch)  # flat C-order, length 4^child_rounds
         n_ch = 1
+        entries = length(V_flat)  # = n_ch * entries_per_row
         for ℓ in 1:child_rounds - 1
-            fi_flat = V
-            rest = div(size(fi_flat, 2), 16)
-            # C-order reshape to (n_ch, 4, 4, rest), then fix axis order for
-            # wht_charge_contract which expects T[i, σ, b, r]:
-            # Julia's reshape puts b before σ → swap axes 2 and 3.
-            fi = _reshape_c(vec(fi_flat), n_ch, 4, 4, rest)
+            entries_per_row = div(entries, n_ch)
+            rest = div(entries_per_row, 16)
+            # C-order reshape to (n_ch, 4, 4, rest)
+            fi = _reshape_c(V_flat, n_ch, 4, 4, rest)
             channels = wht_charge_contract(doubled_mixer(βs[ℓ]), fi)
-            V = vcat([reshape(ch, n_ch, :) for ch in channels]...)
+            # Each channel is (n_ch, 4, rest) — flatten to C-order and concatenate
+            V_flat = vcat([_vec_c(ch) for ch in channels]...)
             n_ch *= 4
+            entries = length(V_flat)
         end
-        V = reshape(V, :, 4)
+        # Final reshape: V_flat is C-order (n_ch * 4) entries → (n_ch, 4)
+        V = _reshape_c(V_flat, n_ch, 4)
     elseif child_branch !== nothing
         V = reshape(CT(0.5) .* child_branch, 1, 4)
     else
