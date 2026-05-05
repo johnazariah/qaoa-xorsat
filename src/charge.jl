@@ -137,6 +137,55 @@ function wht_charge_contract(M::AbstractMatrix, T_tensor::AbstractArray{CT,4}) w
     )
 end
 
+"""
+    _wht_charge_contract_flat!(out, M, factor, R, entries_per_row)
+
+In-place WHT charge contraction on a flat C-order vector.
+
+`factor` has `R * entries_per_row` entries where `entries_per_row = 16 * rest`.
+In C-order layout `factor[i, σ, b, r]`: σ has stride `4*rest`, b has stride `rest`.
+
+Writes 4 channels into `out`, a vector of length `4 * R * 4 * rest`.
+Channel `a` occupies `out[a*R*4*rest+1 : (a+1)*R*4*rest]`.
+"""
+function _wht_charge_contract_flat!(
+    out::AbstractVector{CT},
+    M::AbstractMatrix{CT},
+    factor::AbstractVector{CT},
+    R::Int,
+    entries_per_row::Int,
+) where CT
+    rest = div(entries_per_row, 16)
+    σ_stride = 4 * rest
+    channel_size = R * 4 * rest
+
+    @inbounds for i in 0:R-1
+        row_base = i * entries_per_row
+        for b in 0:3
+            for r in 0:rest-1
+                # Gather 4 σ values, multiply by M[b+1, σ+1]
+                e1 = M[b+1, 1] * factor[row_base + 0*σ_stride + b*rest + r + 1]
+                e2 = M[b+1, 2] * factor[row_base + 1*σ_stride + b*rest + r + 1]
+                e3 = M[b+1, 3] * factor[row_base + 2*σ_stride + b*rest + r + 1]
+                e4 = M[b+1, 4] * factor[row_base + 3*σ_stride + b*rest + r + 1]
+
+                # WHT butterfly
+                p02 = e1 + e3
+                q02 = e1 - e3
+                p13 = e2 + e4
+                q13 = e2 - e4
+
+                dst = i * 4 * rest + b * rest + r + 1
+                out[0*channel_size + dst] = p02 + p13  # a=0
+                out[1*channel_size + dst] = p02 - p13  # a=1
+                out[2*channel_size + dst] = q02 + q13  # a=2
+                out[3*channel_size + dst] = q02 - q13  # a=3
+            end
+        end
+    end
+    out
+end
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Branch tensor contraction
 # ──────────────────────────────────────────────────────────────────────────────
@@ -170,22 +219,18 @@ function _charge_hyperedge_branch(
 
     # ── Phase 1: coupled contractions consuming child branch ──
     if child_branch !== nothing && child_rounds ≥ 2
-        # V is a matrix (n_ch, entries_per_row) stored as a flat C-order vector.
-        # Each iteration of the loop applies wht_charge_contract to expand
+        # V_flat is a flat C-order vector of length 4^child_rounds.
+        # Each iteration applies wht_charge_contract to expand
         # n_ch by 4× while shrinking entries_per_row by 4×.
-        V_flat = CT(0.5) .* copy(child_branch)  # flat C-order, length 4^child_rounds
+        V_flat = CT(0.5) .* copy(child_branch)
         n_ch = 1
-        entries = length(V_flat)  # = n_ch * entries_per_row
+        N_child = length(V_flat)
+        scratch_v = similar(V_flat)
         for ℓ in 1:child_rounds - 1
-            entries_per_row = div(entries, n_ch)
-            rest = div(entries_per_row, 16)
-            # C-order reshape to (n_ch, 4, 4, rest)
-            fi = _reshape_c(V_flat, n_ch, 4, 4, rest)
-            channels = wht_charge_contract(doubled_mixer(βs[ℓ]), fi)
-            # Each channel is (n_ch, 4, rest) — flatten to C-order and concatenate
-            V_flat = vcat([_vec_c(ch) for ch in channels]...)
+            entries_per_row = div(N_child, n_ch)
+            _wht_charge_contract_flat!(scratch_v, doubled_mixer(βs[ℓ]), V_flat, n_ch, entries_per_row)
+            V_flat, scratch_v = scratch_v, V_flat
             n_ch *= 4
-            entries = length(V_flat)
         end
         # Final reshape: V_flat is C-order (n_ch * 4) entries → (n_ch, 4)
         V = _reshape_c(V_flat, n_ch, 4)
@@ -228,18 +273,48 @@ function _charge_hyperedge_branch(
         t_max = maximum(abs, t)
         t_max > 0 && (t = t ./ t_max)
     end
-    F = t .^ m
+    F_flat = _vec_c(t .^ m)
 
-    # Mode products: contract each axis ℓ with W[ℓ]
+    # Mode products on flat C-order vector: W[ℓ] contracts C-axis (ℓ-1)
+    # C-axis j has stride 4^(num_rounds-1-j) in the flat vector
+    N = length(F_flat)
+    scratch = similar(F_flat)
     for ℓ in 1:num_rounds
-        perm = vcat(ℓ, setdiff(1:num_rounds, ℓ))
-        F_perm = permutedims(F, perm)
-        shape = size(F_perm)
-        F_perm = reshape(W[ℓ] * reshape(F_perm, 4, :), shape)
-        F = permutedims(F_perm, sortperm(perm))
+        stride = 4^(num_rounds - ℓ)  # stride of C-axis (ℓ-1) in flat vector
+        _mode_product_flat!(scratch, F_flat, W[ℓ], stride, N)
+        F_flat, scratch = scratch, F_flat
     end
 
-    _vec_c(F)
+    F_flat
+end
+
+"""
+    _mode_product_flat!(out, F, W, stride, N)
+
+Apply 4×4 matrix `W` to the axis with given `stride` in flat vector `F`.
+Writes result to `out`.  Both vectors have length `N`.
+"""
+function _mode_product_flat!(
+    out::AbstractVector{CT},
+    F::AbstractVector{CT},
+    W::AbstractMatrix{CT},
+    stride::Int,
+    N::Int,
+) where CT
+    block = stride * 4
+    @inbounds for outer in 0:block:N-1
+        for inner in 0:stride-1
+            base = outer + inner + 1
+            v1 = F[base]
+            v2 = F[base + stride]
+            v3 = F[base + 2stride]
+            v4 = F[base + 3stride]
+            for h in 1:4
+                out[base + (h-1)*stride] = W[h,1]*v1 + W[h,2]*v2 + W[h,3]*v3 + W[h,4]*v4
+            end
+        end
+    end
+    out
 end
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -260,19 +335,42 @@ function _charge_root_contract(
     p::Int, D::Int, k::Int,
 ) where {T<:Real, CT<:Complex{T}}
     coeffs = CT[CT(0.5)^k]
-    factor = rb  # flat, length 4^p in C-order
+    factor = copy(rb)
     R = 1
+    N = length(rb)  # = 4^p
+
+    # Scratch buffer: large enough for all intermediate rounds.
+    # After wht_charge_contract, output is 4 channels of R*4*rest each = 4*R*4*rest = R*16*rest.
+    # But the output is contiguous as 4*channel_size where channel_size = R*4*rest.
+    # The total size is 4 * R * 4 * rest.  Since R*16*rest = R*entries_per_row = N,
+    # the output is always exactly 4*N/16*4 = N.  Actually let me think...
+    # At round ℓ: R = 4^(ℓ-1), entries_per_row = N/R = 4^(p-ℓ+1), rest = entries_per_row/16 = 4^(p-ℓ-1)
+    # channel_size = R * 4 * rest = 4^(ℓ-1) * 4 * 4^(p-ℓ-1) = 4^(p-1)
+    # total output = 4 * channel_size = 4^p = N
+    # So scratch is always length N — perfect, we can double-buffer.
+    scratch = similar(factor)
 
     for ℓ in 1:p-1
         M = doubled_mixer(βs[ℓ])
         u = root_charge_weights(γs[ℓ])
-        rest = div(length(factor), R * 16)
-        # C-order reshape to (R, 4, 4, rest), fix σ/b axis order
-        fi = _reshape_c(factor, R, 4, 4, rest)
-        channels = wht_charge_contract(M, fi)
-        # Each channel is (R, 4, rest) — flatten back to C-order rows
-        factor = vcat([_vec_c(ch) for ch in channels]...)
-        coeffs = vcat([u[a] .* coeffs for a in 1:4]...)
+        entries_per_row = div(N, R)
+
+        _wht_charge_contract_flat!(scratch, M, factor, R, entries_per_row)
+
+        # scratch now holds [channel0 | channel1 | channel2 | channel3]
+        # each channel has R*4*rest entries in C-order
+        # Next round's factor = vcat(channels...) which is already the layout in scratch
+        factor, scratch = scratch, factor
+
+        # Expand coefficients: new_coeffs[a*R+1 : (a+1)*R] = u[a+1] * coeffs
+        new_coeffs = Vector{CT}(undef, 4R)
+        @inbounds for a in 1:4
+            ua = u[a]
+            for i in 1:R
+                new_coeffs[(a-1)*R + i] = ua * coeffs[i]
+            end
+        end
+        coeffs = new_coeffs
         R *= 4
     end
 
@@ -280,16 +378,21 @@ function _charge_root_contract(
     M = doubled_mixer(βs[p])
     u = root_charge_weights(γs[p])
 
-    entries_per_row = div(length(factor), R)
+    entries_per_row = div(N, R)
     result = zero(CT)
-    for a in 1:4
+    @inbounds for a in 1:4
         K = M .* CT.(CHARGE_DIAG[a, :]')
-        tv = K[1, :] .- K[4, :]  # Z trace vector
-        z = Vector{CT}(undef, R)
+        tv1 = K[1, 1] - K[4, 1]
+        tv2 = K[1, 2] - K[4, 2]
+        tv3 = K[1, 3] - K[4, 3]
+        tv4 = K[1, 4] - K[4, 4]
+        s = zero(CT)
         for i in 0:R-1
-            z[i+1] = sum(j -> factor[i * entries_per_row + j] * tv[j], 1:4)
+            base = i * entries_per_row
+            z = factor[base+1]*tv1 + factor[base+2]*tv2 + factor[base+3]*tv3 + factor[base+4]*tv4
+            s += coeffs[i+1] * z ^ k
         end
-        result += u[a] * sum(coeffs .* z .^ k)
+        result += u[a] * s
     end
 
     real(result)
