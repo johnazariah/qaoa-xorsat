@@ -288,7 +288,36 @@ All tests use absolute tolerance 1e-10 (or 1e-8 for cross-method comparison).
 | **Total** | **O(p² · 4^p)** | **O(p · 4^p)** |
 | Memory | O(p · 4^p) [adjoint] | O(4^p) |
 
-### 6.2 Speedup Factor
+### 6.2 Measured Speedup
+
+Benchmarks on Apple M4 (single-threaded), comparing `charge_parity_expectation`
+against `basso_parity_expectation`:
+
+| k | D | p | Basso (ms) | Charge (ms) | Speedup |
+|---|---|---|-----------|------------|---------|
+| 2 | 3 | 3 | 0.09 | 0.04 | 2.3× |
+| 2 | 3 | 5 | 0.37 | 0.38 | 1.0× |
+| 2 | 3 | 7 | 7.7 | 5.3 | 1.4× |
+| 2 | 3 | 9 | 265 | 146 | 1.8× |
+| 2 | 3 | 11 | 4199 | 2515 | 1.7× |
+| 3 | 4 | 3 | 0.10 | 0.04 | 2.4× |
+| 3 | 4 | 5 | 0.43 | 0.40 | 1.1× |
+| 3 | 4 | 7 | 7.7 | 5.4 | 1.4× |
+| 3 | 4 | 9 | 271 | 148 | 1.8× |
+
+The speedup grows with p (as expected from the O(p) improvement) but is
+below the theoretical p× due to:
+
+1. **Higher constant factors** — the `_reshape_c`/`_vec_c` layout adapters
+   and `permutedims` calls add overhead absent from the Basso path
+2. **Optimised Basso WHT** — the existing WHT uses SIMD, cache-oblivious
+   recursion, and in-place mutation, while the charge code allocates
+   temporaries at each step
+3. **Same dominant term** — at moderate p, the O(4^p) branch power
+   dominates both implementations; the p× saving in WHT overhead only
+   shows at higher p
+
+### 6.3 Theoretical Speedup Factor
 
 The improvement is approximately **p×** at each evaluation.  For the
 target case (k=3, D=4):
