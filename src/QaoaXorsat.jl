@@ -58,6 +58,10 @@ include("reduced_basis.jl")
 export ReducedBasis, basso_branch_tensor_reduced, basso_expectation_reduced
 export expand_symmetric
 
+# Charge decomposition evaluator — O(p·4^p)
+include("charge.jl")
+export charge_parity_expectation, charge_expectation
+
 # Spectral analysis of branch tensor iteration
 include("spectral_analysis.jl")
 export SpectralSnapshot, SpectralProfile
