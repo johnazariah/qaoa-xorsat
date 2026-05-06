@@ -198,12 +198,13 @@ Branch tensor for one hyperedge using charge decomposition.
 Returns a flat `Complex{T}` vector of `4^num_rounds` entries in C-order.
 """
 function _charge_hyperedge_branch(
-    γs::AbstractVector{T},
-    βs::AbstractVector{T},
+    γs::AbstractVector{T1},
+    βs::AbstractVector{T2},
     num_rounds::Int,
     k::Int;
     child_branch::Union{Nothing, AbstractVector}=nothing,
-) where T<:Real
+) where {T1<:Real, T2<:Real}
+    T = promote_type(T1, T2)
     CT = Complex{T}
     m = k - 1  # children per hyperedge
 
@@ -329,24 +330,26 @@ Root contraction using factored rank-1 representation.
 Returns the parity expectation ⟨Z^⊗k⟩.
 """
 function _charge_root_contract(
-    rb::AbstractVector{CT},
-    γs::AbstractVector{T},
-    βs::AbstractVector{T},
+    rb::AbstractVector,
+    γs::AbstractVector{T1},
+    βs::AbstractVector{T2},
     p::Int, D::Int, k::Int;
-    scratch::Union{Nothing, AbstractVector{CT}}=nothing,
-) where {T<:Real, CT<:Complex{T}}
-    coeffs = CT[CT(0.5)^k]
-    factor = copy(rb)
+    scratch::Union{Nothing, AbstractVector}=nothing,
+) where {T1<:Real, T2<:Real}
+    T = promote_type(T1, T2, real(eltype(rb)))
+    CT = Complex{T}
+    coeffs_init = CT(0.5)^k
+    factor = CT.(rb)
     R = 1
     N = length(rb)  # = 4^p
 
     # Double buffer — reuse caller's scratch if provided
-    buf = scratch !== nothing && length(scratch) == N ? scratch : similar(factor)
+    buf = scratch !== nothing && length(scratch) == N ? CT.(scratch) : similar(factor)
 
     # Pre-allocate coefficient double buffer (max size = 4^(p-1))
     max_R = 4^(p - 1)
     coeffs_a = Vector{CT}(undef, max_R)
-    coeffs_a[1] = CT(0.5)^k
+    coeffs_a[1] = coeffs_init
     coeffs_b = Vector{CT}(undef, max_R)
 
     for ℓ in 1:p-1

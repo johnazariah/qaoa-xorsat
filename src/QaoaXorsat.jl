@@ -62,6 +62,10 @@ export expand_symmetric
 include("charge.jl")
 export charge_parity_expectation, charge_expectation
 
+# Charge adjoint differentiation
+include("charge_adjoint.jl")
+export charge_expectation_and_gradient
+
 # Spectral analysis of branch tensor iteration
 include("spectral_analysis.jl")
 export SpectralSnapshot, SpectralProfile

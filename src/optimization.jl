@@ -761,7 +761,7 @@ function optimize_angles(
             )
             per_start_results[i] = (candidate_angles_start, candidate_value_start, start_result)
         else
-            # Non-adjoint path (ForwardDiff or finite differences) — no chunking
+            # Non-adjoint path — no chunking
             function objective(values)
                 local_evaluations[] += 1
                 maybe_report_progress!()
@@ -773,13 +773,53 @@ function optimize_angles(
                 end
             end
 
-            result = Optim.optimize(
-                objective,
-                angle_vector(guess.angles),
-                Optim.LBFGS(),
-                Optim.Options(iterations=maxiters, g_abstol=g_abstol, f_reltol=F_RELTOL, store_trace=true, show_trace=false);
-                autodiff=AutoForwardDiff(),
-            )
+            if autodiff == :charge
+                # Charge mode: use finite differences for gradients.
+                # Central FD would need 2×2p evals; forward FD needs 2p+1.
+                # The charge evaluator is O(p·4^p) per eval, so FD gradient
+                # costs (2p+1) × forward — much cheaper than ForwardDiff's
+                # Dual number overhead which inflates memory by 2p×.
+                h = 1.5e-8  # √eps for Float64
+                function charge_g!(G, values)
+                    f0 = objective(values)
+                    for j in eachindex(values)
+                        values[j] += h
+                        fj = objective(values)
+                        values[j] -= h
+                        G[j] = (fj - f0) / h
+                    end
+                    last_g_norm[] = maximum(abs, G)
+                end
+                function charge_fg!(G, values)
+                    f0 = objective(values)
+                    for j in eachindex(values)
+                        values[j] += h
+                        fj = objective(values)
+                        values[j] -= h
+                        G[j] = (fj - f0) / h
+                    end
+                    last_g_norm[] = maximum(abs, G)
+                    last_value[] = -f0
+                    f0
+                end
+                od = Optim.OnceDifferentiable(objective, charge_g!, charge_fg!, angle_vector(guess.angles))
+                result = Optim.optimize(
+                    od,
+                    angle_vector(guess.angles),
+                    Optim.LBFGS(),
+                    Optim.Options(iterations=maxiters, g_abstol=g_abstol, f_reltol=F_RELTOL,
+                                  store_trace=true, show_trace=false),
+                )
+            else
+                result = Optim.optimize(
+                    objective,
+                    angle_vector(guess.angles),
+                    Optim.LBFGS(),
+                    Optim.Options(iterations=maxiters, g_abstol=g_abstol, f_reltol=F_RELTOL,
+                                  store_trace=true, show_trace=false);
+                    autodiff=AutoForwardDiff(),
+                )
+            end
 
             elapsed_seconds = (time_ns() - started_at) / 1.0e9
             candidate_angles = angles_from_vector(Optim.minimizer(result), params.p) |> canonicalize_angles
