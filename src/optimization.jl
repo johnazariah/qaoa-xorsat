@@ -443,7 +443,10 @@ Keyword arguments:
 - `restarts`: number of additional random starts beyond any supplied seeds
 - `maxiters`: per-start optimiser iteration cap
 - `initial_guesses`: optional seeded starting points of depth `p`
-- `autodiff`: gradient method — `:adjoint` (default, fastest), `:charge` (charge evaluator + ForwardDiff, lower memory), `:forward` (ForwardDiff on raw evaluator), or `:finite` (finite differences)
+- `autodiff`: gradient method:
+  - `:adjoint` (default) — Basso manual adjoint, fastest at p≤12, ~2× forward cost
+  - `:charge` — charge evaluator + central FD, low memory (1.1 GB at p=13), (4p+1)× forward cost
+  - `:forward` — ForwardDiff on Basso evaluator, exact but ~2p× forward cost
 - `rng`: random number generator for restart sampling
 - `g_abstol`: gradient absolute tolerance for convergence (default: `DEFAULT_G_ABSTOL`)
 - `on_evaluation`: optional callback `(start_index, evaluations, elapsed_seconds, value, g_norm) -> nothing` throttled to at most once per 30 seconds per start
@@ -478,6 +481,8 @@ function optimize_angles(
 )::AngleOptimizationResult
     validate_clause_sign(clause_sign)
     maxiters ≥ 1 || throw(ArgumentError("maxiters must be ≥ 1, got $maxiters"))
+    autodiff in (:adjoint, :charge, :forward) || throw(ArgumentError(
+        "autodiff must be :adjoint, :charge, or :forward, got :$autodiff"))
 
     guesses = build_initial_guesses(params.p, initial_guesses, initial_guess_kind, restarts, rng)
 
@@ -769,7 +774,8 @@ function optimize_angles(
                 if autodiff == :charge
                     -charge_expectation(params, candidate; clause_sign)
                 else
-                    -qaoa_expectation(params, candidate; clause_sign)
+                    # :forward uses the normalized Basso evaluator (not the raw light-cone evaluator)
+                    -basso_expectation_normalized(params, candidate; clause_sign)
                 end
             end
 
