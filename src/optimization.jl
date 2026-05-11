@@ -774,19 +774,17 @@ function optimize_angles(
             end
 
             if autodiff == :charge
-                # Charge mode: use finite differences for gradients.
-                # Central FD would need 2×2p evals; forward FD needs 2p+1.
-                # The charge evaluator is O(p·4^p) per eval, so FD gradient
-                # costs (2p+1) × forward — much cheaper than ForwardDiff's
-                # Dual number overhead which inflates memory by 2p×.
+                # Charge mode: central finite differences for gradients.
+                # Cost: (4p+1) × charge_eval — no Dual number overhead.
                 h = 1.5e-8  # √eps for Float64
                 function charge_g!(G, values)
-                    f0 = objective(values)
                     for j in eachindex(values)
                         values[j] += h
-                        fj = objective(values)
-                        values[j] -= h
-                        G[j] = (fj - f0) / h
+                        fp = objective(values)
+                        values[j] -= 2h
+                        fm = objective(values)
+                        values[j] += h  # restore
+                        G[j] = (fp - fm) / (2h)
                     end
                     last_g_norm[] = maximum(abs, G)
                 end
@@ -794,9 +792,11 @@ function optimize_angles(
                     f0 = objective(values)
                     for j in eachindex(values)
                         values[j] += h
-                        fj = objective(values)
-                        values[j] -= h
-                        G[j] = (fj - f0) / h
+                        fp = objective(values)
+                        values[j] -= 2h
+                        fm = objective(values)
+                        values[j] += h  # restore
+                        G[j] = (fp - fm) / (2h)
                     end
                     last_g_norm[] = maximum(abs, G)
                     last_value[] = -f0

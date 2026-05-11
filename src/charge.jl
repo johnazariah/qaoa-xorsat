@@ -149,12 +149,12 @@ Writes 4 channels into `out`, a vector of length `4 * R * 4 * rest`.
 Channel `a` occupies `out[a*R*4*rest+1 : (a+1)*R*4*rest]`.
 """
 function _wht_charge_contract_flat!(
-    out::AbstractVector{CT},
-    M::AbstractMatrix{CT},
-    factor::AbstractVector{CT},
+    out::AbstractVector,
+    M::AbstractMatrix,
+    factor::AbstractVector,
     R::Int,
     entries_per_row::Int,
-) where CT
+)
     rest = div(entries_per_row, 16)
     σ_stride = 4 * rest
     channel_size = R * 4 * rest
@@ -279,6 +279,11 @@ function _charge_hyperedge_branch(
     # Mode products on flat C-order vector: W[ℓ] contracts C-axis (ℓ-1)
     # C-axis j has stride 4^(num_rounds-1-j) in the flat vector
     N = length(F_flat)
+    # Promote F_flat element type to match W (which may carry Dual numbers)
+    OT = promote_type(eltype(F_flat), eltype(W[1]))
+    if OT !== eltype(F_flat)
+        F_flat = OT.(F_flat)
+    end
     scratch = similar(F_flat)
     for ℓ in 1:num_rounds
         stride = 4^(num_rounds - ℓ)  # stride of C-axis (ℓ-1) in flat vector
@@ -296,12 +301,12 @@ Apply 4×4 matrix `W` to the axis with given `stride` in flat vector `F`.
 Writes result to `out`.  Both vectors have length `N`.
 """
 function _mode_product_flat!(
-    out::AbstractVector{CT},
-    F::AbstractVector{CT},
-    W::AbstractMatrix{CT},
+    out::AbstractVector,
+    F::AbstractVector,
+    W::AbstractMatrix,
     stride::Int,
     N::Int,
-) where CT
+)
     block = stride * 4
     @inbounds for outer in 0:block:N-1
         for inner in 0:stride-1
