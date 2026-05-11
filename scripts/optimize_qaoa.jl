@@ -25,7 +25,7 @@ function usage()
   julia --project=. scripts/optimize_qaoa.jl K D P_MIN P_MAX [RESTARTS] [MAXITERS] [SEED] [PRESERVE] [AUTODIFF]
 
 TOML config keys: k, D, p_min, p_max, restarts, maxiters, seed, autodiff, preserve, resume_from
-  autodiff: adjoint (default, fastest at p≤12) | charge (low memory, p≥12) | forward (ForwardDiff)
+  autodiff: adjoint (default, fastest at p≤12) | charge (low memory, p≥12) | forward (ForwardDiff, slow)
   resume_from: path to a previous run directory — copies results for p < p_min and
                warm-starts p_min from the p_min-1 angles found in that run.""")
 end

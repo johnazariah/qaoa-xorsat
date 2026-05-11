@@ -446,7 +446,7 @@ Keyword arguments:
 - `autodiff`: gradient method:
   - `:adjoint` (default) — Basso manual adjoint, fastest at p≤12, ~2× forward cost
   - `:charge` — charge evaluator + central FD, low memory (1.1 GB at p=13), (4p+1)× forward cost
-  - `:forward` — ForwardDiff on Basso evaluator, exact but ~2p× forward cost
+  - `:forward` — ForwardDiff on Basso evaluator, ~2p× forward cost (debugging/validation only)
 - `rng`: random number generator for restart sampling
 - `g_abstol`: gradient absolute tolerance for convergence (default: `DEFAULT_G_ABSTOL`)
 - `on_evaluation`: optional callback `(start_index, evaluations, elapsed_seconds, value, g_norm) -> nothing` throttled to at most once per 30 seconds per start
