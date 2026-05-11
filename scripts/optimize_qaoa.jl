@@ -25,7 +25,7 @@ function usage()
   julia --project=. scripts/optimize_qaoa.jl K D P_MIN P_MAX [RESTARTS] [MAXITERS] [SEED] [PRESERVE] [AUTODIFF]
 
 TOML config keys: k, D, p_min, p_max, restarts, maxiters, seed, autodiff, preserve, resume_from
-  autodiff: charge (default, fast + low memory) | adjoint (Basso, fast per-iter at low p) | forward (slow)
+  autodiff: auto (default) | charge | adjoint | forward
   resume_from: path to a previous run directory — copies results for p < p_min and
                warm-starts p_min from the p_min-1 angles found in that run.""")
 end
@@ -397,8 +397,8 @@ if length(ARGS) == 1 && endswith(ARGS[1], ".toml")
     maxiters = get(config, "maxiters", 320)::Int
     seed = get(config, "seed", 1234)::Int
     preserve = get(config, "preserve", true)::Bool
-    autodiff_str = get(config, "autodiff", "charge")::String
-    autodiff_str in ("adjoint", "charge", "forward") || error("autodiff must be adjoint, charge, or forward; got $autodiff_str")
+    autodiff_str = get(config, "autodiff", "auto")::String
+    autodiff_str in ("auto", "adjoint", "charge", "forward") || error("autodiff must be auto, adjoint, charge, or forward; got $autodiff_str")
     autodiff = Symbol(autodiff_str)
     resume_from = get(config, "resume_from", "")::String
 else
@@ -413,10 +413,10 @@ else
     preserve = length(ARGS) ≥ 8 ? parse_bool_flag(ARGS[8]) : true
     autodiff = if length(ARGS) ≥ 9
         s = lowercase(ARGS[9])
-        s in ("adjoint", "charge", "forward") || error("AUTODIFF must be adjoint, charge, or forward; got $s")
+        s in ("auto", "adjoint", "charge", "forward") || error("AUTODIFF must be auto, adjoint, charge, or forward; got $s")
         Symbol(s)
     else
-        :charge
+        :auto
     end
 end
 

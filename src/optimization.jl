@@ -444,7 +444,8 @@ Keyword arguments:
 - `maxiters`: per-start optimiser iteration cap
 - `initial_guesses`: optional seeded starting points of depth `p`
 - `autodiff`: gradient method:
-  - `:charge` (default) -- charge evaluator + central FD, low memory, fastest overall
+  - `:auto` (default) -- picks :adjoint or :charge based on depth and available memory
+  - `:charge` -- charge evaluator + central FD, low memory, fastest at high p
   - `:adjoint` -- Basso manual adjoint, faster per-iteration at p<10 but high memory
   - `:forward` -- ForwardDiff on Basso evaluator, slow (debugging/validation only)
 - `rng`: random number generator for restart sampling
@@ -468,7 +469,7 @@ function optimize_angles(
     maxiters::Int=200,
     initial_guesses::AbstractVector{<:QAOAAngles}=QAOAAngles[],
     initial_guess_kind::Symbol=:seeded,
-    autodiff::Symbol=:charge,
+    autodiff::Symbol=:auto,
     rng=Random.default_rng(),
     g_abstol::Float64=DEFAULT_G_ABSTOL,
     on_evaluation=nothing,
@@ -481,8 +482,21 @@ function optimize_angles(
 )::AngleOptimizationResult
     validate_clause_sign(clause_sign)
     maxiters ≥ 1 || throw(ArgumentError("maxiters must be ≥ 1, got $maxiters"))
-    autodiff in (:adjoint, :charge, :forward) || throw(ArgumentError(
-        "autodiff must be :adjoint, :charge, or :forward, got :$autodiff"))
+    autodiff in (:auto, :adjoint, :charge, :forward) || throw(ArgumentError(
+        "autodiff must be :auto, :adjoint, :charge, or :forward, got :$autodiff"))
+
+    # Auto-select: use adjoint when it fits in memory and is faster (p <= 11),
+    # charge otherwise. GPU evaluator always uses adjoint path.
+    if autodiff == :auto
+        if gpu_evaluator !== nothing
+            autodiff = :adjoint
+        else
+            N_est = basso_configuration_count(params.p)
+            est_bytes = 40 * N_est * sizeof(ComplexF64)
+            available = Sys.total_memory() * 0.6
+            autodiff = (est_bytes < available && params.p <= 11) ? :adjoint : :charge
+        end
+    end
 
     guesses = build_initial_guesses(params.p, initial_guesses, initial_guess_kind, restarts, rng)
 
@@ -915,7 +929,7 @@ function optimize_depth_sequence(
     clause_sign::Int=default_clause_sign(k),
     restarts::Int=8,
     maxiters::Int=200,
-    autodiff::Symbol=:charge,
+    autodiff::Symbol=:auto,
     rng=Random.default_rng(),
     on_result=nothing,
     on_evaluation=nothing,
@@ -1066,7 +1080,7 @@ function swarm_optimize(
     burst_iters::Int=20,
     cull_fraction::Float64=0.5,
     random_fraction::Float64=0.4,
-    autodiff::Symbol=:charge,
+    autodiff::Symbol=:auto,
     rng=Random.default_rng(),
     g_abstol::Float64=DEFAULT_G_ABSTOL,
     on_generation=nothing,
