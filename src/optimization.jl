@@ -444,9 +444,9 @@ Keyword arguments:
 - `maxiters`: per-start optimiser iteration cap
 - `initial_guesses`: optional seeded starting points of depth `p`
 - `autodiff`: gradient method:
-  - `:adjoint` (default) — Basso manual adjoint, fastest at p≤12, ~2× forward cost
-  - `:charge` — charge evaluator + central FD, low memory (1.1 GB at p=13), (4p+1)× forward cost
-  - `:forward` — ForwardDiff on Basso evaluator, ~2p× forward cost (debugging/validation only)
+  - `:charge` (default) -- charge evaluator + central FD, low memory, fastest overall
+  - `:adjoint` -- Basso manual adjoint, faster per-iteration at p<10 but high memory
+  - `:forward` -- ForwardDiff on Basso evaluator, slow (debugging/validation only)
 - `rng`: random number generator for restart sampling
 - `g_abstol`: gradient absolute tolerance for convergence (default: `DEFAULT_G_ABSTOL`)
 - `on_evaluation`: optional callback `(start_index, evaluations, elapsed_seconds, value, g_norm) -> nothing` throttled to at most once per 30 seconds per start
@@ -468,7 +468,7 @@ function optimize_angles(
     maxiters::Int=200,
     initial_guesses::AbstractVector{<:QAOAAngles}=QAOAAngles[],
     initial_guess_kind::Symbol=:seeded,
-    autodiff::Symbol=:adjoint,
+    autodiff::Symbol=:charge,
     rng=Random.default_rng(),
     g_abstol::Float64=DEFAULT_G_ABSTOL,
     on_evaluation=nothing,
@@ -915,7 +915,7 @@ function optimize_depth_sequence(
     clause_sign::Int=default_clause_sign(k),
     restarts::Int=8,
     maxiters::Int=200,
-    autodiff::Symbol=:adjoint,
+    autodiff::Symbol=:charge,
     rng=Random.default_rng(),
     on_result=nothing,
     on_evaluation=nothing,
@@ -1066,7 +1066,7 @@ function swarm_optimize(
     burst_iters::Int=20,
     cull_fraction::Float64=0.5,
     random_fraction::Float64=0.4,
-    autodiff::Symbol=:adjoint,
+    autodiff::Symbol=:charge,
     rng=Random.default_rng(),
     g_abstol::Float64=DEFAULT_G_ABSTOL,
     on_generation=nothing,
