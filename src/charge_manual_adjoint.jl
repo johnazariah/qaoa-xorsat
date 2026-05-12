@@ -129,57 +129,68 @@ end
 
 function _replay_branch(gs, bs, nr, k, child)
     m = k - 1; tt = 4^nr; CT = ComplexF64
-    cr = child !== nothing ? nr - 1 : 0
+    child_rounds = child !== nothing ? nr - 1 : 0
 
-    if child !== nothing && cr >= 2
-        vf = CT(0.5) .* copy(child)
-        nc = 1; nc_len = length(vf); sc = similar(vf)
-        for el in 1:cr-1
-            epr = div(nc_len, nc)
-            _wht_charge_contract_flat!(sc, doubled_mixer(bs[el]), vf, nc, epr)
-            vf, sc = sc, vf; nc *= 4
+    # ── Phase 1: exactly mirror _charge_hyperedge_branch ──
+    if child !== nothing && child_rounds >= 2
+        V_flat = CT(0.5) .* copy(child)
+        n_ch = 1; N_child = length(V_flat)
+        scratch_v = similar(V_flat)
+        for el in 1:child_rounds - 1
+            epr = div(N_child, n_ch)
+            _wht_charge_contract_flat!(scratch_v, doubled_mixer(bs[el]), V_flat, n_ch, epr)
+            V_flat, scratch_v = scratch_v, V_flat
+            n_ch *= 4
         end
-        V = _reshape_c(vf, nc, 4)
+        V = _reshape_c(V_flat, n_ch, 4)
     elseif child !== nothing
-        V = reshape(CT(0.5) .* child, 1, 4); nc = 1
+        V = reshape(CT(0.5) .* child, 1, 4); n_ch = 1
+        V_flat = _vec_c(V)
     else
-        V = fill(CT(0.5), 1, 4); nc = 1
+        V = fill(CT(0.5), 1, 4); n_ch = 1
+        V_flat = _vec_c(V)
     end
-    vflat = vec(V)
+    vflat = copy(V_flat)  # C-order flat — NOT vec(V) which is F-order
 
-    sm = max(cr - 1, 0)
+    # ── Phase 2: exactly mirror _charge_hyperedge_branch ──
+    start_mv = max(child_rounds - 1, 0)
     MD = [let Ml = doubled_mixer(bs[el])
         [Ml .* CT.(CHARGE_DIAG[a, :]') for a in 1:4]
     end for el in 1:nr]
-    tv = [MD[nr][a][1,:] .+ MD[nr][a][4,:] for a in 1:4]
-    tm = hcat(tv...)
 
-    function p2(Vl, e0)
-        if e0 == nr - 1
-            res = Vl * tm
-            return vcat([res[:, a] for a in 1:4]...)
+    trace_vecs = [MD[nr][a][1, :] .+ MD[nr][a][4, :] for a in 1:4]
+    trace_matrix = hcat(trace_vecs...)
+
+    function _p2(V_local, l0)
+        if l0 == nr - 1
+            result = V_local * trace_matrix
+            return vcat([result[:, a] for a in 1:4]...)
         end
-        el = e0 + 1
-        vcat([p2(Vl * transpose(MD[el][a]), e0 + 1) for a in 1:4]...)
+        el = l0 + 1
+        vcat([_p2(V_local * transpose(MD[el][a]), l0 + 1) for a in 1:4]...)
     end
 
-    tf = p2(reshape(vflat, nc, 4), sm)
-    t = _reshape_c(tf, ntuple(_ -> 4, nr)...)
-    rem = nr - sm
+    t_flat = _p2(V, start_mv)
+    t = _reshape_c(t_flat, ntuple(_ -> 4, nr)...)
+
+    remaining = nr - start_mv
     if nr > 1
-        pm = vcat(collect(nr:-1:rem+1), collect(1:rem))
-        t = permutedims(t, pm)
+        perm = vcat(collect(nr:-1:remaining+1), collect(1:remaining))
+        t = permutedims(t, perm)
     end
-    tap = _vec_c(t)
 
-    tmax = 0.0; tn = copy(tap)
+    # ── Entrywise power with normalization ──
     if m > 1
-        tmax = maximum(abs, tap)
-        tmax > 0 && (tn ./= tmax)
+        tmax = maximum(abs, t)
+        tmax > 0 && (t = t ./ tmax)
+    else
+        tmax = 0.0
     end
-    fp = m == 1 ? copy(tn) : tn .^ m
+    F_powered = _vec_c(t .^ m)
+    t_normalized = _vec_c(m > 1 ? t : copy(t))
+    t_after_perm = _vec_c(m > 1 ? t .* tmax : copy(t))
 
-    BranchState(vflat, nc, tap, tmax, tn, fp)
+    BranchState(vflat, n_ch, t_after_perm, tmax, t_normalized, F_powered)
 end
 
 function _fwd_cached(params, angles; clause_sign=1)
@@ -281,6 +292,11 @@ function _bwd_branch!(adj_F, gs, bs, nr, k, child, state, gg, gb)
                 for a in 1:4
                     idx = (a-1)*nrows + i
                     su += aout[idx] * conj(tm[s, a])
+                    # Backward through tm: adj_tm[s,a] += conj(Vl[i,s]) * aout[idx]
+                    # tm[s,a] = MD[nr][a][1,s] + MD[nr][a][4,s]
+                    adj_tm_sa = conj(Vl[(i-1)*4 + s]) * aout[idx]
+                    adj_md[nr, a][1, s] += adj_tm_sa
+                    adj_md[nr, a][4, s] += adj_tm_sa
                 end
                 aV[(i-1)*4 + s] += su
             end
@@ -388,8 +404,10 @@ function _bwd_root!(adj_raw, cache, gg, gb)
             b = i * eprf
             z = factor[b+1]*tv[1] + factor[b+2]*tv[2] + factor[b+3]*tv[3] + factor[b+4]*tv[4]
             dz = adj_raw * uf[a] * ca[i+1] * k * z^(k-1)
-            fb[b+1] += dz*tv[1]; fb[b+2] += dz*tv[2]
-            fb[b+3] += dz*tv[3]; fb[b+4] += dz*tv[4]
+            cdz = conj(dz)
+            ctv1 = conj(tv[1]); ctv2 = conj(tv[2]); ctv3 = conj(tv[3]); ctv4 = conj(tv[4])
+            fb[b+1] += cdz*ctv1; fb[b+2] += cdz*ctv2
+            fb[b+3] += cdz*ctv3; fb[b+4] += cdz*ctv4
         end
         du = _root_charge_deriv(gs[p])
         sv = zero(CT)
@@ -419,11 +437,96 @@ function _bwd_root!(adj_raw, cache, gg, gb)
         dM = _doubled_mixer_deriv(bs[el])
         gb[el] += real(sum(conj.(aMw) .* dM))
 
+        # Coefficient adjoint: gamma gradient through root_charge_weights(gs[el])
+        # At round el, coefficient update was: cb[(a-1)*R_el + i] = u[a] * ca_el[i]
+        # The final raw depends on the coefficients, so d(raw)/d(u[a]) contributes to gg[el]
+        # We need adj_ca at this level: how much does each ca affect the final raw?
+        # Propagate adj_ca backward from the final measurement
         du = _root_charge_deriv(gs[el])
-        Rpv2 = 4^(el-1)
-        # TODO: coefficient adjoint for gamma through u
-        # For now this contribution is small and partially captured
-        # by the branch-level gamma gradients
+        R_el = 4^(el-1)
+        # Reconstruct adj_ca at level el from fb (adjoint of factor at level el)
+        # The coefficient adjoint is: d(raw)/d(u_el[a]) = Σ_i adj_ca_after[(a-1)*R_el+i] * ca_before[i]
+        # But adj_ca is entangled with the forward pass in complex ways.
+        # Simple approach: use the stored ca values and the final measurement structure.
+        # The coefficient after round el is: ca_after[(a-1)*R_el + i] = u_el[a] * ca_before[i]
+        # The final raw uses these coefficients linearly: raw = Σ_i ca_final[i] * w[i]
+        # where w[i] = Σ_a uf[a] * z_{a,i}^k (weighted by final-round u)
+        # So d(raw)/d(ca_final[i]) = w[i]
+        # Chain backward through subsequent coefficient rounds to get d(raw)/d(u_el[a])
+
+        # For now, compute numerically via the scalar relationship:
+        # raw depends on gs[el] through u = root_charge_weights(gs[el])
+        # u enters only through the coefficient array, not through factor
+        # So d(raw)/d(gs[el]) = Σ_a du[a] * Σ_i ca_partial[i] * z_final[...] where the
+        # ca_partial terms collect the contribution from this specific u[a]
+
+        # Efficient approach: replay the coefficient chain from round el onward
+        # and accumulate the gradient of raw w.r.t. u_el[a]
+        u_el = root_charge_weights(gs[el])
+        R_after = 4 * R_el  # R after round el
+        # Reconstruct ca_before from ca_after and u
+        # ca_before[i] = ca_after[(a-1)*R_el + i] / u_el[a] for any a where u_el[a] != 0
+        # But it's easier to just recompute by replaying forward up to el-1
+        ca_replay = Vector{CT}(undef, maxR)
+        ca_replay[1] = CT(0.5)^k
+        cb_replay = Vector{CT}(undef, maxR)
+        R_tmp = 1
+        for el2 in 1:el-1
+            u2 = root_charge_weights(gs[el2])
+            @inbounds for a2 in 1:4
+                for ii in 1:R_tmp; cb_replay[(a2-1)*R_tmp+ii] = u2[a2] * ca_replay[ii]; end
+            end
+            R_tmp *= 4; ca_replay, cb_replay = cb_replay, ca_replay
+        end
+        # ca_replay now holds ca_before (coefficients before round el)
+        # At round el: ca_after[(a-1)*R_el + i] = u_el[a] * ca_before[i]
+        # d(ca_after[(a-1)*R_el + i])/d(gs[el]) = du[a] * ca_before[i]
+        # Need to propagate through subsequent rounds to get d(ca_final)/d(gs[el])
+        # Then: d(raw)/d(gs[el]) = Σ_j d(ca_final[j])/d(gs[el]) * w_final[j]
+        # where w_final[j] = Σ_a uf[a] * z_{a,j}^k (the final measurement contribution per coeff)
+
+        # Compute w_final: d(raw)/d(ca_final[j])
+        # From the final measurement: raw = Σ_a uf[a] * Σ_j ca_final[j+1] * z_{a,j}^k
+        # So d(raw)/d(ca_final[j+1]) = Σ_a uf[a] * z_{a,j}^k
+        R_final = 4^(p-1)
+        eprf_final = div(N, R_final)
+        w_final = zeros(CT, R_final)
+        factor_final = fhist[end]
+        for a in 1:4
+            K2 = Mf .* CT.(CHARGE_DIAG[a, :]')
+            tv2 = (K2[1,1]-K2[4,1], K2[1,2]-K2[4,2], K2[1,3]-K2[4,3], K2[1,4]-K2[4,4])
+            for j in 0:R_final-1
+                bb = j * eprf_final
+                z2 = factor_final[bb+1]*tv2[1] + factor_final[bb+2]*tv2[2] +
+                     factor_final[bb+3]*tv2[3] + factor_final[bb+4]*tv2[4]
+                w_final[j+1] += uf[a] * z2^k
+            end
+        end
+
+        # Propagate d(ca)/d(gs[el]) forward through rounds el+1..p-1
+        # Starting: d(ca_after_el)/d(gs[el])[(a-1)*R_el+i] = du[a] * ca_before[i]
+        dca = zeros(CT, R_final)  # will hold d(ca_final)/d(gs[el])
+        # Initialize at round el
+        for a in 1:4
+            for ii in 1:R_el
+                dca[(a-1)*R_el + ii] = du[a] * ca_replay[ii]
+            end
+        end
+        # Propagate through rounds el+1..p-1
+        R_prop = R_after
+        for el2 in (el+1):(p-1)
+            u2 = root_charge_weights(gs[el2])
+            dca_new = zeros(CT, R_final)
+            for a2 in 1:4
+                for ii in 1:R_prop
+                    dca_new[(a2-1)*R_prop + ii] = u2[a2] * dca[ii]
+                end
+            end
+            R_prop *= 4; dca = dca_new
+        end
+
+        # d(raw)/d(gs[el]) = Σ_j dca[j] * w_final[j]
+        gg[el] += adj_raw * real(sum(dca .* w_final))
 
         fb = aT
     end
