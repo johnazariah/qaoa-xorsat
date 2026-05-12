@@ -797,6 +797,7 @@ function optimize_angles(
             if autodiff == :charge_adjoint
                 # Charge manual adjoint: exact gradients in ~5x forward cost.
                 p = params.p
+                Diagnostics.diag_info("optimize_angles: using :charge_adjoint, p=$p, maxiters=$maxiters")
                 function cadj_g!(G, values)
                     candidate = angles_from_vector(values, p)
                     _, γg, βg = charge_expectation_and_gradient(params, candidate; clause_sign)
@@ -806,12 +807,15 @@ function optimize_angles(
                 end
                 function cadj_fg!(G, values)
                     candidate = angles_from_vector(values, p)
-                    val, γg, βg = charge_expectation_and_gradient(params, candidate; clause_sign)
+                    t = @elapsed begin
+                        val, γg, βg = charge_expectation_and_gradient(params, candidate; clause_sign)
+                    end
                     G[1:p] .= .-γg
                     G[p+1:2p] .= .-βg
                     last_g_norm[] = maximum(abs, G)
                     last_value[] = val
                     local_evaluations[] += 1
+                    Diagnostics.diag_progress("p=$p", "eval $(local_evaluations[]): ctilde=$(round(val, digits=10)) gnorm=$(round(last_g_norm[], sigdigits=2)) $(round(t, digits=1))s RSS=$(round(Diagnostics.rss_gb(), digits=1))GB")
                     maybe_report_progress!()
                     -val
                 end

@@ -1,5 +1,9 @@
 module QaoaXorsat
 
+# Runtime diagnostics (controlled by QAOA_DIAG env vars)
+include("diagnostics.jl")
+using .Diagnostics
+
 # Tree structure
 include("tree.jl")
 export TreeParams

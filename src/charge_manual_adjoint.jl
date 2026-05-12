@@ -557,31 +557,40 @@ Compute value and gradient via manual adjoint. Cost: ~3-5x forward.
 function charge_expectation_and_gradient(
     params::TreeParams, angles::QAOAAngles; clause_sign::Int=1,
 )
-    cache = _fwd_cached(params, angles; clause_sign)
-    p = cache.p; k = cache.k; D = cache.D; deg = D - 1
+    p = params.p
+    Diagnostics.diag_info("charge_expectation_and_gradient: k=$(params.k) D=$(params.D) p=$p"; level=1)
+
+    cache = Diagnostics.diag_phase("forward pass p=$p") do
+        _fwd_cached(params, angles; clause_sign)
+    end
+    k = cache.k; D = cache.D; deg = D - 1
     cs = Float64(cache.cs)
 
     gg = zeros(p); gb = zeros(p)
     sm = cs / 2 * exp(k * cache.log_s)
 
-    arb = _bwd_root!(sm, cache, gg, gb)
+    t_root = @elapsed arb = _bwd_root!(sm, cache, gg, gb)
+    Diagnostics.diag_time("backward root p=$p", t_root)
 
     Fp = cache.F_levels[p]; fmx = cache.rb_max
     Fn = Fp ./ fmx
     aFn = deg .* conj.(Fn .^ (deg-1)) .* arb
     aF = aFn ./ fmx
 
-    for lv in p:-1:1
-        ch = lv > 1 ? cache.children[lv] : nothing
-        ach = _bwd_branch!(aF, cache.gs, cache.bs, lv, k, ch, cache.states[lv], gg, gb)
-        if lv > 1 && ach !== nothing
-            Fpv = cache.F_levels[lv-1]; fmpv = cache.F_maxs[lv-1]
-            Fnpv = Fpv ./ fmpv
-            aFnpv = deg .* conj.(Fnpv .^ (deg-1)) .* ach
-            aF = aFnpv ./ fmpv
+    Diagnostics.diag_phase("backward branches p=$p") do
+        for lv in p:-1:1
+            ch = lv > 1 ? cache.children[lv] : nothing
+            ach = _bwd_branch!(aF, cache.gs, cache.bs, lv, k, ch, cache.states[lv], gg, gb)
+            if lv > 1 && ach !== nothing
+                Fpv = cache.F_levels[lv-1]; fmpv = cache.F_maxs[lv-1]
+                Fnpv = Fpv ./ fmpv
+                aFnpv = deg .* conj.(Fnpv .^ (deg-1)) .* ach
+                aF = aFnpv ./ fmpv
+            end
         end
     end
 
     gg .*= cs / 2
+    Diagnostics.diag_mem("gradient done p=$p")
     (cache.val, gg, gb)
 end
