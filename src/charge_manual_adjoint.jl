@@ -127,11 +127,15 @@ struct FwdCache
     log_s::Float64; raw::Float64; val::Float64
 end
 
-function _replay_branch(gs, bs, nr, k, child)
-    m = k - 1; tt = 4^nr; CT = ComplexF64
+"""
+Instrumented forward: compute branch F *and* save intermediates for backward.
+Returns `(F_flat, BranchState)` in a single pass — no redundant replay.
+"""
+function _charge_branch_instrumented(gs, bs, nr, k, child)
+    m = k - 1; CT = ComplexF64
     child_rounds = child !== nothing ? nr - 1 : 0
 
-    # ── Phase 1: exactly mirror _charge_hyperedge_branch ──
+    # ── Phase 1: coupled contractions consuming child branch ──
     if child !== nothing && child_rounds >= 2
         V_flat = CT(0.5) .* copy(child)
         n_ch = 1; N_child = length(V_flat)
@@ -150,14 +154,13 @@ function _replay_branch(gs, bs, nr, k, child)
         V = fill(CT(0.5), 1, 4); n_ch = 1
         V_flat = _vec_c(V)
     end
-    vflat = copy(V_flat)  # C-order flat — NOT vec(V) which is F-order
+    saved_V_flat = copy(V_flat)
 
-    # ── Phase 2: exactly mirror _charge_hyperedge_branch ──
+    # ── Phase 2: fused mixer + trace ──
     start_mv = max(child_rounds - 1, 0)
     MD = [let Ml = doubled_mixer(bs[el])
         [Ml .* CT.(CHARGE_DIAG[a, :]') for a in 1:4]
     end for el in 1:nr]
-
     trace_vecs = [MD[nr][a][1, :] .+ MD[nr][a][4, :] for a in 1:4]
     trace_matrix = hcat(trace_vecs...)
 
@@ -179,18 +182,29 @@ function _replay_branch(gs, bs, nr, k, child)
         t = permutedims(t, perm)
     end
 
-    # ── Entrywise power with normalization ──
+    # ── Entrywise power with normalization — save intermediates ──
     if m > 1
         tmax = maximum(abs, t)
         tmax > 0 && (t = t ./ tmax)
     else
         tmax = 0.0
     end
+    t_normalized = _vec_c(copy(t))
     F_powered = _vec_c(t .^ m)
-    t_normalized = _vec_c(m > 1 ? t : copy(t))
-    t_after_perm = _vec_c(m > 1 ? t .* tmax : copy(t))
 
-    BranchState(vflat, n_ch, t_after_perm, tmax, t_normalized, F_powered)
+    # ── Mode products ──
+    W = [charge_weight_matrix(gs[el]) for el in 1:nr]
+    N = length(F_powered)
+    F_flat = copy(F_powered)
+    scratch = similar(F_flat)
+    for el in 1:nr
+        stride = 4^(nr - el)
+        _mode_product_flat!(scratch, F_flat, W[el], stride, N)
+        F_flat, scratch = scratch, F_flat
+    end
+
+    state = BranchState(saved_V_flat, n_ch, F_powered, tmax, t_normalized, F_powered)
+    (F_flat, state)
 end
 
 function _fwd_cached(params, angles; clause_sign=1)
@@ -204,17 +218,17 @@ function _fwd_cached(params, angles; clause_sign=1)
     ST = Vector{BranchState}(undef, p)
     ls = 0.0
 
-    F = _charge_hyperedge_branch(gs, bs, 1, k)
+    F, st = _charge_branch_instrumented(gs, bs, 1, k, nothing)
     FL[1] = copy(F); FM[1] = 1.0; CH[1] = CT[]
-    ST[1] = _replay_branch(gs, bs, 1, k, nothing)
+    ST[1] = st
 
     for lv in 2:p
         fmx = maximum(abs, F); FM[lv-1] = fmx
         fmx > 0 && (F ./= fmx; ls += deg * log(fmx))
         ch = F .^ deg; CH[lv] = copy(ch)
-        F = _charge_hyperedge_branch(gs, bs, lv, k; child_branch=ch)
+        F, st = _charge_branch_instrumented(gs, bs, lv, k, ch)
         FL[lv] = copy(F)
-        ST[lv] = _replay_branch(gs, bs, lv, k, ch)
+        ST[lv] = st
     end
 
     fmx = maximum(abs, F); rbm = fmx

@@ -482,11 +482,12 @@ function optimize_angles(
 )::AngleOptimizationResult
     validate_clause_sign(clause_sign)
     maxiters ≥ 1 || throw(ArgumentError("maxiters must be ≥ 1, got $maxiters"))
-    autodiff in (:auto, :adjoint, :charge, :forward) || throw(ArgumentError(
-        "autodiff must be :auto, :adjoint, :charge, or :forward, got :$autodiff"))
+    autodiff in (:auto, :adjoint, :charge, :charge_adjoint, :forward) || throw(ArgumentError(
+        "autodiff must be :auto, :adjoint, :charge, :charge_adjoint, or :forward, got :$autodiff"))
 
     # Auto-select: use adjoint when it fits in memory and is faster (p <= 11),
-    # charge otherwise. GPU evaluator always uses adjoint path.
+    # charge_adjoint for high p (manual adjoint, ~5x fwd cost),
+    # charge (FD) as fallback.
     if autodiff == :auto
         if gpu_evaluator !== nothing
             autodiff = :adjoint
@@ -494,7 +495,7 @@ function optimize_angles(
             N_est = basso_configuration_count(params.p)
             est_bytes = 40 * N_est * sizeof(ComplexF64)
             available = Sys.total_memory() * 0.6
-            autodiff = (est_bytes < available && params.p <= 11) ? :adjoint : :charge
+            autodiff = (est_bytes < available && params.p <= 11) ? :adjoint : :charge_adjoint
         end
     end
 
@@ -785,7 +786,7 @@ function optimize_angles(
                 local_evaluations[] += 1
                 maybe_report_progress!()
                 candidate = angles_from_vector(values, params.p)
-                if autodiff == :charge
+                if autodiff in (:charge, :charge_adjoint)
                     -charge_expectation(params, candidate; clause_sign)
                 else
                     # :forward uses the normalized Basso evaluator (not the raw light-cone evaluator)
@@ -793,7 +794,36 @@ function optimize_angles(
                 end
             end
 
-            if autodiff == :charge
+            if autodiff == :charge_adjoint
+                # Charge manual adjoint: exact gradients in ~5x forward cost.
+                p = params.p
+                function cadj_g!(G, values)
+                    candidate = angles_from_vector(values, p)
+                    _, γg, βg = charge_expectation_and_gradient(params, candidate; clause_sign)
+                    G[1:p] .= .-γg
+                    G[p+1:2p] .= .-βg
+                    last_g_norm[] = maximum(abs, G)
+                end
+                function cadj_fg!(G, values)
+                    candidate = angles_from_vector(values, p)
+                    val, γg, βg = charge_expectation_and_gradient(params, candidate; clause_sign)
+                    G[1:p] .= .-γg
+                    G[p+1:2p] .= .-βg
+                    last_g_norm[] = maximum(abs, G)
+                    last_value[] = val
+                    local_evaluations[] += 1
+                    maybe_report_progress!()
+                    -val
+                end
+                od = Optim.OnceDifferentiable(objective, cadj_g!, cadj_fg!, angle_vector(guess.angles))
+                result = Optim.optimize(
+                    od,
+                    angle_vector(guess.angles),
+                    Optim.LBFGS(),
+                    Optim.Options(iterations=maxiters, g_abstol=g_abstol, f_reltol=F_RELTOL,
+                                  store_trace=true, show_trace=false),
+                )
+            elseif autodiff == :charge
                 # Charge mode: central finite differences for gradients.
                 # Cost: (4p+1) × charge_eval — no Dual number overhead.
                 h = 1.5e-8  # √eps for Float64
@@ -843,7 +873,7 @@ function optimize_angles(
 
             elapsed_seconds = (time_ns() - started_at) / 1.0e9
             candidate_angles = angles_from_vector(Optim.minimizer(result), params.p) |> canonicalize_angles
-            candidate_value = if autodiff == :charge
+            candidate_value = if autodiff in (:charge, :charge_adjoint)
                 charge_expectation(params, candidate_angles; clause_sign)
             else
                 basso_expectation_normalized(params, candidate_angles; clause_sign)
