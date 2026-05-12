@@ -1,14 +1,14 @@
 using QaoaXorsat, Printf, Dates, Random
 
 function main()
-    println("MaxCut p=14 D=3 -- manual charge adjoint (~5x fwd cost)")
+    println("MaxCut p=14 D=3 -- manual charge adjoint (instrumented forward)")
     println("Started: ", Dates.format(now(), "yyyy-mm-dd HH:MM:SS"))
-    println("RAM: ", Sys.total_memory() / (1024^3), " GB")
+    println("PID: ", getpid())
+    println("RAM: ", round(Sys.total_memory() / (1024^3), digits=1), " GB")
+    println("QAOA_DIAG: ", get(ENV, "QAOA_DIAG", "not set"))
     println()
-
-    # FD baseline timings (from killed run)
-    println("FD baseline (from previous run):")
-    println("  p=10: 772.0s  p=11: 4331.4s  (p=12+ was running)")
+    println("FD baseline: p=10: 772s  p=11: 4331s  p=12: ~19800s")
+    println("Adjoint v2:  p=10: 75s   p=11: 373s   p=12: 1646s   p=13: 6653s")
     println()
     flush(stdout)
 
@@ -31,7 +31,6 @@ function main()
         end
     end
 
-    # p=14
     println()
     println("=== p=14 optimization (manual adjoint) ===")
     flush(stdout)
@@ -43,15 +42,19 @@ function main()
     flush(stdout)
     t_eval = @elapsed charge_parity_expectation(params_14, warm_14)
     @printf("%.1fs\n", t_eval)
+    flush(stdout)
+
+    GC.gc(true)
 
     @printf("  Single adjoint gradient at p=14... ")
     flush(stdout)
     t_grad = @elapsed charge_expectation_and_gradient(params_14, warm_14; clause_sign=-1)
     @printf("%.1fs (%.1fx fwd)\n", t_grad, t_grad / t_eval)
-    @printf("  Memory: %.1f GB RSS\n", Sys.maxrss() / 1e9)
     flush(stdout)
 
-    println("  Optimizing...")
+    GC.gc(true)
+
+    println("  Optimizing p=14...")
     flush(stdout)
 
     t_p14 = @elapsed r14 = optimize_angles(params_14;
@@ -69,11 +72,12 @@ function main()
     println("===================================================")
     @printf("  p=14 RESULT: ctilde = %.10f\n", r14.value)
     @printf("  Iterations:  %d\n", r14.iterations)
-    @printf("  Wall time:   %.1fs (%.1f hr)\n", t_p14, t_p14/3600)
+    @printf("  Wall time:   %.1fs (%.2f hr)\n", t_p14, t_p14/3600)
     @printf("  Converged:   %s\n", r14.converged)
-    @printf("  Memory:      %.1f GB RSS\n", Sys.maxrss() / 1e9)
     println("===================================================")
-    println("Finished: ", Dates.format(now(), "yyyy-mm-dd HH:MM:SS"))
+    println("\nAngles (γ): ", r14.angles.γ)
+    println("Angles (β): ", r14.angles.β)
+    println("\nFinished: ", Dates.format(now(), "yyyy-mm-dd HH:MM:SS"))
     flush(stdout)
 end
 
