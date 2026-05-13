@@ -1,5 +1,9 @@
 module QaoaXorsat
 
+# Runtime diagnostics (controlled by QAOA_DIAG env vars)
+include("diagnostics.jl")
+using .Diagnostics
+
 # Tree structure
 include("tree.jl")
 export TreeParams
@@ -62,8 +66,8 @@ export expand_symmetric
 include("charge.jl")
 export charge_parity_expectation, charge_expectation
 
-# Charge adjoint differentiation
-include("charge_adjoint.jl")
+# Manual charge adjoint — exact gradients in ~3x forward cost
+include("charge_manual_adjoint.jl")
 export charge_expectation_and_gradient
 
 # Spectral analysis of branch tensor iteration
