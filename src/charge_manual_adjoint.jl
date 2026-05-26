@@ -189,8 +189,12 @@ function _charge_branch_instrumented(gs, bs, nr, k, child)
     else
         tmax = 0.0
     end
-    t_normalized = _vec_c(copy(t))
     F_powered = _vec_c(t .^ m)
+    # When m == 1 the backward never reads state.t_normalized (the m==1 branch
+    # of the power backward returns `ac` directly without touching it).  Alias
+    # to F_powered to save one full 4^lv vector per branch level.  Combined
+    # over all p levels at k=2 this saves ~5.7 GB at p=14.
+    t_normalized = m == 1 ? F_powered : _vec_c(copy(t))
 
     # ── Mode products ──
     W = [charge_weight_matrix(gs[el]) for el in 1:nr]
@@ -358,22 +362,38 @@ function _bwd_branch!(adj_F, gs, bs, nr, k, child, state, gg, gb)
     child === nothing && return nothing
     cr < 2 && return aV .* 0.5
 
+    # Memory-frugal Phase 1 backward.
+    #
+    # The previous version stored the full forward history `p1s` (cr vectors
+    # of length 4^cr ComplexF64).  At cr = p-1 = 13 that is ~13 GB transient
+    # inside a single _bwd_branch! call.  We instead keep only the seed
+    # `vi = 0.5 * child` (1 vector) plus two ping-pong replay buffers and
+    # recompute each historical state on demand at the start of the relevant
+    # backward iteration.  Cost: O(cr²) extra _wht_charge_contract_flat! calls,
+    # bounded by ~p²/2 ≪ p · 4^p work.
     csz = 4^cr
-    vi = CT(0.5) .* copy(child)
-    p1s = [copy(vi)]; ncf = 1; vc = copy(vi); sc = similar(vc)
-    for el in 1:cr-1
-        epr = div(csz, ncf)
-        _wht_charge_contract_flat!(sc, doubled_mixer(bs[el]), vc, ncf, epr)
-        vc, sc = sc, vc; ncf *= 4
-        push!(p1s, copy(vc))
-    end
+    vi          = CT(0.5) .* copy(child)
+    replay_a    = similar(vi)
+    replay_b    = similar(vi)
 
     ap1 = copy(aV); ncb = state.n_ch
     for el in (cr-1):-1:1
         ncb = div(ncb, 4); rest = div(csz, ncb * 16)
         Mb = doubled_mixer(bs[el])
+
+        # Replay forward from vi for (el-1) WHT steps to reconstruct p1s[el].
+        copyto!(replay_a, vi)
+        ncf_r = 1
+        for j in 1:el-1
+            epr_r = div(csz, ncf_r)
+            _wht_charge_contract_flat!(replay_b, doubled_mixer(bs[j]),
+                                       replay_a, ncf_r, epr_r)
+            replay_a, replay_b = replay_b, replay_a
+            ncf_r *= 4
+        end
+
         aT = zeros(CT, csz); aMw = zeros(CT, 4, 4)
-        _wht_adjoint!(aT, aMw, Mb, p1s[el], ap1, ncb, rest)
+        _wht_adjoint!(aT, aMw, Mb, replay_a, ap1, ncb, rest)
         dM = _doubled_mixer_deriv(bs[el])
         gb[el] += real(sum(conj.(aMw) .* dM))
         ap1 = aT
@@ -388,11 +408,16 @@ function _bwd_root!(adj_raw, cache, gg, gb)
     p = cache.p; k = cache.k; D = cache.D
     gs = cache.gs; bs = cache.bs; CT = ComplexF64; N = length(cache.rb)
 
+    # ── Phase A: forward chain from cache.rb (no history saved) ──
+    # The previous implementation pushed a copy of `factor` at every round
+    # into `fhist`, costing p · N ComplexF64 ≈ 60 GB at p=14, N=4^14.
+    # We instead retain only the final state and replay the chain on demand
+    # in the backward loop (Phase D).  Replay cost is O(p²) WHTs which is
+    # negligible compared to the p · 4^p inner work.
     factor = copy(cache.rb); buf = similar(factor)
     R = 1; maxR = 4^(p-1)
     ca = Vector{CT}(undef, maxR); ca[1] = CT(0.5)^k
     cb = Vector{CT}(undef, maxR)
-    fhist = [copy(factor)]
 
     for el in 1:p-1
         M = doubled_mixer(bs[el]); u = root_charge_weights(gs[el])
@@ -404,12 +429,19 @@ function _bwd_root!(adj_raw, cache, gg, gb)
             for i in 1:R; cb[(a-1)*R+i] = ua * ca[i]; end
         end
         R *= 4; ca, cb = cb, ca
-        push!(fhist, copy(factor))
     end
+
+    # `factor` now holds factor_final (read-only for the rest of this fn).
+    # `buf` is a spare length-N buffer — we'll reuse it in Phase D as one
+    # leg of the replay ping-pong, saving a 4.3 GB allocation at p=14.
+    # `ca` holds ca_final at R = 4^(p-1); `cb` is the spare coefficient
+    # buffer — we'll reuse the pair as the coefficient-replay scratch.
 
     Mf = doubled_mixer(bs[p]); uf = root_charge_weights(gs[p])
     eprf = div(N, R)
+    R_final = R                          # = 4^(p-1)
 
+    # ── Phase B: bs[p]/gs[p] gradients and seed fb ──
     fb = zeros(CT, N)
     for a in 1:4
         K = Mf .* CT.(CHARGE_DIAG[a, :]')
@@ -443,106 +475,113 @@ function _bwd_root!(adj_raw, cache, gg, gb)
         end
     end
 
+    # ── Phase C: precompute w_final ONCE (used by every backward iter) ──
+    # w_final[j+1] = d(raw)/d(ca_final[j+1]) = Σ_a uf[a] · z_{a,j}^k
+    # where z_{a,j} is the per-cell linear combination over factor_final.
+    # The previous code recomputed this inside the loop over `el`, costing
+    # O(p · R_final) redundant work and one R_final allocation per iter.
+    w_final = zeros(CT, R_final)
+    for a in 1:4
+        K2 = Mf .* CT.(CHARGE_DIAG[a, :]')
+        tv2 = (K2[1,1]-K2[4,1], K2[1,2]-K2[4,2], K2[1,3]-K2[4,3], K2[1,4]-K2[4,4])
+        for j in 0:R_final-1
+            bb = j * eprf
+            z2 = factor[bb+1]*tv2[1] + factor[bb+2]*tv2[2] +
+                 factor[bb+3]*tv2[3] + factor[bb+4]*tv2[4]
+            w_final[j+1] += uf[a] * z2^k
+        end
+    end
+
+    # ── Phase D: backward chain (el = p-1 → 1) ──
+    # All scratch buffers are allocated ONCE outside the loop and reused.
+    # Big buffers are aliased to Phase-A buffers that are no longer needed:
+    #   factor (= factor_final, read-only past Phase C)  ↦  factor_replay
+    #   buf    (spare from Phase A)                      ↦  buf_replay
+    #   ca, cb (coefficient pair from Phase A)           ↦  ca_replay, cb_replay
+    # Net new Phase-D allocations: fb_next (length N), aMw (4×4),
+    # dca / dca_buf (length R_final each, 1 GB at p=14 — unavoidable).
+    factor_replay = factor                   # alias: read-only past Phase C
+    buf_replay    = buf                      # reuse Phase-A spare
+    ca_replay     = ca                       # reuse Phase-A coefficients
+    cb_replay     = cb
+    fb_next       = similar(fb)
+    aMw           = Matrix{CT}(undef, 4, 4)
+    dca           = Vector{CT}(undef, R_final)
+    dca_buf       = Vector{CT}(undef, R_final)
+
     for el in (p-1):-1:1
         M = doubled_mixer(bs[el]); Rpv = 4^(el-1)
         eprp = div(N, Rpv); rest = div(eprp, 16)
-        aT = zeros(CT, N); aMw = zeros(CT, 4, 4)
-        _wht_adjoint!(aT, aMw, M, fhist[el], fb, Rpv, rest)
+
+        # Reconstruct factor_at[el] (= fhist[el] in the old code) by
+        # replaying the forward WHT chain from cache.rb for (el-1) steps.
+        copyto!(factor_replay, cache.rb)
+        R_replay = 1
+        for el2 in 1:el-1
+            M2 = doubled_mixer(bs[el2])
+            epr2 = div(N, R_replay)
+            _wht_charge_contract_flat!(buf_replay, M2, factor_replay,
+                                       R_replay, epr2)
+            factor_replay, buf_replay = buf_replay, factor_replay
+            R_replay *= 4
+        end
+
+        # bs[el] gradient and propagated factor adjoint.
+        fill!(aMw, zero(CT))            # _wht_adjoint! zeros adj_T but uses += on adj_M
+        _wht_adjoint!(fb_next, aMw, M, factor_replay, fb, Rpv, rest)
         dM = _doubled_mixer_deriv(bs[el])
         gb[el] += real(sum(conj.(aMw) .* dM))
 
-        # Coefficient adjoint: gamma gradient through root_charge_weights(gs[el])
-        # At round el, coefficient update was: cb[(a-1)*R_el + i] = u[a] * ca_el[i]
-        # The final raw depends on the coefficients, so d(raw)/d(u[a]) contributes to gg[el]
-        # We need adj_ca at this level: how much does each ca affect the final raw?
-        # Propagate adj_ca backward from the final measurement
-        du = _root_charge_deriv(gs[el])
-        R_el = 4^(el-1)
-        # Reconstruct adj_ca at level el from fb (adjoint of factor at level el)
-        # The coefficient adjoint is: d(raw)/d(u_el[a]) = Σ_i adj_ca_after[(a-1)*R_el+i] * ca_before[i]
-        # But adj_ca is entangled with the forward pass in complex ways.
-        # Simple approach: use the stored ca values and the final measurement structure.
-        # The coefficient after round el is: ca_after[(a-1)*R_el + i] = u_el[a] * ca_before[i]
-        # The final raw uses these coefficients linearly: raw = Σ_i ca_final[i] * w[i]
-        # where w[i] = Σ_a uf[a] * z_{a,i}^k (weighted by final-round u)
-        # So d(raw)/d(ca_final[i]) = w[i]
-        # Chain backward through subsequent coefficient rounds to get d(raw)/d(u_el[a])
-
-        # For now, compute numerically via the scalar relationship:
-        # raw depends on gs[el] through u = root_charge_weights(gs[el])
-        # u enters only through the coefficient array, not through factor
-        # So d(raw)/d(gs[el]) = Σ_a du[a] * Σ_i ca_partial[i] * z_final[...] where the
-        # ca_partial terms collect the contribution from this specific u[a]
-
-        # Efficient approach: replay the coefficient chain from round el onward
-        # and accumulate the gradient of raw w.r.t. u_el[a]
-        u_el = root_charge_weights(gs[el])
-        R_after = 4 * R_el  # R after round el
-        # Reconstruct ca_before from ca_after and u
-        # ca_before[i] = ca_after[(a-1)*R_el + i] / u_el[a] for any a where u_el[a] != 0
-        # But it's easier to just recompute by replaying forward up to el-1
-        ca_replay = Vector{CT}(undef, maxR)
+        # gs[el] gradient via coefficient-chain replay + propagation.
+        # ca_before[i] = ca at start of round `el` (after rounds 1..el-1).
         ca_replay[1] = CT(0.5)^k
-        cb_replay = Vector{CT}(undef, maxR)
         R_tmp = 1
         for el2 in 1:el-1
             u2 = root_charge_weights(gs[el2])
             @inbounds for a2 in 1:4
-                for ii in 1:R_tmp; cb_replay[(a2-1)*R_tmp+ii] = u2[a2] * ca_replay[ii]; end
-            end
-            R_tmp *= 4; ca_replay, cb_replay = cb_replay, ca_replay
-        end
-        # ca_replay now holds ca_before (coefficients before round el)
-        # At round el: ca_after[(a-1)*R_el + i] = u_el[a] * ca_before[i]
-        # d(ca_after[(a-1)*R_el + i])/d(gs[el]) = du[a] * ca_before[i]
-        # Need to propagate through subsequent rounds to get d(ca_final)/d(gs[el])
-        # Then: d(raw)/d(gs[el]) = Σ_j d(ca_final[j])/d(gs[el]) * w_final[j]
-        # where w_final[j] = Σ_a uf[a] * z_{a,j}^k (the final measurement contribution per coeff)
-
-        # Compute w_final: d(raw)/d(ca_final[j])
-        # From the final measurement: raw = Σ_a uf[a] * Σ_j ca_final[j+1] * z_{a,j}^k
-        # So d(raw)/d(ca_final[j+1]) = Σ_a uf[a] * z_{a,j}^k
-        R_final = 4^(p-1)
-        eprf_final = div(N, R_final)
-        w_final = zeros(CT, R_final)
-        factor_final = fhist[end]
-        for a in 1:4
-            K2 = Mf .* CT.(CHARGE_DIAG[a, :]')
-            tv2 = (K2[1,1]-K2[4,1], K2[1,2]-K2[4,2], K2[1,3]-K2[4,3], K2[1,4]-K2[4,4])
-            for j in 0:R_final-1
-                bb = j * eprf_final
-                z2 = factor_final[bb+1]*tv2[1] + factor_final[bb+2]*tv2[2] +
-                     factor_final[bb+3]*tv2[3] + factor_final[bb+4]*tv2[4]
-                w_final[j+1] += uf[a] * z2^k
-            end
-        end
-
-        # Propagate d(ca)/d(gs[el]) forward through rounds el+1..p-1
-        # Starting: d(ca_after_el)/d(gs[el])[(a-1)*R_el+i] = du[a] * ca_before[i]
-        dca = zeros(CT, R_final)  # will hold d(ca_final)/d(gs[el])
-        # Initialize at round el
-        for a in 1:4
-            for ii in 1:R_el
-                dca[(a-1)*R_el + ii] = du[a] * ca_replay[ii]
-            end
-        end
-        # Propagate through rounds el+1..p-1
-        R_prop = R_after
-        for el2 in (el+1):(p-1)
-            u2 = root_charge_weights(gs[el2])
-            dca_new = zeros(CT, R_final)
-            for a2 in 1:4
-                for ii in 1:R_prop
-                    dca_new[(a2-1)*R_prop + ii] = u2[a2] * dca[ii]
+                ua = u2[a2]
+                for ii in 1:R_tmp
+                    cb_replay[(a2-1)*R_tmp + ii] = ua * ca_replay[ii]
                 end
             end
-            R_prop *= 4; dca = dca_new
+            R_tmp *= 4
+            ca_replay, cb_replay = cb_replay, ca_replay
         end
 
-        # d(raw)/d(gs[el]) = Σ_j dca[j] * w_final[j]
-        gg[el] += adj_raw * real(sum(dca .* w_final))
+        # Seed dca = ∂ca_after_el / ∂gs[el]  =  du[a] · ca_before[i].
+        du = _root_charge_deriv(gs[el])
+        R_el = 4^(el-1)
+        fill!(dca, zero(CT))
+        @inbounds for a in 1:4
+            duA = du[a]
+            for ii in 1:R_el
+                dca[(a-1)*R_el + ii] = duA * ca_replay[ii]
+            end
+        end
 
-        fb = aT
+        # Propagate dca through later rounds el+1..p-1 (ping-pong).
+        R_prop = 4 * R_el
+        for el2 in (el+1):(p-1)
+            u2 = root_charge_weights(gs[el2])
+            fill!(dca_buf, zero(CT))
+            @inbounds for a2 in 1:4
+                ua = u2[a2]
+                for ii in 1:R_prop
+                    dca_buf[(a2-1)*R_prop + ii] = ua * dca[ii]
+                end
+            end
+            R_prop *= 4
+            dca, dca_buf = dca_buf, dca
+        end
+
+        s = zero(CT)
+        @inbounds for j in 1:R_final
+            s += dca[j] * w_final[j]
+        end
+        gg[el] += adj_raw * real(s)
+
+        # Promote fb_next into fb for the next (smaller-el) iter.
+        fb, fb_next = fb_next, fb
     end
     return fb
 end
@@ -576,17 +615,37 @@ function charge_expectation_and_gradient(
     Fn = Fp ./ fmx
     aFn = deg .* conj.(Fn .^ (deg-1)) .* arb
     aF = aFn ./ fmx
+    # Free F_levels[p] eagerly — only Fn/aFn copies are needed below, and
+    # those are local to this scope.  At p=14 this drops ~4.3 GB before the
+    # branch backward begins, where many other large buffers will allocate.
+    cache.F_levels[p] = ComplexF64[]
+    Fp = Fn = aFn = nothing
 
     Diagnostics.diag_phase("backward branches p=$p") do
         for lv in p:-1:1
             ch = lv > 1 ? cache.children[lv] : nothing
             ach = _bwd_branch!(aF, cache.gs, cache.bs, lv, k, ch, cache.states[lv], gg, gb)
+
+            # Eagerly drop the per-level branch payload now that _bwd_branch!
+            # has finished consuming it.  Each BranchState at level lv holds
+            # up to ~5.4 GB worth of ComplexF64 vectors at p=14, and children
+            # add another ~4.3 GB at the top level.
+            if lv > 1
+                cache.children[lv] = ComplexF64[]
+            end
+            cache.states[lv] = BranchState(ComplexF64[], 0, ComplexF64[],
+                                            0.0, ComplexF64[], ComplexF64[])
+            ch = nothing
+
             if lv > 1 && ach !== nothing
                 Fpv = cache.F_levels[lv-1]; fmpv = cache.F_maxs[lv-1]
                 Fnpv = Fpv ./ fmpv
                 aFnpv = deg .* conj.(Fnpv .^ (deg-1)) .* ach
                 aF = aFnpv ./ fmpv
+                cache.F_levels[lv-1] = ComplexF64[]
+                Fpv = Fnpv = aFnpv = nothing
             end
+            ach = nothing
         end
     end
 
