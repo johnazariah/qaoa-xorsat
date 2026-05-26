@@ -147,6 +147,82 @@ and p=14+ on A100/H100 (40–80 GB).
 
 ---
 
+## Entry 33 — p=14 D=3 Memory Stabilization + Successful Mac Run (26–27 May 2026)
+
+### Summary
+
+The long-blocked MaxCut run at k=2, D=3, p=14 was completed successfully on
+the 64 GB Mac after targeted memory fixes to the charge manual adjoint path.
+
+Final result:
+- ctilde = 0.891384992947
+- converged = true
+- iterations = 58
+- evaluations = 172
+- wall = 32343.4s (8.98 hr)
+- peak RSS = 55.65 GB
+
+Artifacts written:
+- `results/maxcut-k2-d3-p14-angles.txt`
+- `results/maxcut-k2-p14-timing.csv`
+- `results/maxcut-k2-d3-p14-progress.csv`
+- `logs/p14-d3-memfix-20260526-185251.log`
+
+### What Was Failing Before
+
+On the same machine, p=14 was repeatedly jetsam-killed during the first
+adjoint gradient. Forward evaluation completed (~30s), then memory surged in
+backward due to retained histories and per-iteration large allocations.
+
+### Fixes That Unblocked It
+
+All fixes were made in `src/charge_manual_adjoint.jl`:
+
+1. `_bwd_root!`: removed `fhist` (p copies of length-4^p vectors)
+   - Replaced with on-demand forward replay per backward step
+   - Eliminated ~60 GB peak contributor at p=14
+
+2. `_bwd_branch!` Phase 1: removed `p1s` history
+   - Replaced with replay from seed via two ping-pong buffers
+   - Eliminated ~13 GB transient at top branch depth
+
+3. `_bwd_root!` buffer strategy cleanup
+   - Precomputed `w_final` once (instead of once per backward iteration)
+   - Hoisted large temporaries outside loop
+   - Switched to explicit ping-pong for factor adjoints
+
+4. `_charge_branch_instrumented`: m==1 alias optimization
+   - Aliased `t_normalized = F_powered` for m==1 path where backward does not
+     consume `t_normalized`
+   - Avoided one full extra vector per level in this path
+
+5. `charge_expectation_and_gradient`: eager cache freeing
+   - Dropped consumed `cache.children[lv]`, `cache.states[lv]`, and
+     `cache.F_levels[lv-1]` immediately after use
+   - Released memory earlier during the branch backward sweep
+
+Validation:
+- `test/test_charge_adjoint.jl`: 76/76 pass after changes
+
+### Execution Notes
+
+Run used:
+- branch: `feature/charge-adjoint-memory-fix`
+- script: `scripts/run_p14_d3_warm.jl`
+- command: `JULIA_NUM_THREADS=12 julia --project=. scripts/run_p14_d3_warm.jl`
+
+Observed behavior:
+- Forward timing remained ~29s (same order as before)
+- Memory no longer exploded during first adjoint
+- RSS oscillated through optimization but remained bounded; max 55.65 GB
+- No jetsam kill; full optimization completed and outputs persisted
+
+### Commits
+
+- `74cf598` charge_manual_adjoint: 4 memory fixes for large-p adjoint
+
+---
+
 ## Entry 32 — CUDA Backend + Streaming Checkpointing (1–2 May 2026)
 
 ### Summary
