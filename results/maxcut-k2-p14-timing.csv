@@ -1,0 +1,4 @@
+# MaxCut per-D timing at p=14 -- created 2026-05-27T03:55:49.697
+# autodiff=:charge_adjoint, warm-started from saved p=13
+k,D,p,ctilde,wall_seconds,evaluations,iterations,converged,fwd_seconds,grad_seconds,grad_over_fwd,peak_rss_gb,started_at,finished_at
+2,3,14,0.891384992947,32343.4,172,58,true,29.21,200.98,6.88,55.65,2026-05-26T18:56:45,2026-05-27T03:55:49
