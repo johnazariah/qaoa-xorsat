@@ -22,48 +22,19 @@
 # See scripts/HANDOFF-p14-xeon.md for end-to-end instructions.
 
 using QaoaXorsat
-using Printf, Dates, Random, DelimitedFiles
+using Printf, Dates, Random
 
 const REPO_ROOT      = normpath(joinpath(@__DIR__, ".."))
 const SWEEP_CSV      = joinpath(REPO_ROOT, "results", "maxcut-k2-d3-sweep.csv")
 const OUTPUT_CSV     = joinpath(REPO_ROOT, "results", "maxcut-k2-p14-timing.csv")
 const ANGLES_OUT     = joinpath(REPO_ROOT, "results", "maxcut-k2-d3-p14-angles.txt")
 const PROGRESS_CSV   = joinpath(REPO_ROOT, "results", "maxcut-k2-d3-p14-progress.csv")
+const SNAPSHOTS_CSV  = joinpath(REPO_ROOT, "results", "maxcut-k2-d3-p14-angle-snapshots.csv")
 
 const K = 2
 const D = 3
 const P = 14
 const CLAUSE_SIGN = -1   # MaxCut convention used by previous sweeps
-
-function read_p13_angles(path::AbstractString)
-    isfile(path) || error("p=13 sweep CSV not found: $path")
-    # Files may contain multiple appended sweeps; we want the LAST p=13 row so
-    # we read the whole file and keep the latest match.
-    found_ctilde = nothing
-    found_angles = nothing
-    for line in eachline(path)
-        startswith(line, '#') && continue
-        startswith(line, "k,") && continue
-        parts = split(line, ',')
-        length(parts) >= 7 || continue
-        k_ = tryparse(Int, parts[1])
-        d_ = tryparse(Int, parts[2])
-        p_ = tryparse(Int, parts[3])
-        (k_ === nothing || d_ === nothing || p_ === nothing) && continue
-        if k_ == K && d_ == D && p_ == 13
-            ctilde = parse(Float64, parts[4])
-            γ = parse.(Float64, split(parts[6], ';'))
-            β = parse.(Float64, split(parts[7], ';'))
-            length(γ) == 13 || error("expected 13 γ values, got $(length(γ))")
-            length(β) == 13 || error("expected 13 β values, got $(length(β))")
-            found_ctilde = ctilde
-            found_angles = QAOAAngles(γ, β)
-        end
-    end
-    found_angles === nothing &&
-        error("no p=13 row for k=$K D=$D found in $path")
-    return found_ctilde, found_angles
-end
 
 function write_angles(path, angles::QAOAAngles, ctilde::Float64, wall::Float64, iters::Int)
     open(path, "w") do io
@@ -106,7 +77,11 @@ function main()
     # ---- Step 1: load saved p=13 angles ----
     print("Loading saved p=13 angles... ")
     flush(stdout)
-    ctilde13, angles13 = read_p13_angles(SWEEP_CSV)
+    store = CsvResultStore(SWEEP_CSV, :sweep)
+    p13_record = read_best_record(store, K, D, P - 1)
+    p13_record === nothing && error("no p=13 row for k=$K D=$D found in $SWEEP_CSV")
+    ctilde13 = p13_record.value
+    angles13 = p13_record.angles
     @printf("done.  p=13 c̃ = %.12f\n", ctilde13)
     flush(stdout)
 
@@ -174,6 +149,7 @@ function main()
                     elapsed, evals, val, gnorm, rss_gb)
             flush(stdout)
         end,
+        on_angle_snapshot = snapshot -> write_angle_snapshot!(SNAPSHOTS_CSV, snapshot),
     )
 
     finished_at = now()
@@ -213,6 +189,7 @@ function main()
     @printf("Wrote angles  -> %s\n", ANGLES_OUT)
     @printf("Wrote timing  -> %s\n", OUTPUT_CSV)
     @printf("Wrote progress-> %s\n", PROGRESS_CSV)
+    @printf("Wrote snapshots-> %s\n", SNAPSHOTS_CSV)
     println("Finished:   ", Dates.format(finished_at, "yyyy-mm-dd HH:MM:SS"))
     flush(stdout)
 end

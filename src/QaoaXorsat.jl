@@ -41,8 +41,14 @@ include("maxcut_transfer.jl")
 
 # Optimisation helpers
 include("optimization.jl")
-export AngleOptimizationResult
+export AngleOptimizationResult, AngleSnapshot, PlateauPolicy, OptimizationPolicy
+export OptimizationRunSpec, OptimizationCallbacks, OptimizationEvent
+export EvaluationEvent, PlateauEvent, AngleSnapshotEvent, DepthResultEvent
+export run_optimization
+export AngleRecord, CsvResultStore, PreviousDepthWarmStart
 export canonicalize_angles, random_angles, extend_angles
+export format_angles, parse_angles, snapshot_csv_header, snapshot_csv_row, write_angle_snapshot!
+export read_records, read_best_record, append_record!, resolve_warm_start
 export optimize_angles, optimize_depth_sequence, swarm_optimize, optimize_angles_chebyshev
 
 # QAOA evaluation

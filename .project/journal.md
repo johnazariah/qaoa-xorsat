@@ -608,6 +608,10 @@ Optim callback maintains a 30-value circular buffer, checks if
 `max - min < g_abstol` every iteration, flushes trace every 5 minutes.
 Proven at p=12: converges at 45 iterations (~40 min vs 2+ hours).
 
+### 5. Core Optimization Policy Refactor (May 2026)
+
+Moved plateau detection, best-so-far capture, warm-start lookup, and recoverable angle snapshots into the core QaoaXorsat optimizer layer. Runners now consume shared result-store helpers instead of parsing warm-start CSVs by hand, and the core API can emit snapshots with full gamma/beta vectors plus plateau metadata for recovery or p+1 seeding.
+
 Also wrote the research paper (`qaoa-xorsat-research/paper/main.tex`) with
 full 15-pair comparison table, QAOA vs p figure, timing progression plot.
 Stephen Jordan invited John as co-author on the Google Quantum AI paper.

@@ -30,33 +30,6 @@ function parse_D()
     return D
 end
 
-function read_p13_angles(path::AbstractString, D::Int)
-    isfile(path) || error("p=13 sweep CSV not found: $path")
-    found_ctilde = nothing
-    found_angles = nothing
-    for line in eachline(path)
-        startswith(line, '#') && continue
-        startswith(line, "k,") && continue
-        parts = split(line, ',')
-        length(parts) >= 7 || continue
-        k_ = tryparse(Int, parts[1])
-        d_ = tryparse(Int, parts[2])
-        p_ = tryparse(Int, parts[3])
-        (k_ === nothing || d_ === nothing || p_ === nothing) && continue
-        if k_ == K && d_ == D && p_ == 13
-            ctilde = parse(Float64, parts[4])
-            gamma = parse.(Float64, split(parts[6], ';'))
-            beta  = parse.(Float64, split(parts[7], ';'))
-            length(gamma) == 13 || error("expected 13 gamma values, got $(length(gamma))")
-            length(beta)  == 13 || error("expected 13 beta values, got $(length(beta))")
-            found_ctilde = ctilde
-            found_angles = QAOAAngles(gamma, beta)
-        end
-    end
-    found_angles === nothing && error("no p=13 row for k=$K D=$D found in $path")
-    return found_ctilde, found_angles
-end
-
 function write_angles(path, D::Int, angles::QAOAAngles, ctilde::Float64, wall::Float64, iters::Int)
     gamma = getproperty(angles, Symbol("γ"))
     beta  = getproperty(angles, Symbol("β"))
@@ -91,6 +64,7 @@ function main()
     sweep_csv = joinpath(REPO_ROOT, "results", "maxcut-k2-d$(D)-sweep.csv")
     angles_out = joinpath(REPO_ROOT, "results", "maxcut-k2-d$(D)-p14-angles.txt")
     progress_csv = joinpath(REPO_ROOT, "results", "maxcut-k2-d$(D)-p14-progress.csv")
+    snapshots_csv = joinpath(REPO_ROOT, "results", "maxcut-k2-d$(D)-p14-angle-snapshots.csv")
 
     println("=" ^ 60)
     println("MaxCut k=$K D=$D p=$P -- charge_adjoint, warm-start from saved p=13")
@@ -104,7 +78,11 @@ function main()
 
     print("Loading saved p=13 angles... ")
     flush(stdout)
-    ctilde13, angles13 = read_p13_angles(sweep_csv, D)
+    store = CsvResultStore(sweep_csv, :sweep)
+    p13_record = read_best_record(store, K, D, P - 1)
+    p13_record === nothing && error("no p=13 row for k=$K D=$D found in $sweep_csv")
+    ctilde13 = p13_record.value
+    angles13 = p13_record.angles
     @printf("done.  p=13 ctilde = %.12f\n", ctilde13)
     flush(stdout)
 
@@ -165,6 +143,7 @@ function main()
                     elapsed, evals, val, gnorm, rss_gb)
             flush(stdout)
         end,
+        on_angle_snapshot = snapshot -> write_angle_snapshot!(snapshots_csv, snapshot),
     )
 
     finished_at = now()
@@ -203,6 +182,7 @@ function main()
     @printf("Wrote angles  -> %s\n", angles_out)
     @printf("Wrote timing  -> %s\n", OUTPUT_CSV)
     @printf("Wrote progress-> %s\n", progress_csv)
+    @printf("Wrote snapshots-> %s\n", snapshots_csv)
     println("Finished:   ", Dates.format(finished_at, "yyyy-mm-dd HH:MM:SS"))
     flush(stdout)
 end

@@ -16,6 +16,8 @@ Reference implementation accompanying Shutty, Azariah & Jordan, *"Quantum Approx
 
 This code computes **exact** QAOA satisfaction fractions $\tilde{c}(p)$ for depth-$p$ QAOA on $D$-regular Max-$k$-XORSAT, using tensor network contraction on the light-cone tree. The key algorithmic innovation — a Walsh-Hadamard factorisation of the $k$-body constraint fold — reduces the cost from $O(4^{kp})$ to $O(p^2 \cdot 4^p)$ for any $k$, making depths $p \leq 12$ tractable on a single workstation.
 
+The optimizer policy now lives in the core library as well: plateau detection runs on the expensive evaluation stream, best-so-far angles are captured as recoverable snapshots, and the standard runners consume the shared result-store helpers instead of parsing warm-start CSVs by hand.
+
 ---
 
 ## Results
@@ -84,7 +86,7 @@ our values are exact at each finite D with no O(1/D) approximation.
 
 4. **Generic fold engine**: The Basso-Farhi branch-tensor contraction is a catamorphism over the light-cone tree, parametrised by a cost algebra. MaxCut and Max-k-XORSAT are different instantiations of the same interface — validated by reproducing Farhi et al. (2025) MaxCut results with no code changes.
 
-5. **Plateau detection**: Per-iteration Optim.jl callback with a 30-value circular buffer. Stops the optimizer when the objective range plateaus below g_abstol, reducing p=12 wall time from 2+ hours to ~40 minutes.
+5. **Plateau detection and recovery**: Evaluation-level plateau monitoring with a 30-value rolling buffer. Stops the optimizer when the expensive value stream plateaus below `g_abstol`, and emits recoverable angle snapshots with full `gamma`/`beta` vectors, gradient norm, and plateau statistics.
 
 6. **Swarm/memetic optimizer**: Population-based basin discovery for rugged landscapes at high (k,D). 100 random candidates, short L-BFGS bursts, cull/crossover, early exit when stagnant, full L-BFGS polish on winner. Finds basins that standard multi-start L-BFGS misses — (7,8) went from failing at p=3 to valid results at p=8+.
 
