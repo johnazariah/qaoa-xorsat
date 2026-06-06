@@ -65,8 +65,8 @@ using Random
     @testset "algebra-parameterised optimize_angles matches legacy" begin
         algebra = XORSATAlgebra(3)
         params = TreeParams(3, 4, 1)
-        result_legacy = optimize_angles(params; clause_sign=1, restarts=1, maxiters=20)
-        result_algebra = optimize_angles(algebra, params; restarts=1, maxiters=20)
+        result_legacy = optimize_angles(params; clause_sign=1, restarts=1, maxiters=20, autodiff=:adjoint)
+        result_algebra = optimize_angles(algebra, params; restarts=1, maxiters=20, autodiff=:adjoint)
 
         @test result_algebra.value ≈ result_legacy.value atol=1e-8
     end

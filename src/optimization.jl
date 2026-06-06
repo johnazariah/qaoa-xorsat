@@ -2,6 +2,8 @@ using Optim
 using ADTypes: AutoForwardDiff
 using ForwardDiff
 using Random
+using Dates
+using Printf
 
 struct AngleOptimizationStartSpec
     kind::Symbol
@@ -14,6 +16,206 @@ struct OptimizationTraceEntry
     g_norm::Float64
 end
 
+struct PlateauPolicy
+    enabled::Bool
+    min_evaluations::Int
+    value_window::Int
+    gradient_window::Int
+    value_range_tol::Float64
+    gradient_ceiling::Float64
+    gradient_value_range_tol::Float64
+end
+
+PlateauPolicy(; enabled::Bool=true,
+    min_evaluations::Int=60,
+    value_window::Int=30,
+    gradient_window::Int=20,
+    value_range_tol::Float64=1.0e-4,
+    gradient_ceiling::Float64=1.0e-2,
+    gradient_value_range_tol::Float64=1.0e-3,
+) = PlateauPolicy(enabled, min_evaluations, value_window, gradient_window,
+    value_range_tol, gradient_ceiling, gradient_value_range_tol)
+
+struct AngleSnapshot
+    k::Int
+    D::Int
+    p::Int
+    start_index::Int
+    evaluations::Int
+    iterations::Int
+    elapsed_seconds::Float64
+    value::Float64
+    gradient_norm::Float64
+    plateau_value_range::Float64
+    plateau_gradient_max::Float64
+    angles::QAOAAngles
+    reason::Symbol
+    timestamp_utc::String
+end
+
+mutable struct BestSoFar
+    value::Float64
+    angle_values::Vector{Float64}
+    gradient_norm::Float64
+    evaluation::Int
+    elapsed_seconds::Float64
+end
+
+struct PlateauStop <: Exception
+    reason::Symbol
+end
+
+struct OptimizationPolicy
+    restarts::Int
+    maxiters::Int
+    g_abstol::Float64
+    autodiff::Symbol
+    eval_eltype::Type
+    checkpointed::Bool
+    charge_cache_spill::Bool
+    checkpoint_max_ram_checkpoints::Int
+    plateau::PlateauPolicy
+end
+
+function OptimizationPolicy(; restarts::Int=8, maxiters::Int=200,
+        g_abstol::Float64=DEFAULT_G_ABSTOL, autodiff::Symbol=:auto,
+        eval_eltype::Type=Float64, checkpointed::Bool=false,
+    charge_cache_spill::Bool=false,
+        checkpoint_max_ram_checkpoints::Int=typemax(Int),
+        plateau::Union{Nothing,PlateauPolicy}=nothing)
+    OptimizationPolicy(restarts, maxiters, g_abstol, autodiff, eval_eltype,
+    checkpointed, charge_cache_spill, checkpoint_max_ram_checkpoints,
+        plateau === nothing ? disabled_plateau_policy() : plateau)
+end
+
+function optimization_policy(params::TreeParams; mode::Symbol=:production,
+        memory_profile::Symbol=:auto)
+    plateau = default_plateau_policy(params.p, DEFAULT_G_ABSTOL)
+    if mode == :production
+        if memory_profile == :low
+            return OptimizationPolicy(restarts=4, maxiters=250, g_abstol=1.0e-6,
+                autodiff=:charge_adjoint, eval_eltype=Float64, checkpointed=true,
+                charge_cache_spill=false,
+                checkpoint_max_ram_checkpoints=1, plateau=plateau)
+        elseif memory_profile == :high
+            return OptimizationPolicy(restarts=8, maxiters=200, g_abstol=1.0e-6,
+                autodiff=:adjoint, eval_eltype=Float64, checkpointed=false,
+                charge_cache_spill=false,
+                checkpoint_max_ram_checkpoints=typemax(Int), plateau=plateau)
+        elseif memory_profile == :spill
+            return OptimizationPolicy(restarts=4, maxiters=250, g_abstol=1.0e-6,
+                autodiff=:charge_adjoint, eval_eltype=Float64, checkpointed=true,
+                charge_cache_spill=true,
+                checkpoint_max_ram_checkpoints=1, plateau=plateau)
+        elseif memory_profile != :auto
+            throw(ArgumentError("memory_profile must be :auto, :low, :high, or :spill, got :$memory_profile"))
+        else
+            return OptimizationPolicy(restarts=8, maxiters=200, g_abstol=1.0e-6,
+                autodiff=params.p <= 11 ? :adjoint : :charge_adjoint,
+                eval_eltype=Float64, checkpointed=params.p >= 13,
+                charge_cache_spill=false,
+                checkpoint_max_ram_checkpoints=typemax(Int), plateau=plateau)
+        end
+    end
+    OptimizationPolicy(restarts=2, maxiters=100, g_abstol=1.0e-6,
+        autodiff=:charge_adjoint, eval_eltype=Float64, checkpointed=false,
+        charge_cache_spill=false,
+        checkpoint_max_ram_checkpoints=typemax(Int), plateau=disabled_plateau_policy())
+end
+
+optimization_policy(k::Int, D::Int, p::Int; kwargs...) = optimization_policy(TreeParams(k, D, p); kwargs...)
+
+struct OptimizationRunSpec
+    params::TreeParams
+    clause_sign::Int
+    initial_angles::Vector{QAOAAngles}
+    initial_guess_kind::Symbol
+    policy::OptimizationPolicy
+    rng::AbstractRNG
+end
+
+abstract type OptimizationEvent end
+
+struct EvaluationEvent <: OptimizationEvent
+    start_index::Int
+    evaluations::Int
+    elapsed_seconds::Float64
+    value::Float64
+    gradient_norm::Float64
+    best_value::Float64
+end
+
+struct PlateauEvent <: OptimizationEvent
+    start_index::Int
+    reason::Symbol
+    evaluations::Int
+    value_range::Float64
+    gradient_max::Float64
+    best_value::Float64
+end
+
+struct AngleSnapshotEvent <: OptimizationEvent
+    snapshot::AngleSnapshot
+end
+
+struct DepthResultEvent <: OptimizationEvent
+    result::Any
+end
+
+struct OptimizationCallbacks
+    on_event::Function
+    on_evaluation::Function
+    on_angle_snapshot::Function
+    on_depth_result::Function
+end
+
+OptimizationCallbacks(; on_event=(args...)->nothing,
+    on_evaluation=(args...)->nothing,
+    on_angle_snapshot=(args...)->nothing,
+    on_depth_result=(args...)->nothing) = OptimizationCallbacks(
+        on_event, on_evaluation, on_angle_snapshot, on_depth_result)
+
+function _emit_optimization_event!(callbacks::OptimizationCallbacks, event::OptimizationEvent)
+    try
+        callbacks.on_event(event)
+    catch e
+        @warn "on_event callback failed" exception=e
+    end
+    if event isa EvaluationEvent
+        try
+            callbacks.on_evaluation(event)
+        catch e
+            @warn "on_evaluation callback failed" exception=e
+        end
+    elseif event isa AngleSnapshotEvent
+        try
+            callbacks.on_angle_snapshot((event::AngleSnapshotEvent).snapshot)
+        catch e
+            @warn "on_angle_snapshot callback failed" exception=e
+        end
+    elseif event isa DepthResultEvent
+        try
+            callbacks.on_depth_result(event)
+        catch e
+            @warn "on_depth_result callback failed" exception=e
+        end
+    end
+    event
+end
+
+mutable struct EvaluationPlateauMonitor
+    policy::PlateauPolicy
+    params::TreeParams
+    start_index::Int
+    started_at::UInt64
+    values::Vector{Float64}
+    gnorms::Vector{Float64}
+    best::Union{Nothing,BestSoFar}
+    best_snapshot::Union{Nothing,AngleSnapshot}
+    last_value_range::Float64
+    last_gradient_max::Float64
+end
+
 struct AngleOptimizationStartResult
     kind::Symbol
     value::Float64
@@ -22,7 +224,18 @@ struct AngleOptimizationStartResult
     iterations::Int
     converged::Bool
     trace::Vector{OptimizationTraceEntry}
+    termination_reason::Symbol
+    best_evaluation::Int
+    best_gradient_norm::Float64
+    best_snapshot::Union{Nothing,AngleSnapshot}
 end
+
+AngleOptimizationStartResult(kind::Symbol, value::Float64, wall_time_seconds::Float64,
+    evaluations::Int, iterations::Int, converged::Bool,
+    trace::Vector{OptimizationTraceEntry}) = AngleOptimizationStartResult(
+        kind, value, wall_time_seconds, evaluations, iterations, converged, trace,
+        converged ? :optim_converged : :unknown, 0, NaN, nothing,
+    )
 
 const DEFAULT_G_ABSTOL = 1.0e-6
 const RELAXED_G_ABSTOL_FLOOR = 1.0e-3
@@ -30,6 +243,355 @@ const F_RELTOL = 1.0e-10
 const PLATEAU_CHECK_SECONDS = 300  # check plateau every 5 minutes wall time
 const PLATEAU_WINDOW_SIZE = 30     # rolling window of recent values for plateau detection
 const GRADIENT_PLATEAU_WINDOW = 20 # secondary: if gradient norm has been < 100×g_abstol for this many iters, exit
+
+disabled_plateau_policy() = PlateauPolicy(enabled=false)
+
+function default_plateau_policy(p::Int, g_abstol::Float64)
+    p >= 12 || return disabled_plateau_policy()
+    PlateauPolicy(
+        enabled=true,
+        min_evaluations=60,
+        value_window=PLATEAU_WINDOW_SIZE,
+        gradient_window=GRADIENT_PLATEAU_WINDOW,
+        value_range_tol=g_abstol,
+        gradient_ceiling=100 * g_abstol,
+        gradient_value_range_tol=10 * g_abstol,
+    )
+end
+
+function _timestamp_utc()
+    Dates.format(now(UTC), dateformat"yyyy-mm-ddTHH:MM:SS") * "Z"
+end
+
+function format_angles(angles::QAOAAngles)
+    join(string.(angles.γ), ';'), join(string.(angles.β), ';')
+end
+
+function parse_angles(gamma_field::AbstractString, beta_field::AbstractString)
+    gamma = parse.(Float64, split(gamma_field, ';'))
+    beta = parse.(Float64, split(beta_field, ';'))
+    length(gamma) == length(beta) || throw(ArgumentError(
+        "gamma and beta lengths differ: $(length(gamma)) != $(length(beta))"))
+    QAOAAngles(gamma, beta)
+end
+
+snapshot_csv_header() = "timestamp_utc,k,D,p,start_index,evaluations,iterations,elapsed_seconds,value,gradient_norm,plateau_value_range,plateau_gradient_max,reason,gamma,beta"
+
+function snapshot_csv_row(snapshot::AngleSnapshot)
+    gamma, beta = format_angles(snapshot.angles)
+    @sprintf("%s,%d,%d,%d,%d,%d,%d,%.6f,%.12f,%.6e,%.12e,%.6e,%s,%s,%s",
+        snapshot.timestamp_utc, snapshot.k, snapshot.D, snapshot.p,
+        snapshot.start_index, snapshot.evaluations, snapshot.iterations,
+        snapshot.elapsed_seconds, snapshot.value, snapshot.gradient_norm,
+        snapshot.plateau_value_range, snapshot.plateau_gradient_max,
+        string(snapshot.reason), gamma, beta)
+end
+
+function write_angle_snapshot!(path::AbstractString, snapshot::AngleSnapshot; append::Bool=true)
+    dir = dirname(path)
+    isempty(dir) || mkpath(dir)
+    file_exists = isfile(path)
+    mode = append && file_exists ? "a" : "w"
+    open(path, mode) do io
+        if mode == "w" || !file_exists
+            println(io, snapshot_csv_header())
+        end
+        println(io, snapshot_csv_row(snapshot))
+    end
+    snapshot
+end
+
+function write_latest_angle_snapshot!(path::AbstractString, snapshot::AngleSnapshot)
+    dir = dirname(path)
+    isempty(dir) || mkpath(dir)
+    tmp = path * ".tmp"
+    open(tmp, "w") do io
+        println(io, snapshot_csv_header())
+        println(io, snapshot_csv_row(snapshot))
+    end
+    mv(tmp, path; force=true)
+    snapshot
+end
+
+function _snapshot_from_fields(fields::AbstractVector{<:AbstractString})
+    length(fields) >= 15 || return nothing
+    k = tryparse(Int, fields[2]); k === nothing && return nothing
+    D = tryparse(Int, fields[3]); D === nothing && return nothing
+    p = tryparse(Int, fields[4]); p === nothing && return nothing
+    start_index = tryparse(Int, fields[5]); start_index === nothing && return nothing
+    evaluations = tryparse(Int, fields[6]); evaluations === nothing && return nothing
+    iterations = tryparse(Int, fields[7]); iterations === nothing && return nothing
+    elapsed = tryparse(Float64, fields[8]); elapsed === nothing && return nothing
+    value = tryparse(Float64, fields[9]); value === nothing && return nothing
+    gradient_norm = tryparse(Float64, fields[10]); gradient_norm === nothing && return nothing
+    value_range = tryparse(Float64, fields[11]); value_range === nothing && return nothing
+    gradient_max = tryparse(Float64, fields[12]); gradient_max === nothing && return nothing
+    angles = try
+        parse_angles(fields[14], fields[15])
+    catch
+        return nothing
+    end
+    AngleSnapshot(k, D, p, start_index, evaluations, iterations, elapsed, value,
+        gradient_norm, value_range, gradient_max, angles, Symbol(fields[13]),
+        String(fields[1]))
+end
+
+function read_angle_snapshots(path::AbstractString)
+    isfile(path) || return AngleSnapshot[]
+    snapshots = AngleSnapshot[]
+    for line in eachline(path)
+        isempty(line) && continue
+        startswith(line, "timestamp_utc,") && continue
+        snapshot = _snapshot_from_fields(split(line, ','))
+        snapshot === nothing && continue
+        push!(snapshots, snapshot)
+    end
+    snapshots
+end
+
+function read_best_angle_snapshot(path::AbstractString, k::Int, D::Int, p::Int;
+        start_index::Union{Int,Nothing}=nothing)
+    best = nothing
+    for snapshot in read_angle_snapshots(path)
+        snapshot.k == k && snapshot.D == D && snapshot.p == p || continue
+        start_index === nothing || snapshot.start_index == start_index || continue
+        depth(snapshot.angles) == p || continue
+        is_valid_qaoa_value(snapshot.value) || continue
+        if best === nothing || snapshot.value > best.value ||
+           (snapshot.value == best.value && snapshot.evaluations > best.evaluations)
+            best = snapshot
+        end
+    end
+    best
+end
+
+read_best_angle_snapshot(path::AbstractString, k::Int, D::Int, p::Int, start_index::Int) =
+    read_best_angle_snapshot(path, k, D, p; start_index)
+
+_angle_snapshot_history_path(dir::AbstractString) = joinpath(dir, "angle-snapshots.csv")
+_angle_snapshot_latest_path(dir::AbstractString, start_index::Int) =
+    joinpath(dir, "start-$(start_index)-latest-angle-snapshot.csv")
+
+function _persist_angle_snapshot!(history_path::Union{String,Nothing},
+        latest_path::Union{String,Nothing}, snapshot::AngleSnapshot, io_lock::ReentrantLock)
+    history_path === nothing && latest_path === nothing && return snapshot
+    try
+        lock(io_lock)
+        try
+            history_path === nothing || write_angle_snapshot!(history_path, snapshot)
+            latest_path === nothing || write_latest_angle_snapshot!(latest_path, snapshot)
+        finally
+            unlock(io_lock)
+        end
+    catch e
+        @warn "angle snapshot persistence failed" exception=e
+    end
+    snapshot
+end
+
+function _resume_guesses_from_angle_snapshots(params::TreeParams,
+        guesses::Vector{AngleOptimizationStartSpec}, snapshot_dir::Union{String,Nothing})
+    snapshot_dir === nothing && return guesses
+    resumed = copy(guesses)
+    for i in eachindex(resumed)
+        snapshot = read_best_angle_snapshot(
+            _angle_snapshot_latest_path(snapshot_dir, i), params.k, params.D, params.p, i)
+        snapshot === nothing && continue
+        resumed[i] = AngleOptimizationStartSpec(resumed[i].kind,
+            canonicalize_angles(snapshot.angles))
+    end
+    resumed
+end
+
+struct AngleRecord
+    k::Int
+    D::Int
+    p::Int
+    value::Float64
+    wall_seconds::Float64
+    angles::QAOAAngles
+    metadata::Dict{Symbol,Any}
+end
+
+abstract type ResultStore end
+
+struct CsvResultStore <: ResultStore
+    path::String
+    schema::Symbol
+end
+
+abstract type WarmStartSource end
+
+struct PreviousDepthWarmStart <: WarmStartSource
+    store::ResultStore
+    k::Int
+    D::Int
+    previous_p::Int
+end
+
+function _record_from_fields(fields::Vector{SubString{String}}, schema::Symbol)
+    if schema == :sweep
+        length(fields) >= 7 || return nothing
+        k = tryparse(Int, fields[1]); k === nothing && return nothing
+        D = tryparse(Int, fields[2]); D === nothing && return nothing
+        p = tryparse(Int, fields[3]); p === nothing && return nothing
+        value = tryparse(Float64, fields[4]); value === nothing && return nothing
+        wall = tryparse(Float64, fields[5]); wall === nothing && (wall = NaN)
+        angles = try
+            parse_angles(fields[6], fields[7])
+        catch
+            return nothing
+        end
+        return AngleRecord(k, D, p, value, wall, angles, Dict{Symbol,Any}(:schema => schema))
+    elseif schema == :swarm
+        length(fields) >= 8 || return nothing
+        k = tryparse(Int, fields[1]); k === nothing && return nothing
+        D = tryparse(Int, fields[2]); D === nothing && return nothing
+        p = tryparse(Int, fields[3]); p === nothing && return nothing
+        value = tryparse(Float64, fields[4]); value === nothing && return nothing
+        evals = tryparse(Int, fields[5])
+        wall = tryparse(Float64, fields[6]); wall === nothing && (wall = NaN)
+        angles = try
+            parse_angles(fields[7], fields[8])
+        catch
+            return nothing
+        end
+        return AngleRecord(k, D, p, value, wall, angles,
+            Dict{Symbol,Any}(:schema => schema, :evaluations => evals))
+    else
+        throw(ArgumentError("unsupported CSV result schema: $(schema)"))
+    end
+end
+
+function read_records(store::CsvResultStore)
+    isfile(store.path) || return AngleRecord[]
+    records = AngleRecord[]
+    for line in eachline(store.path)
+        startswith(line, '#') && continue
+        startswith(line, "k,") && continue
+        startswith(line, "timestamp_utc,") && continue
+        fields = split(line, ',')
+        record = _record_from_fields(fields, store.schema)
+        record === nothing && continue
+        push!(records, record)
+    end
+    records
+end
+
+function read_best_record(store::CsvResultStore, k::Int, D::Int, p::Int)
+    best = nothing
+    for record in read_records(store)
+        record.k == k && record.D == D && record.p == p || continue
+        is_valid_qaoa_value(record.value) || continue
+        if best === nothing || record.value > best.value
+            best = record
+        end
+    end
+    best
+end
+
+function append_record!(store::CsvResultStore, record::AngleRecord)
+    store.schema == :sweep || throw(ArgumentError("append_record! currently supports :sweep stores"))
+    dir = dirname(store.path)
+    isempty(dir) || mkpath(dir)
+    file_exists = isfile(store.path)
+    gamma, beta = format_angles(record.angles)
+    open(store.path, file_exists ? "a" : "w") do io
+        if !file_exists
+            println(io, "k,D,p,ctilde,wall_seconds,gamma,beta")
+        end
+        @printf(io, "%d,%d,%d,%.12f,%.1f,%s,%s\n",
+            record.k, record.D, record.p, record.value, record.wall_seconds,
+            gamma, beta)
+    end
+    record
+end
+
+function resolve_warm_start(source::PreviousDepthWarmStart, target_p::Int)
+    record = read_best_record(source.store, source.k, source.D, source.previous_p)
+    record === nothing && return nothing
+    extend_angles(record.angles, target_p)
+end
+
+function EvaluationPlateauMonitor(policy::PlateauPolicy, params::TreeParams, start_index::Int)
+    EvaluationPlateauMonitor(policy, params, start_index, time_ns(), Float64[], Float64[],
+        nothing, nothing, Inf, Inf)
+end
+
+function _push_window!(values::Vector{Float64}, value::Float64, max_length::Int)
+    push!(values, value)
+    if length(values) > max_length
+        popfirst!(values)
+    end
+    values
+end
+
+function _snapshot_from_best(monitor::EvaluationPlateauMonitor, reason::Symbol, iterations::Int=0)
+    best = monitor.best
+    best === nothing && return nothing
+    angles = angles_from_vector(best.angle_values, monitor.params.p) |> canonicalize_angles
+    AngleSnapshot(
+        monitor.params.k,
+        monitor.params.D,
+        monitor.params.p,
+        monitor.start_index,
+        best.evaluation,
+        iterations,
+        best.elapsed_seconds,
+        best.value,
+        best.gradient_norm,
+        monitor.last_value_range,
+        monitor.last_gradient_max,
+        angles,
+        reason,
+        _timestamp_utc(),
+    )
+end
+
+function observe_evaluation!(monitor::EvaluationPlateauMonitor, evaluations::Int,
+                             value::Float64, gradient_norm::Float64,
+                             angle_values::AbstractVector{<:Real}; iterations::Int=0)
+    updated_best = false
+    if is_valid_qaoa_value(value) && isfinite(gradient_norm)
+        elapsed = (time_ns() - monitor.started_at) / 1.0e9
+        if monitor.best === nothing || value > monitor.best.value ||
+           (value == monitor.best.value && gradient_norm < monitor.best.gradient_norm)
+            monitor.best = BestSoFar(value, Float64.(angle_values), gradient_norm,
+                evaluations, elapsed)
+            monitor.best_snapshot = _snapshot_from_best(monitor, :best_seen, iterations)
+            updated_best = true
+        end
+
+        policy = monitor.policy
+        if policy.enabled
+            _push_window!(monitor.values, value, policy.value_window)
+            _push_window!(monitor.gnorms, gradient_norm, policy.gradient_window)
+
+            if evaluations >= policy.min_evaluations && length(monitor.values) == policy.value_window
+                monitor.last_value_range = maximum(monitor.values) - minimum(monitor.values)
+                if monitor.last_value_range < policy.value_range_tol
+                    monitor.best_snapshot = _snapshot_from_best(monitor, :value_plateau, iterations)
+                    return (:value_plateau, updated_best)
+                end
+            end
+
+            if evaluations >= policy.min_evaluations &&
+               length(monitor.gnorms) == policy.gradient_window &&
+               length(monitor.values) >= policy.gradient_window
+                monitor.last_gradient_max = maximum(monitor.gnorms)
+                recent_values = monitor.values[end-policy.gradient_window+1:end]
+                monitor.last_value_range = maximum(recent_values) - minimum(recent_values)
+                if monitor.last_gradient_max < policy.gradient_ceiling &&
+                   monitor.last_value_range < policy.gradient_value_range_tol
+                    monitor.best_snapshot = _snapshot_from_best(monitor, :gradient_plateau, iterations)
+                    return (:gradient_plateau, updated_best)
+                end
+            end
+        end
+    end
+
+    (nothing, updated_best)
+end
 
 """
     plateau_chunk_size(p) -> Int
@@ -64,7 +626,24 @@ struct AngleOptimizationResult
     best_start_kind::Symbol
     g_abstol::Float64
     start_results::Vector{AngleOptimizationStartResult}
+    termination_reason::Symbol
+    best_evaluation::Int
+    best_gradient_norm::Float64
+    plateau_value_range::Float64
+    plateau_gradient_max::Float64
+    best_snapshot::Union{Nothing,AngleSnapshot}
 end
+
+AngleOptimizationResult(angles::QAOAAngles, value::Float64, wall_time_seconds::Float64,
+    best_start_wall_time_seconds::Float64, evaluations::Int, starts::Int,
+    iterations::Int, converged::Bool, restarts::Int, maxiters::Int,
+    retry_count::Int, best_start_kind::Symbol, g_abstol::Float64,
+    start_results::Vector{AngleOptimizationStartResult}) = AngleOptimizationResult(
+        angles, value, wall_time_seconds, best_start_wall_time_seconds,
+        evaluations, starts, iterations, converged, restarts, maxiters,
+        retry_count, best_start_kind, g_abstol, start_results,
+        converged ? :optim_converged : :unknown, 0, NaN, Inf, Inf, nothing,
+    )
 
 default_clause_sign(k::Int) = k == 2 ? -1 : 1
 
@@ -131,6 +710,30 @@ function extend_angles(
         [previous.γ; fill(last(previous.γ), extra)],
         [previous.β; fill(last(previous.β), extra)],
     )
+end
+
+# ── Chebyshev polynomial helpers ─────────────────────────────────────────
+
+"""
+    _chebyshev_basis(t, deg)
+
+Evaluate Chebyshev polynomials T₀..T_deg at points `t ∈ [0, 1]`.
+Returns a `(length(t), deg+1)` matrix.
+"""
+function _chebyshev_basis(t::AbstractVector{<:Real}, deg::Int)
+    n = length(t)
+    B = Matrix{Float64}(undef, n, deg + 1)
+    u = @. 2.0 * t - 1.0  # map [0,1] → [-1,1]
+    @inbounds for i in 1:n
+        B[i, 1] = 1.0
+        if deg ≥ 1
+            B[i, 2] = u[i]
+        end
+        for j in 3:deg+1
+            B[i, j] = 2.0 * u[i] * B[i, j-1] - B[i, j-2]
+        end
+    end
+    B
 end
 
 function build_initial_guesses(
@@ -249,6 +852,164 @@ function merge_optimization_results(
     )
 end
 
+# ── Chebyshev reparameterized optimization ───────────────────────────────
+
+"""
+    _angles_to_cheb_coeffs(angles, n_c)
+
+Project `p` angles into `n_c` Chebyshev coefficients via least-squares fit
+at positions `t_i = (i-0.5)/p` on `[0,1]`.
+"""
+function _angles_to_cheb_coeffs(angles::AbstractVector{<:Real}, n_c::Int)
+    p = length(angles)
+    t = [(i - 0.5) / p for i in 1:p]
+    deg = min(n_c - 1, p - 1)
+    B = _chebyshev_basis(t, deg)
+    c = B \ Float64.(angles)
+    # Pad with zeros if n_c > p
+    n_c > length(c) ? vcat(c, zeros(n_c - length(c))) : c[1:n_c]
+end
+
+"""
+    _cheb_coeffs_to_angles(coeffs, p)
+
+Reconstruct `p` angles from Chebyshev coefficients at positions `t_i = (i-0.5)/p`.
+"""
+function _cheb_coeffs_to_angles(coeffs::AbstractVector{<:Real}, p::Int)
+    n_c = length(coeffs)
+    t = [(i - 0.5) / p for i in 1:p]
+    B = _chebyshev_basis(t, n_c - 1)
+    B * coeffs
+end
+
+"""
+    optimize_angles_chebyshev(params; n_coeffs=nothing, kwargs...) -> AngleOptimizationResult
+
+Optimize QAOA angles using Chebyshev reparameterization.
+
+Instead of optimizing `2p` angle parameters directly, optimizes `2·n_c`
+Chebyshev coefficients, where `n_c ≪ p`.  The angles are reconstructed as
+`γᵢ = Σⱼ cⱼ · Tⱼ(tᵢ)` with `tᵢ = (i-0.5)/p` on `[0,1]`.
+
+This reduces the search space dimensionality from `2p` to `2·n_c`, making
+the optimizer converge faster and more reliably at high depth.  The
+Chebyshev basis naturally produces smooth angle curves.
+
+Uses the charge evaluator with ForwardDiff for gradient computation.
+
+# Keywords
+- `n_coeffs`: number of Chebyshev coefficients per angle array
+  (default: `max(3, ceil(Int, 2√p))`)
+- `clause_sign`: ±1 (default by problem type)
+- `restarts`: number of random restarts
+- `maxiters`: per-start iteration cap
+- `initial_guess`: optional `QAOAAngles` starting point (projected to Chebyshev basis)
+- `g_abstol`: gradient tolerance
+"""
+function optimize_angles_chebyshev(
+    params::TreeParams;
+    n_coeffs::Union{Nothing,Int}=nothing,
+    clause_sign::Int=default_clause_sign(params.k),
+    restarts::Int=4,
+    maxiters::Int=400,
+    initial_guess::Union{Nothing,QAOAAngles}=nothing,
+    rng=Random.default_rng(),
+    g_abstol::Float64=DEFAULT_G_ABSTOL,
+)::AngleOptimizationResult
+    p = params.p
+    validate_clause_sign(clause_sign)
+
+    # Default n_coeffs: enough to capture the angle structure, not too many
+    nc = n_coeffs !== nothing ? n_coeffs : max(3, ceil(Int, 2 * sqrt(p)))
+
+    # Build Chebyshev basis matrix (p × nc)
+    t = [(i - 0.5) / p for i in 1:p]
+    B = _chebyshev_basis(t, nc - 1)
+
+    # Objective: coeffs (2·nc vector) → -c̃
+    function objective(x)
+        γ_coeffs = @view x[1:nc]
+        β_coeffs = @view x[nc+1:2nc]
+        γ = B * γ_coeffs
+        β = B * β_coeffs
+        angles = QAOAAngles(γ, β)
+        -charge_expectation(params, angles; clause_sign)
+    end
+
+    # Initial point
+    if initial_guess !== nothing
+        γ0 = _angles_to_cheb_coeffs(initial_guess.γ, nc)
+        β0 = _angles_to_cheb_coeffs(initial_guess.β, nc)
+    else
+        γ0 = zeros(nc)
+        β0 = zeros(nc)
+    end
+
+    started_at = time_ns()
+    best_value = -Inf
+    best_x = [γ0; β0]
+    best_result = nothing
+    all_start_results = AngleOptimizationStartResult[]
+
+    for start_idx in 1:(1 + restarts)
+        x0 = if start_idx == 1 && initial_guess !== nothing
+            [γ0; β0]
+        else
+            # Random start in Chebyshev coefficient space
+            # Scale: first few coefficients larger (they set the mean/slope)
+            scale = [1.0 / (1 + 0.5j) for j in 0:nc-1]
+            [2π .* scale .* randn(rng, nc); π .* scale .* randn(rng, nc)]
+        end
+
+        local_result = Optim.optimize(
+            objective,
+            x0,
+            Optim.LBFGS(),
+            Optim.Options(iterations=maxiters, g_abstol=g_abstol, f_reltol=F_RELTOL,
+                          store_trace=true, show_trace=false);
+            autodiff=AutoForwardDiff(),
+        )
+
+        val = -Optim.minimum(local_result)
+        elapsed = (time_ns() - started_at) / 1.0e9
+        kind = (start_idx == 1 && initial_guess !== nothing) ? :warm : :random
+        optim_trace = Optim.trace(local_result)
+        trace = [OptimizationTraceEntry(s.iteration, s.value, s.g_norm) for s in optim_trace]
+        push!(all_start_results, AngleOptimizationStartResult(
+            kind, val, elapsed, Optim.f_calls(local_result),
+            Optim.iterations(local_result), Optim.converged(local_result), trace))
+
+        if is_valid_qaoa_value(val) && val > best_value
+            best_value = val
+            best_x = Optim.minimizer(local_result)
+            best_result = local_result
+        end
+    end
+
+    # Reconstruct best angles
+    γ_best = B * best_x[1:nc]
+    β_best = B * best_x[nc+1:2nc]
+    best_angles = QAOAAngles(γ_best, β_best) |> canonicalize_angles
+
+    # Re-evaluate at best point for consistency
+    final_value = charge_expectation(params, best_angles; clause_sign)
+
+    total_elapsed = (time_ns() - started_at) / 1.0e9
+    total_evals = sum(r.evaluations for r in all_start_results)
+    total_iters = sum(r.iterations for r in all_start_results)
+    any_converged = any(r.converged for r in all_start_results)
+    best_start_idx = argmax(r.value for r in all_start_results)
+
+    AngleOptimizationResult(
+        best_angles, final_value, total_elapsed,
+        all_start_results[best_start_idx].wall_time_seconds,
+        total_evals, 1 + restarts, total_iters,
+        any_converged, restarts, maxiters, 0,
+        all_start_results[best_start_idx].kind, g_abstol,
+        all_start_results,
+    )
+end
+
 """
     optimize_angles(params; kwargs...) -> AngleOptimizationResult
 
@@ -261,13 +1022,24 @@ Keyword arguments:
 - `restarts`: number of additional random starts beyond any supplied seeds
 - `maxiters`: per-start optimiser iteration cap
 - `initial_guesses`: optional seeded starting points of depth `p`
-- `autodiff`: gradient method — `:adjoint` (default, fastest), `:forward` (ForwardDiff), or `:finite` (finite differences)
+- `autodiff`: gradient method:
+  - `:auto` (default) -- picks :adjoint or :charge based on depth and available memory
+  - `:charge` -- charge evaluator + central FD, low memory, fastest at high p
+  - `:adjoint` -- Basso manual adjoint, faster per-iteration at p<10 but high memory
+  - `:forward` -- ForwardDiff on Basso evaluator, slow (debugging/validation only)
 - `rng`: random number generator for restart sampling
 - `g_abstol`: gradient absolute tolerance for convergence (default: `DEFAULT_G_ABSTOL`)
 - `on_evaluation`: optional callback `(start_index, evaluations, elapsed_seconds, value, g_norm) -> nothing` throttled to at most once per 30 seconds per start
+- `evaluation_report_seconds`: throttle period for `on_evaluation` and `EvaluationEvent` emission (default: `30.0`)
+- `on_angle_snapshot`: optional callback receiving `AngleSnapshot` when best-so-far improves or plateau termination fires
+- `angle_snapshot_dir`: optional durable directory for optimizer-level angle snapshots; defaults to `checkpoint_disk_dir` when set
+- `persist_angle_snapshots`: persist best-so-far snapshots into `angle_snapshot_dir` when available (default: `true`)
+- `resume_angle_snapshots`: replace matching start guesses with the latest durable snapshot from `angle_snapshot_dir` when available (default: `true`)
 - `on_chunk`: optional callback `(start_index, iterations, trace_entries, current_angles_vector) -> nothing` called after each plateau-detection chunk for incremental trace flushing
+- `plateau_policy`: optional evaluation-level plateau policy (default: enabled at p>=12)
 - `eval_eltype`: element type for evaluation arithmetic (default: `Float64`; use `Double64` for k≥6)
 - `checkpointed`: use the CPU gradient checkpointer for adjoint evaluations
+- `charge_cache_spill`: spill charge-adjoint branch cache to disk (must be explicitly enabled)
 - `checkpoint_disk_dir`: optional parent directory for spilled checkpoint tensors
 - `checkpoint_max_ram_checkpoints`: maximum branch-tensor checkpoints to keep in RAM when spilling
 """
@@ -276,6 +1048,53 @@ Keyword arguments:
 _promote_angles(a::QAOAAngles, ::Type{Float64}) = a
 _promote_angles(a::QAOAAngles, ::Type{T}) where T<:Real = QAOAAngles(T.(a.γ), T.(a.β))
 
+function _charge_manual_adjoint_peak_bytes_estimate(p::Int)
+    # Empirical model anchored by observed p=14 RSS and cache anatomy.
+    # 4^p ComplexF64 entries are the dominant dimension.
+    n_charge = Int(4)^p
+    bytes_per_charge = n_charge * sizeof(ComplexF64)
+    ceil(Int, 13.0 * bytes_per_charge)
+end
+
+function _charge_manual_adjoint_spill_bytes_estimate(p::Int)
+    # With spill enabled we still need the largest level resident plus
+    # substantial working buffers during root/branch backward.
+    n_charge = Int(4)^p
+    bytes_per_charge = n_charge * sizeof(ComplexF64)
+    ceil(Int, 2.5 * bytes_per_charge)
+end
+
+function _preflight_charge_memory!(params::TreeParams, autodiff::Symbol,
+        charge_cache_spill::Bool, checkpoint_disk_dir::Union{String,Nothing})
+    autodiff == :charge_adjoint || return
+
+    available = Sys.total_memory()
+    reserve = floor(Int, 0.8 * available)
+    peak_no_spill = _charge_manual_adjoint_peak_bytes_estimate(params.p)
+    peak_spill = _charge_manual_adjoint_spill_bytes_estimate(params.p)
+
+    if charge_cache_spill
+        checkpoint_disk_dir === nothing && throw(ArgumentError(
+            "charge_cache_spill=true requires checkpoint_disk_dir; set a fast local path and rerun."))
+        if peak_spill > reserve
+            throw(ArgumentError(
+                "Preflight memory check failed for charge adjoint spill mode at p=$(params.p): " *
+                "estimated peak $(round(peak_spill / 2.0^30, digits=1)) GB exceeds 80% of system RAM " *
+                "($(round(reserve / 2.0^30, digits=1)) GB). Use a bigger machine."))
+        end
+        return
+    end
+
+    if peak_no_spill > reserve
+        throw(ArgumentError(
+            "Preflight memory check failed for autodiff=:charge_adjoint at p=$(params.p): " *
+            "estimated peak $(round(peak_no_spill / 2.0^30, digits=1)) GB exceeds 80% of system RAM " *
+            "($(round(reserve / 2.0^30, digits=1)) GB). " *
+            "Use a bigger machine or explicitly opt in to spill mode with memory_profile=:spill " *
+            "(or charge_cache_spill=true and checkpoint_disk_dir=<path>)."))
+    end
+end
+
 function optimize_angles(
     params::TreeParams;
     clause_sign::Int=default_clause_sign(params.k),
@@ -283,23 +1102,66 @@ function optimize_angles(
     maxiters::Int=200,
     initial_guesses::AbstractVector{<:QAOAAngles}=QAOAAngles[],
     initial_guess_kind::Symbol=:seeded,
-    autodiff::Symbol=:adjoint,
+    autodiff::Symbol=:auto,
     rng=Random.default_rng(),
     g_abstol::Float64=DEFAULT_G_ABSTOL,
     on_evaluation=nothing,
+    evaluation_report_seconds::Float64=30.0,
+    on_angle_snapshot=nothing,
+    angle_snapshot_dir::Union{String,Nothing}=nothing,
+    persist_angle_snapshots::Bool=true,
+    resume_angle_snapshots::Bool=true,
     on_chunk=nothing,
+    plateau_policy::Union{Nothing,PlateauPolicy}=nothing,
     eval_eltype::Type=Float64,
     gpu_evaluator::Union{Function,Nothing}=nothing,
     checkpointed::Bool=false,
+    charge_cache_spill::Bool=false,
     checkpoint_disk_dir::Union{String,Nothing}=nothing,
     checkpoint_max_ram_checkpoints::Int=typemax(Int),
+    callbacks::OptimizationCallbacks=OptimizationCallbacks(),
 )::AngleOptimizationResult
     validate_clause_sign(clause_sign)
+    evaluation_report_seconds ≥ 0.0 || throw(ArgumentError(
+        "evaluation_report_seconds must be ≥ 0, got $evaluation_report_seconds"))
     maxiters ≥ 1 || throw(ArgumentError("maxiters must be ≥ 1, got $maxiters"))
+    autodiff in (:auto, :adjoint, :charge, :charge_adjoint, :forward) || throw(ArgumentError(
+        "autodiff must be :auto, :adjoint, :charge, :charge_adjoint, or :forward, got :$autodiff"))
 
+    # Auto-select: use adjoint when it fits in memory and is faster (p <= 11),
+    # charge_adjoint for high p (manual adjoint, ~5x fwd cost),
+    # charge (FD) as fallback.
+    if autodiff == :auto
+        if gpu_evaluator !== nothing
+            autodiff = :adjoint
+        else
+            N_est = basso_configuration_count(params.p)
+            est_bytes = 40 * N_est * sizeof(ComplexF64)
+            available = Sys.total_memory() * 0.6
+            autodiff = (est_bytes < available && params.p <= 11) ? :adjoint : :charge_adjoint
+        end
+    end
+
+    _preflight_charge_memory!(params, autodiff, charge_cache_spill, checkpoint_disk_dir)
+
+    durable_snapshot_dir = angle_snapshot_dir === nothing ? checkpoint_disk_dir : angle_snapshot_dir
     guesses = build_initial_guesses(params.p, initial_guesses, initial_guess_kind, restarts, rng)
+    guesses = resume_angle_snapshots ?
+              _resume_guesses_from_angle_snapshots(params, guesses, durable_snapshot_dir) :
+              guesses
+    effective_plateau_policy = plateau_policy === nothing ?
+                               default_plateau_policy(params.p, g_abstol) :
+                               plateau_policy
 
     optimization_started_at = time_ns()
+
+    if checkpoint_disk_dir !== nothing && (checkpointed || charge_cache_spill)
+        mkpath(checkpoint_disk_dir)
+    end
+    if persist_angle_snapshots && durable_snapshot_dir !== nothing
+        mkpath(durable_snapshot_dir)
+    end
+    snapshot_io_lock = ReentrantLock()
 
     # Memory-bounded concurrency: limit parallel restarts to avoid OOM.
     # At p=11 each adjoint cache is ~5-7 GB; running too many in parallel
@@ -325,18 +1187,58 @@ function optimize_angles(
             started_at = time_ns()
             last_value = Ref(NaN)
             last_g_norm = Ref(NaN)
-            local_checkpoint_dir = checkpointed && checkpoint_disk_dir !== nothing ?
+            eval_monitor = EvaluationPlateauMonitor(effective_plateau_policy, params, i)
+            local_checkpoint_dir = (checkpoint_disk_dir !== nothing && (checkpointed || charge_cache_spill)) ?
                                    mktempdir(checkpoint_disk_dir; prefix="qaoa-start$(i)-") :
                                    nothing
 
+        function emit_snapshot(snapshot::Union{Nothing,AngleSnapshot})
+            snapshot === nothing && return
+            if persist_angle_snapshots && durable_snapshot_dir !== nothing
+                _persist_angle_snapshot!(
+                    _angle_snapshot_history_path(durable_snapshot_dir),
+                    _angle_snapshot_latest_path(durable_snapshot_dir, snapshot.start_index),
+                    snapshot,
+                    snapshot_io_lock,
+                )
+            end
+            if !isnothing(on_angle_snapshot)
+                try
+                    on_angle_snapshot(snapshot)
+                catch e
+                    @warn "on_angle_snapshot callback failed" exception=e
+                end
+            end
+            _emit_optimization_event!(callbacks, AngleSnapshotEvent(snapshot))
+        end
+
+        function record_core_progress!(evaluations::Int, value::Float64,
+                                       gnorm::Float64, values; iterations::Int=0)
+            stop_reason, updated_best = observe_evaluation!(eval_monitor, evaluations,
+                value, gnorm, values; iterations)
+            updated_best && emit_snapshot(eval_monitor.best_snapshot)
+            if stop_reason !== nothing
+                best_value = eval_monitor.best === nothing ? NaN : eval_monitor.best.value
+                _emit_optimization_event!(callbacks, PlateauEvent(i, stop_reason,
+                    evaluations, eval_monitor.last_value_range,
+                    eval_monitor.last_gradient_max, best_value))
+                emit_snapshot(eval_monitor.best_snapshot)
+                throw(PlateauStop(stop_reason))
+            end
+        end
+
         function maybe_report_progress!()
-            isnothing(on_evaluation) && return
             now = time_ns()
             elapsed_since_report = (now - last_progress_at[]) / 1.0e9
-            elapsed_since_report ≥ 30.0 || return
+            elapsed_since_report ≥ evaluation_report_seconds || return
             last_progress_at[] = now
             elapsed = (now - started_at) / 1.0e9
-            on_evaluation(i, local_evaluations[], elapsed, last_value[], last_g_norm[])
+            if !isnothing(on_evaluation)
+                on_evaluation(i, local_evaluations[], elapsed, last_value[], last_g_norm[])
+            end
+            best_value = eval_monitor.best === nothing ? NaN : eval_monitor.best.value
+            _emit_optimization_event!(callbacks, EvaluationEvent(i,
+                local_evaluations[], elapsed, last_value[], last_g_norm[], best_value))
         end
 
         if autodiff == :adjoint
@@ -428,6 +1330,7 @@ function optimize_angles(
                 G[params.p+1:2*params.p] .= .-Float64.(βg)
                 last_g_norm[] = maximum(abs, G)
                 last_value[] = fval
+                record_core_progress!(local_evaluations[], fval, last_g_norm[], values)
                 -fval
             end
 
@@ -519,29 +1422,46 @@ function optimize_angles(
                 return false  # keep going
             end
 
-            result = Optim.optimize(
-                od,
-                angle_vector(guess.angles),
-                Optim.LBFGS(),
-                Optim.Options(
-                    iterations=maxiters,
-                    g_abstol=g_abstol,
-                    f_reltol=F_RELTOL,
-                    store_trace=false,  # we track trace ourselves in the callback
-                    show_trace=false,
-                    callback=plateau_callback,
-                ),
-            )
+            result = nothing
+            termination_reason = :unknown
+            try
+                result = Optim.optimize(
+                    od,
+                    angle_vector(guess.angles),
+                    Optim.LBFGS(),
+                    Optim.Options(
+                        iterations=maxiters,
+                        g_abstol=g_abstol,
+                        f_reltol=F_RELTOL,
+                        store_trace=false,  # we track trace ourselves in the callback
+                        show_trace=false,
+                        callback=plateau_callback,
+                    ),
+                )
+            catch e
+                if e isa PlateauStop
+                    termination_reason = e.reason
+                    converged_flag = true
+                else
+                    rethrow()
+                end
+            end
 
             # If Optim converged via g_abstol (not our plateau), mark it
-            if Optim.converged(result) && !converged_flag
+            if result !== nothing && Optim.converged(result) && !converged_flag
                 converged_flag = true
+                termination_reason = :optim_converged
             end
+
+            final_iterations = result === nothing ? iteration_count[] : Optim.iterations(result)
+            final_minimizer = result === nothing && eval_monitor.best_snapshot !== nothing ?
+                              angle_vector(eval_monitor.best_snapshot.angles) :
+                              Optim.minimizer(result)
 
             # Final on_chunk flush
             if !isnothing(on_chunk)
                 try
-                    on_chunk(i, Optim.iterations(result), all_trace, Optim.minimizer(result))
+                    on_chunk(i, final_iterations, all_trace, final_minimizer)
                 catch e
                     @warn "on_chunk callback failed" exception=e
                 end
@@ -549,8 +1469,10 @@ function optimize_angles(
 
             # Package results — re-evaluate using normalized path to avoid overflow
             elapsed_seconds_start = (time_ns() - started_at) / 1.0e9
-            candidate_angles_start = angles_from_vector(Optim.minimizer(result), params.p) |> canonicalize_angles
-            if gpu_evaluator !== nothing
+            candidate_angles_start = angles_from_vector(final_minimizer, params.p) |> canonicalize_angles
+            if termination_reason in (:value_plateau, :gradient_plateau) && eval_monitor.best_snapshot !== nothing
+                candidate_value_start = eval_monitor.best_snapshot.value
+            elseif gpu_evaluator !== nothing
                 candidate_value_start, _, _ = gpu_evaluator(params,
                     _promote_angles(candidate_angles_start, eval_eltype); clause_sign)
             elseif checkpointed
@@ -573,48 +1495,165 @@ function optimize_angles(
                 candidate_value_start,
                 elapsed_seconds_start,
                 local_evaluations[],
-                Optim.iterations(result),
+                final_iterations,
                 converged_flag,
                 all_trace,
+                termination_reason,
+                eval_monitor.best_snapshot === nothing ? 0 : eval_monitor.best_snapshot.evaluations,
+                eval_monitor.best_snapshot === nothing ? NaN : eval_monitor.best_snapshot.gradient_norm,
+                eval_monitor.best_snapshot,
             )
             per_start_results[i] = (candidate_angles_start, candidate_value_start, start_result)
         else
-            # Non-adjoint path (ForwardDiff or finite differences) — no chunking
+            # Non-adjoint path — no chunking
+            result = nothing
+            termination_reason = :unknown
             function objective(values)
                 local_evaluations[] += 1
                 maybe_report_progress!()
                 candidate = angles_from_vector(values, params.p)
-                -qaoa_expectation(params, candidate; clause_sign)
+                if autodiff in (:charge, :charge_adjoint)
+                    -charge_expectation(params, candidate; clause_sign)
+                else
+                    # :forward uses the normalized Basso evaluator (not the raw light-cone evaluator)
+                    -basso_expectation_normalized(params, candidate; clause_sign)
+                end
             end
 
-            result = Optim.optimize(
-                objective,
-                angle_vector(guess.angles),
-                Optim.LBFGS(),
-                Optim.Options(iterations=maxiters, g_abstol=g_abstol, f_reltol=F_RELTOL, store_trace=true, show_trace=false);
-                autodiff=autodiff == :forward ? AutoForwardDiff() : :finite,
-            )
+            if autodiff == :charge_adjoint
+                # Charge manual adjoint: exact gradients in ~5x forward cost.
+                p = params.p
+                Diagnostics.diag_info("optimize_angles: using :charge_adjoint, p=$p, maxiters=$maxiters")
+                function cadj_g!(G, values)
+                    candidate = angles_from_vector(values, p)
+                    _, γg, βg = charge_expectation_and_gradient(params, candidate;
+                        clause_sign,
+                        cache_disk_dir=charge_cache_spill ? local_checkpoint_dir : nothing)
+                    G[1:p] .= .-γg
+                    G[p+1:2p] .= .-βg
+                    last_g_norm[] = maximum(abs, G)
+                end
+                function cadj_fg!(G, values)
+                    candidate = angles_from_vector(values, p)
+                    t = @elapsed begin
+                        val, γg, βg = charge_expectation_and_gradient(params, candidate;
+                            clause_sign,
+                            cache_disk_dir=charge_cache_spill ? local_checkpoint_dir : nothing)
+                    end
+                    G[1:p] .= .-γg
+                    G[p+1:2p] .= .-βg
+                    last_g_norm[] = maximum(abs, G)
+                    last_value[] = val
+                    local_evaluations[] += 1
+                    Diagnostics.diag_progress("p=$p", "eval $(local_evaluations[]): ctilde=$(round(val, digits=10)) gnorm=$(round(last_g_norm[], sigdigits=2)) $(round(t, digits=1))s RSS=$(round(Diagnostics.rss_gb(), digits=1))GB")
+                    record_core_progress!(local_evaluations[], Float64(val), last_g_norm[], values)
+                    maybe_report_progress!()
+                    -val
+                end
+                od = Optim.OnceDifferentiable(objective, cadj_g!, cadj_fg!, angle_vector(guess.angles))
+                try
+                    result = Optim.optimize(
+                        od,
+                        angle_vector(guess.angles),
+                        Optim.LBFGS(),
+                        Optim.Options(iterations=maxiters, g_abstol=g_abstol, f_reltol=F_RELTOL,
+                                      store_trace=true, show_trace=false),
+                    )
+                catch e
+                    if e isa PlateauStop
+                        termination_reason = e.reason
+                    else
+                        rethrow()
+                    end
+                end
+            elseif autodiff == :charge
+                # Charge mode: central finite differences for gradients.
+                # Cost: (4p+1) × charge_eval — no Dual number overhead.
+                h = 1.5e-8  # √eps for Float64
+                function charge_g!(G, values)
+                    for j in eachindex(values)
+                        values[j] += h
+                        fp = objective(values)
+                        values[j] -= 2h
+                        fm = objective(values)
+                        values[j] += h  # restore
+                        G[j] = (fp - fm) / (2h)
+                    end
+                    last_g_norm[] = maximum(abs, G)
+                end
+                function charge_fg!(G, values)
+                    f0 = objective(values)
+                    for j in eachindex(values)
+                        values[j] += h
+                        fp = objective(values)
+                        values[j] -= 2h
+                        fm = objective(values)
+                        values[j] += h  # restore
+                        G[j] = (fp - fm) / (2h)
+                    end
+                    last_g_norm[] = maximum(abs, G)
+                    last_value[] = -f0
+                    f0
+                end
+                od = Optim.OnceDifferentiable(objective, charge_g!, charge_fg!, angle_vector(guess.angles))
+                result = Optim.optimize(
+                    od,
+                    angle_vector(guess.angles),
+                    Optim.LBFGS(),
+                    Optim.Options(iterations=maxiters, g_abstol=g_abstol, f_reltol=F_RELTOL,
+                                  store_trace=true, show_trace=false),
+                )
+            else
+                result = Optim.optimize(
+                    objective,
+                    angle_vector(guess.angles),
+                    Optim.LBFGS(),
+                    Optim.Options(iterations=maxiters, g_abstol=g_abstol, f_reltol=F_RELTOL,
+                                  store_trace=true, show_trace=false);
+                    autodiff=AutoForwardDiff(),
+                )
+            end
 
             elapsed_seconds = (time_ns() - started_at) / 1.0e9
-            candidate_angles = angles_from_vector(Optim.minimizer(result), params.p) |> canonicalize_angles
-            candidate_value = basso_expectation_normalized(params, candidate_angles; clause_sign)
+            if result === nothing && termination_reason in (:value_plateau, :gradient_plateau) &&
+               eval_monitor.best_snapshot !== nothing
+                candidate_angles = eval_monitor.best_snapshot.angles
+                candidate_value = eval_monitor.best_snapshot.value
+                trace_entries = OptimizationTraceEntry[]
+                result_iterations = 0
+                result_converged = true
+            else
+                candidate_angles = angles_from_vector(Optim.minimizer(result), params.p) |> canonicalize_angles
+                candidate_value = if autodiff in (:charge, :charge_adjoint)
+                    charge_expectation(params, candidate_angles; clause_sign)
+                else
+                    basso_expectation_normalized(params, candidate_angles; clause_sign)
+                end
+                optim_trace = Optim.trace(result)
+                trace_entries = [
+                    OptimizationTraceEntry(state.iteration, state.value, state.g_norm)
+                    for state in optim_trace
+                ]
+                result_iterations = Optim.iterations(result)
+                result_converged = Optim.converged(result)
+                result_converged && (termination_reason = :optim_converged)
+            end
             if !is_valid_qaoa_value(candidate_value)
                 @warn "start $(i) ($(guess.kind), non-adjoint) produced invalid value $(candidate_value); marking failed"
                 candidate_value = -Inf
             end
-            optim_trace = Optim.trace(result)
-            trace_entries = [
-                OptimizationTraceEntry(state.iteration, state.value, state.g_norm)
-                for state in optim_trace
-            ]
             start_result = AngleOptimizationStartResult(
                 guess.kind,
                 candidate_value,
                 elapsed_seconds,
                 local_evaluations[],
-                Optim.iterations(result),
-                Optim.converged(result),
+                result_iterations,
+                result_converged,
                 trace_entries,
+                termination_reason,
+                eval_monitor.best_snapshot === nothing ? 0 : eval_monitor.best_snapshot.evaluations,
+                eval_monitor.best_snapshot === nothing ? NaN : eval_monitor.best_snapshot.gradient_norm,
+                eval_monitor.best_snapshot,
             )
             per_start_results[i] = (candidate_angles, candidate_value, start_result)
         end
@@ -652,7 +1691,34 @@ function optimize_angles(
         best_start.kind,
         g_abstol,
         start_results,
+        best_start.termination_reason,
+        best_start.best_evaluation,
+        best_start.best_gradient_norm,
+        best_start.best_snapshot === nothing ? Inf : best_start.best_snapshot.plateau_value_range,
+        best_start.best_snapshot === nothing ? Inf : best_start.best_snapshot.plateau_gradient_max,
+        best_start.best_snapshot,
     )
+end
+
+function run_optimization(spec::OptimizationRunSpec; callbacks::OptimizationCallbacks=OptimizationCallbacks())
+    result = optimize_angles(spec.params;
+        clause_sign=spec.clause_sign,
+        restarts=spec.policy.restarts,
+        maxiters=spec.policy.maxiters,
+        initial_guesses=spec.initial_angles,
+        initial_guess_kind=spec.initial_guess_kind,
+        autodiff=spec.policy.autodiff,
+        rng=spec.rng,
+        g_abstol=spec.policy.g_abstol,
+        plateau_policy=spec.policy.plateau,
+        eval_eltype=spec.policy.eval_eltype,
+        checkpointed=spec.policy.checkpointed,
+        charge_cache_spill=spec.policy.charge_cache_spill,
+        checkpoint_max_ram_checkpoints=spec.policy.checkpoint_max_ram_checkpoints,
+        callbacks=callbacks,
+    )
+    _emit_optimization_event!(callbacks, DepthResultEvent(result))
+    result
 end
 
 function validate_depth_sequence(p_values)
@@ -679,11 +1745,13 @@ function optimize_depth_sequence(
     clause_sign::Int=default_clause_sign(k),
     restarts::Int=8,
     maxiters::Int=200,
-    autodiff::Symbol=:adjoint,
+    autodiff::Symbol=:auto,
     rng=Random.default_rng(),
     on_result=nothing,
     on_evaluation=nothing,
+    on_angle_snapshot=nothing,
     on_chunk=nothing,
+    plateau_policy::Union{Nothing,PlateauPolicy}=nothing,
     warm_start::Union{Nothing,QAOAAngles}=nothing,
     eval_eltype::Type=Float64,
     gpu_evaluator::Union{Function,Nothing}=nothing,
@@ -711,7 +1779,9 @@ function optimize_depth_sequence(
             rng,
             g_abstol=start_tol,
             on_evaluation,
+            on_angle_snapshot,
             on_chunk,
+            plateau_policy,
             eval_eltype,
             gpu_evaluator,
             checkpointed,
@@ -739,7 +1809,9 @@ function optimize_depth_sequence(
                     rng,
                     g_abstol=escalated_tol,
                     on_evaluation,
+                    on_angle_snapshot,
                     on_chunk,
+                    plateau_policy,
                     eval_eltype,
                     gpu_evaluator,
                     checkpointed,
@@ -830,7 +1902,7 @@ function swarm_optimize(
     burst_iters::Int=20,
     cull_fraction::Float64=0.5,
     random_fraction::Float64=0.4,
-    autodiff::Symbol=:adjoint,
+    autodiff::Symbol=:auto,
     rng=Random.default_rng(),
     g_abstol::Float64=DEFAULT_G_ABSTOL,
     on_generation=nothing,

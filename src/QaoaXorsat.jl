@@ -1,5 +1,9 @@
 module QaoaXorsat
 
+# Runtime diagnostics (controlled by QAOA_DIAG env vars)
+include("diagnostics.jl")
+using .Diagnostics
+
 # Tree structure
 include("tree.jl")
 export TreeParams
@@ -37,9 +41,16 @@ include("maxcut_transfer.jl")
 
 # Optimisation helpers
 include("optimization.jl")
-export AngleOptimizationResult
+export AngleOptimizationResult, AngleSnapshot, PlateauPolicy, OptimizationPolicy
+export OptimizationRunSpec, OptimizationCallbacks, OptimizationEvent
+export EvaluationEvent, PlateauEvent, AngleSnapshotEvent, DepthResultEvent
+export run_optimization
+export AngleRecord, CsvResultStore, PreviousDepthWarmStart
 export canonicalize_angles, random_angles, extend_angles
-export optimize_angles, optimize_depth_sequence, swarm_optimize
+export format_angles, parse_angles, snapshot_csv_header, snapshot_csv_row, write_angle_snapshot!
+export write_latest_angle_snapshot!, read_angle_snapshots, read_best_angle_snapshot
+export read_records, read_best_record, append_record!, resolve_warm_start
+export optimize_angles, optimize_depth_sequence, swarm_optimize, optimize_angles_chebyshev
 
 # QAOA evaluation
 include("qaoa.jl")
@@ -57,6 +68,14 @@ export basso_expectation_and_gradient_checkpointed, basso_expectation_checkpoint
 include("reduced_basis.jl")
 export ReducedBasis, basso_branch_tensor_reduced, basso_expectation_reduced
 export expand_symmetric
+
+# Charge decomposition evaluator — O(p·4^p)
+include("charge.jl")
+export charge_parity_expectation, charge_expectation
+
+# Manual charge adjoint — exact gradients in ~3x forward cost
+include("charge_manual_adjoint.jl")
+export charge_expectation_and_gradient
 
 # Spectral analysis of branch tensor iteration
 include("spectral_analysis.jl")

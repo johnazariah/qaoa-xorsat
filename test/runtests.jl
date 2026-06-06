@@ -16,4 +16,6 @@ using Test
     include("test_reduced_basis.jl")
     include("test_spectral_analysis.jl")
     include("test_normalization.jl")
+    include("test_charge.jl")
+    include("test_charge_adjoint.jl")
 end
