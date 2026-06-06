@@ -1,5 +1,27 @@
 # Project Journal
 
+## Decision: Resumable Optimizer Snapshots (June 5, 2026)
+
+The p=14 reference refresh was interrupted by a macOS software update reboot
+after the reference start completed and while a perturbation start was still
+running. The result rows survived because the experiment used append-only
+start records, but the in-progress optimizer trajectory had to be replayed
+from its original seed. The spill checkpoint files were memory-management
+scratch for a single evaluation, not durable optimizer state.
+
+Decision: treat resumability as a layered concern. Run-level records remain
+the durable ledger for completed starts. Evaluation-level spill files remain
+scratch unless a future evaluation is expensive enough to justify exact
+mid-evaluation replay. The core optimizer now owns optimizer-level snapshots:
+when a durable snapshot directory is supplied, `optimize_angles` writes both
+an append-only angle snapshot history and a latest best-so-far snapshot per
+start. On rerun with the same directory, matching starts resume from the
+latest durable best angles before continuing the optimiser.
+
+This preserves most useful progress after a reboot without coupling every
+runner script to callback wiring, and it keeps the exact tensor checkpoint
+machinery focused on memory pressure rather than recovery semantics.
+
 ## Algorithmic Innovation Summary (for future methods paper)
 
 This section threads the key algorithmic innovations in the order they
@@ -144,6 +166,155 @@ Results on RTX 4060 8GB:
 
 The streaming approach unlocks p=13 F64 gradient on 16GB cards (RTX 5070),
 and p=14+ on A100/H100 (40–80 GB).
+
+---
+
+## Entry 34 — Preflight/Spill Guardrail + D=9 p=14 Completion (31 May 2026)
+
+### Summary
+
+Added explicit memory guardrails for high-depth `:charge_adjoint` runs,
+implemented explicit spill opt-in at the runner layer, fixed spill directory
+creation in threaded optimization, and completed the D=9 p=14 MaxCut run on
+the 64 GB Mac.
+
+Final D=9 p=14 result:
+- ctilde = 0.721906666140
+- converged = true
+- evaluations = 95
+- wall = 17511.7s (4.86 hr)
+- warmup memory (single fwd/grad timing): 23.09 GB / 52.53 GB RSS
+
+Final D=9 p=13 precursor run:
+- ctilde = 0.719758986936
+- converged = true
+- evaluations = 241
+- wall = 15.78 hr
+
+Artifacts written:
+- `results/maxcut-k2-d9-p14-angles.txt`
+- `results/maxcut-k2-d9-p14-progress.csv`
+- `results/maxcut-k2-d9-p14-angle-snapshots.csv`
+- `results/maxcut-k2-p14-timing.csv` (appended)
+
+### What Happened
+
+1. New preflight memory checks (for `:charge_adjoint`) correctly blocked
+   unsafe runs when estimated peak exceeded RAM headroom.
+
+2. First D=9 p=14 attempt failed by design with a preflight error (non-spill
+   path on 64 GB machine).
+
+3. Runner was updated to support explicit spill opt-in (`--spill`,
+   optional `--spill-dir`).
+
+4. Second attempt with spill exposed an operational bug:
+   `mktempdir(checkpoint_disk_dir)` failed when the parent directory did not
+   exist.
+
+5. Core optimizer fix: create spill/checkpoint parent with `mkpath(...)`
+   before launching threaded starts.
+
+6. Relaunch with explicit spill then completed D=9 p=14 successfully.
+
+### Code Changes
+
+- `src/optimization.jl`
+  - Added charge-adjoint memory preflight guardrails.
+  - Added `charge_cache_spill` option pathing.
+  - Added `mkpath(checkpoint_disk_dir)` before per-start `mktempdir` calls.
+
+- `scripts/run_p14_d_warm.jl`
+  - Added explicit spill CLI options:
+    - `--spill`
+    - `--spill-dir <path>`
+  - Wired flags through `optimize_angles(...; charge_cache_spill, checkpoint_disk_dir)`.
+
+### Commits
+
+- `158e675` Fix spill mkpath and add --spill CLI opt-in to p14 runner
+
+### Operational Note
+
+For high-depth p=14 runs on 64 GB machines, spill mode should remain an
+explicit user decision (`--spill`) so that slow disk-backed operation is never
+enabled implicitly.
+
+---
+
+## Entry 33 — p=14 D=3 Memory Stabilization + Successful Mac Run (26–27 May 2026)
+
+### Summary
+
+The long-blocked MaxCut run at k=2, D=3, p=14 was completed successfully on
+the 64 GB Mac after targeted memory fixes to the charge manual adjoint path.
+
+Final result:
+- ctilde = 0.891384992947
+- converged = true
+- iterations = 58
+- evaluations = 172
+- wall = 32343.4s (8.98 hr)
+- peak RSS = 55.65 GB
+
+Artifacts written:
+- `results/maxcut-k2-d3-p14-angles.txt`
+- `results/maxcut-k2-p14-timing.csv`
+- `results/maxcut-k2-d3-p14-progress.csv`
+- `logs/p14-d3-memfix-20260526-185251.log`
+
+### What Was Failing Before
+
+On the same machine, p=14 was repeatedly jetsam-killed during the first
+adjoint gradient. Forward evaluation completed (~30s), then memory surged in
+backward due to retained histories and per-iteration large allocations.
+
+### Fixes That Unblocked It
+
+All fixes were made in `src/charge_manual_adjoint.jl`:
+
+1. `_bwd_root!`: removed `fhist` (p copies of length-4^p vectors)
+   - Replaced with on-demand forward replay per backward step
+   - Eliminated ~60 GB peak contributor at p=14
+
+2. `_bwd_branch!` Phase 1: removed `p1s` history
+   - Replaced with replay from seed via two ping-pong buffers
+   - Eliminated ~13 GB transient at top branch depth
+
+3. `_bwd_root!` buffer strategy cleanup
+   - Precomputed `w_final` once (instead of once per backward iteration)
+   - Hoisted large temporaries outside loop
+   - Switched to explicit ping-pong for factor adjoints
+
+4. `_charge_branch_instrumented`: m==1 alias optimization
+   - Aliased `t_normalized = F_powered` for m==1 path where backward does not
+     consume `t_normalized`
+   - Avoided one full extra vector per level in this path
+
+5. `charge_expectation_and_gradient`: eager cache freeing
+   - Dropped consumed `cache.children[lv]`, `cache.states[lv]`, and
+     `cache.F_levels[lv-1]` immediately after use
+   - Released memory earlier during the branch backward sweep
+
+Validation:
+- `test/test_charge_adjoint.jl`: 76/76 pass after changes
+
+### Execution Notes
+
+Run used:
+- branch: `feature/charge-adjoint-memory-fix`
+- script: `scripts/run_p14_d3_warm.jl`
+- command: `JULIA_NUM_THREADS=12 julia --project=. scripts/run_p14_d3_warm.jl`
+
+Observed behavior:
+- Forward timing remained ~29s (same order as before)
+- Memory no longer exploded during first adjoint
+- RSS oscillated through optimization but remained bounded; max 55.65 GB
+- No jetsam kill; full optimization completed and outputs persisted
+
+### Commits
+
+- `74cf598` charge_manual_adjoint: 4 memory fixes for large-p adjoint
 
 ---
 
@@ -531,6 +702,10 @@ wall-time chunks → circular buffer with per-iteration check. Final design:
 Optim callback maintains a 30-value circular buffer, checks if
 `max - min < g_abstol` every iteration, flushes trace every 5 minutes.
 Proven at p=12: converges at 45 iterations (~40 min vs 2+ hours).
+
+### 5. Core Optimization Policy Refactor (May 2026)
+
+Moved plateau detection, best-so-far capture, warm-start lookup, and recoverable angle snapshots into the core QaoaXorsat optimizer layer. Runners now consume shared result-store helpers instead of parsing warm-start CSVs by hand, and the core API can emit snapshots with full gamma/beta vectors plus plateau metadata for recovery or p+1 seeding.
 
 Also wrote the research paper (`qaoa-xorsat-research/paper/main.tex`) with
 full 15-pair comparison table, QAOA vs p figure, timing progression plot.
