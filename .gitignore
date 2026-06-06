@@ -68,6 +68,7 @@ scripts/build-composite-sheet.jl
 # Transient artefacts
 *.tar.gz
 *.out
+full-test-exit-code.txt
 STEPHEN-INSTRUCTIONS.md
 DEPLOYMENT.md
 SLURM.md

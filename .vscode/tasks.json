@@ -1,0 +1,21 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "qaoa-full-tests",
+			"type": "shell",
+			"command": "julia",
+			"args": [
+				"--project=.",
+				"test/test_optimization.jl"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "optimizer-tests-once",
+			"type": "shell",
+			"command": "julia --project=. test/test_optimization.jl",
+			"isBackground": false
+		}
+	]
+}
