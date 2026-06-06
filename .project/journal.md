@@ -22,6 +22,29 @@ This preserves most useful progress after a reboot without coupling every
 runner script to callback wiring, and it keeps the exact tensor checkpoint
 machinery focused on memory pressure rather than recovery semantics.
 
+## Entry 35 — Logical Main Rewrite and Fast-Forward (June 6, 2026)
+
+We rewrote the `feature/charge-adjoint-memory-fix` branch before publishing
+so that `main` records the work as logical changes rather than chronological
+debugging increments. A backup branch preserves the original history:
+`backup/charge-adjoint-memory-fix-before-logical-rewrite-20260606-113958`.
+
+The rewritten branch consists of three commits:
+
+1. `c63a60c` — Implement charge-based optimizer core.
+2. `e5d0184` — Add p14 runner workflow.
+3. `ef29755` — Record p14 MaxCut sweep artifacts.
+
+Local `main` was fast-forwarded to the rewritten branch. Validation before
+the fast-forward:
+
+- `julia --project=. test/test_charge.jl` — 20/20 pass.
+- `julia --project=. test/test_charge_adjoint.jl` — 80/80 pass.
+- `julia --project=. test/test_optimization.jl` — 152/152 pass.
+- `julia --project=. -e 'using Test; using QaoaXorsat; include("test/test_cost_algebra.jl")'` — 32/32 pass.
+
+Decision: publish these three logical commits directly to `origin/main`.
+
 ## Algorithmic Innovation Summary (for future methods paper)
 
 This section threads the key algorithmic innovations in the order they
