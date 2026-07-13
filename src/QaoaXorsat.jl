@@ -56,6 +56,20 @@ export optimize_angles, optimize_depth_sequence, swarm_optimize, optimize_angles
 include("qaoa.jl")
 export parity_expectation, qaoa_expectation
 
+# Heisenberg (XYZ) cost — Stage 0 statevector oracle on the 1D chain
+include("heisenberg_statevector.jl")
+export HeisenbergCouplings
+export chain_edges, central_edge, exact_chain_length
+export heisenberg_chain_state, heisenberg_edge_correlators, heisenberg_energy_density
+
+# Heisenberg (XYZ) cost — Stage 0.5 matrix-free Schrödinger evolver (RK4/Euler)
+include("sparse_qaoa.jl")
+export PauliTerm
+export heisenberg_terms, x_mixer_terms, xy_mixer_terms, swap_mixer_terms
+export apply_terms!, hamiltonian_expectation
+export evolve_rk4!, evolve_euler!
+export sparse_qaoa_state, sparse_qaoa_energy
+
 # Manual adjoint differentiation
 include("adjoint.jl")
 export basso_expectation_and_gradient, basso_expectation_normalized

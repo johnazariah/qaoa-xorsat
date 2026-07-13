@@ -8,6 +8,8 @@ using Test
     include("test_transfer_oracles.jl")
     include("test_maxcut_transfer.jl")
     include("test_qaoa.jl")
+    include("test_heisenberg_statevector.jl")
+    include("test_sparse_qaoa.jl")
     include("test_optimization.jl")
     include("test_wht_factorisation.jl")
     include("test_adjoint.jl")
