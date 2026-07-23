@@ -7,7 +7,7 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19211958.svg)](https://doi.org/10.5281/zenodo.19211958)
 [![CI](https://github.com/johnazariah/qaoa-xorsat/actions/workflows/ci.yml/badge.svg)](https://github.com/johnazariah/qaoa-xorsat/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-1741%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-2153%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 ![Julia](https://img.shields.io/badge/Julia-1.11+-purple)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -101,7 +101,7 @@ git clone https://github.com/johnazariah/qaoa-xorsat.git
 cd qaoa-xorsat
 julia --project=. -e 'using Pkg; Pkg.instantiate()'
 
-# Run tests (1741 tests, 100% coverage)
+# Run tests (2153 tests, 100% coverage)
 julia --project=. -t auto -e 'using Pkg; Pkg.test()'
 
 # Quick evaluation
@@ -113,6 +113,33 @@ println("k=3, D=4, p=1: $result")
 ```
 
 ## Usage
+
+### Exact finite-N MaxCut statevector API (v0.5.0)
+
+Version 0.5.0 adds an exact statevector evaluator for arbitrary finite,
+weighted MaxCut graphs. It computes the QAOA state, objective, optimum value,
+success probability, and analytic gradient without constructing a
+`2^N × 2^N` matrix. The reversible adjoint uses `O(2^N)` working memory
+independent of QAOA depth.
+
+```julia
+using QaoaXorsat
+
+edges = [(1, 2), (2, 3), (1, 3)]
+weights = [1.0, 1.0, 0.5]
+evaluator = prepare_maxcut_eval(3, edges; weights)
+angles = QAOAAngles([0.4], [0.2])
+
+value, gradient = maxcut_expectation_and_gradient(evaluator, angles)
+success_probability = maxcut_success_probability(evaluator, angles)
+maximum_value = maxcut_value_max(evaluator)
+```
+
+Prepared evaluators reuse internal buffers and are not thread-safe; use one
+evaluator per concurrent task. The gradient returned by
+`maxcut_expectation_and_gradient` is evaluator-owned scratch storage. Use
+`maxcut_expectation_and_gradient!` with caller-owned storage when retaining it
+across calls.
 
 Two clean entry-point scripts are provided:
 
@@ -215,6 +242,7 @@ src/
   cost_algebra.jl        # MaxCut / XORSAT algebra dispatch
   optimization.jl        # L-BFGS + swarm optimizer, warm-start, plateau detection
   qaoa.jl                # Public API: evaluate_qaoa, optimize_angles
+  maxcut_statevector.jl  # Exact finite-N MaxCut state, objective, and gradient
   reduced_basis.jl       # Spectral truncation for large (k,D)
   spectral_analysis.jl   # Effective rank analysis
   transfer_oracles.jl    # Raw transfer matrix oracles
@@ -242,7 +270,7 @@ The evaluator is generic over the angle element type `T <: Real` via `QAOAAngles
 julia --project=. -t auto -e 'using Pkg; Pkg.test()'
 ```
 
-21 test files covering:
+27 test files covering:
 - Tree structure and node counting
 - Tensor primitives and hyperindex operations
 - Brute-force oracle validation against known results
@@ -251,6 +279,7 @@ julia --project=. -t auto -e 'using Pkg; Pkg.test()'
 - Checkpointed adjoint matching full adjoint (< 1e-12)
 - Optimizer convergence to known optima
 - Cost algebra dispatch (MaxCut and XORSAT)
+- Exact finite-N MaxCut state, objective, success probability, and gradient
 - Overflow protection and normalization
 - GPU kernels (forward, backward, WHT, checkpointed)
 
