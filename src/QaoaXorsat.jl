@@ -56,6 +56,13 @@ export optimize_angles, optimize_depth_sequence, swarm_optimize, optimize_angles
 include("qaoa.jl")
 export parity_expectation, qaoa_expectation
 
+# Exact finite-N MaxCut statevector evaluation
+include("maxcut_statevector.jl")
+export MaxCutStatevectorEval, prepare_maxcut_eval
+export maxcut_state, maxcut_expectation, maxcut_success_probability
+export maxcut_expectation_and_gradient, maxcut_expectation_and_gradient!
+export maxcut_value_max
+
 # Heisenberg (XYZ) cost — Stage 0 statevector oracle on the 1D chain
 include("heisenberg_statevector.jl")
 export HeisenbergCouplings
@@ -65,6 +72,7 @@ export heisenberg_chain_state, heisenberg_edge_correlators, heisenberg_energy_de
 # Heisenberg (XYZ) cost — Stage 0.5 matrix-free Schrödinger evolver (RK4/Euler)
 include("sparse_qaoa.jl")
 export PauliTerm
+export z_term
 export heisenberg_terms, x_mixer_terms, xy_mixer_terms, swap_mixer_terms
 export apply_terms!, hamiltonian_expectation
 export evolve_rk4!, evolve_euler!

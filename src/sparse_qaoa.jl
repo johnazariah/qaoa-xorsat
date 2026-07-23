@@ -17,8 +17,9 @@ ever stored. See `.project/SPEC-heisenberg-cost.md` (Stage 0.5).
 """
     PauliTerm(kind, i, j, coeff)
 
-A single weighted Pauli term. `kind ∈ (:x, :xx, :yy, :zz)`; `i`, `j` are
-1-indexed qubits (`j` ignored for `:x`); `coeff` is the real coefficient.
+A single weighted Pauli term. `kind ∈ (:x, :z, :xx, :yy, :zz)`; `i`, `j` are
+1-indexed qubits (`j` ignored for one-body `:x` and `:z` terms); `coeff` is the
+real coefficient.
 """
 struct PauliTerm
     kind::Symbol
@@ -28,6 +29,7 @@ struct PauliTerm
 end
 
 x_term(i::Int, coeff::Real=1.0) = PauliTerm(:x, i, i, Float64(coeff))
+z_term(i::Int, coeff::Real=1.0) = PauliTerm(:z, i, i, Float64(coeff))
 xx_term(i::Int, j::Int, coeff::Real=1.0) = PauliTerm(:xx, i, j, Float64(coeff))
 yy_term(i::Int, j::Int, coeff::Real=1.0) = PauliTerm(:yy, i, j, Float64(coeff))
 zz_term(i::Int, j::Int, coeff::Real=1.0) = PauliTerm(:zz, i, j, Float64(coeff))
@@ -67,7 +69,12 @@ function apply_terms!(out::Vector{ComplexF64}, terms, ψ::Vector{ComplexF64}, N:
     dim = length(ψ)
     for t in terms
         c = ComplexF64(t.coeff)
-        if t.kind === :zz
+        if t.kind === :z
+            @inbounds for b in 0:dim-1
+                zi = z_eigenvalue((b >> (t.i - 1)) & 1)
+                out[b+1] += c * zi * ψ[b+1]
+            end
+        elseif t.kind === :zz
             @inbounds for b in 0:dim-1
                 zi = z_eigenvalue((b >> (t.i - 1)) & 1)
                 zj = z_eigenvalue((b >> (t.j - 1)) & 1)
