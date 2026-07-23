@@ -3,7 +3,7 @@ using Test
 using LinearAlgebra
 using Random
 
-using QaoaXorsat: apply_terms!, evolve_rk4!, evolve_euler!, x_term, xx_term, yy_term, zz_term,
+using QaoaXorsat: apply_terms!, evolve_rk4!, evolve_euler!, x_term, z_term, xx_term, yy_term, zz_term,
     apply_heisenberg_cost_layer!, apply_mixer_layer!, plus_state, edge_xx, edge_yy, edge_zz
 
 # ── Independent dense references (qubit 1 = least-significant bit) ────────────
@@ -15,6 +15,7 @@ _op_on(O, q, N) = reduce(kron, (_id(1 << (N - q)), O, _id(1 << (q - 1))))
 
 function _dense_term(t::PauliTerm, N)
     t.kind === :x && return t.coeff * _op_on(_X, t.i, N)
+    t.kind === :z && return t.coeff * _op_on(_Z, t.i, N)
     t.kind === :xx && return t.coeff * _op_on(_X, t.i, N) * _op_on(_X, t.j, N)
     t.kind === :yy && return t.coeff * _op_on(_Y, t.i, N) * _op_on(_Y, t.j, N)
     t.kind === :zz && return t.coeff * _op_on(_Z, t.i, N) * _op_on(_Z, t.j, N)
@@ -27,12 +28,29 @@ _dense_H(terms, N) = sum(_dense_term(t, N) for t in terms)
     @testset "apply_terms! matches independent dense H·ψ" begin
         rng = MersenneTwister(1)
         N = 4
-        terms = [x_term(2, 0.7), xx_term(1, 3, -1.1), yy_term(2, 4, 0.5), zz_term(1, 2, 0.9)]
+        terms = [x_term(2, 0.7), z_term(3, -0.2), xx_term(1, 3, -1.1),
+            yy_term(2, 4, 0.5), zz_term(1, 2, 0.9)]
         H = _dense_H(terms, N)
         ψ = randn(rng, ComplexF64, 1 << N)
         out = similar(ψ)
         apply_terms!(out, terms, ψ, N)
         @test out ≈ H * ψ atol = 1e-12
+    end
+
+    @testset "one-body Z acts diagonally on computational basis states" begin
+        N = 3
+        coefficient = -0.7
+        for qubit in 1:N, basis in 0:(1 << N)-1
+            ψ = zeros(ComplexF64, 1 << N)
+            ψ[basis+1] = 1
+            out = similar(ψ)
+            apply_terms!(out, [z_term(qubit, coefficient)], ψ, N)
+
+            sign = iszero((basis >> (qubit - 1)) & 1) ? 1 : -1
+            expected = zeros(ComplexF64, 1 << N)
+            expected[basis+1] = coefficient * sign
+            @test out == expected
+        end
     end
 
     @testset "hamiltonian_expectation matches ψ'Hψ" begin
@@ -83,6 +101,28 @@ _dense_H(terms, N) = sum(_dense_term(t, N) for t in terms)
         ψ = plus_state(N)
         evolve_rk4!(ψ, x_mixer_terms(N), 1.3, N; steps=500)
         @test all(abs.(abs.(ψ) .- exp2(-N / 2)) .< 1e-8)
+    end
+
+    @testset "longitudinal-field QAOA matches dense propagation and energy" begin
+        N = 3
+        cost = [z_term(1, 0.7), z_term(2, -0.4), z_term(3, 1.1)]
+        mixer = x_mixer_terms(N)
+        angles = QAOAAngles([0.3, -0.6], [0.8, 0.2])
+        Hcost = _dense_H(cost, N)
+        Hmixer = _dense_H(mixer, N)
+
+        dense = plus_state(N)
+        for layer in 1:depth(angles)
+            dense = exp(-im * angles.γ[layer] * Hcost) * dense
+            dense = exp(-im * angles.β[layer] * Hmixer) * dense
+        end
+        sparse = sparse_qaoa_state(
+            N, cost, mixer, angles; cost_steps=1200, mixer_steps=1200)
+
+        @test sparse ≈ dense atol=1e-8
+        @test sparse_qaoa_energy(
+            N, cost, mixer, angles; cost_steps=1200, mixer_steps=1200) ≈
+              real(dense' * Hcost * dense) atol=1e-8
     end
 
     @testset "single edge: sparse RK4 == gate-based == dense (Trotter exact)" begin

@@ -12,7 +12,7 @@ using Test
 using LinearAlgebra
 using Random
 
-using QaoaXorsat: x_term, xx_term, yy_term, zz_term, plus_state, evolve_rk4!, edge_zz,
+using QaoaXorsat: x_term, z_term, xx_term, yy_term, zz_term, plus_state, evolve_rk4!, edge_zz,
     HeisenbergCouplings, heisenberg_terms, x_mixer_terms, xy_mixer_terms, swap_mixer_terms,
     apply_terms!, hamiltonian_expectation, sparse_qaoa_state, sparse_qaoa_energy,
     QAOAAngles, PauliTerm
@@ -26,6 +26,7 @@ rbid(n) = Matrix{ComplexF64}(I, n, n)
 rbon(O, q, N) = reduce(kron, (rbid(1 << (N - q)), O, rbid(1 << (q - 1))))
 function rbterm(t::PauliTerm, N)
     t.kind === :x && return t.coeff * rbon(rbX, t.i, N)
+    t.kind === :z && return t.coeff * rbon(rbZ, t.i, N)
     t.kind === :xx && return t.coeff * rbon(rbX, t.i, N) * rbon(rbX, t.j, N)
     t.kind === :yy && return t.coeff * rbon(rbY, t.i, N) * rbon(rbY, t.j, N)
     t.kind === :zz && return t.coeff * rbon(rbZ, t.i, N) * rbon(rbZ, t.j, N)
@@ -48,6 +49,7 @@ rbmag(ψ, N) = sum(abs2(ψ[b+1]) * (N - 2 * count_ones(b)) for b in 0:length(ψ)
         terms = heisenberg_terms([[1, 2], [2, 3], [3, 4], [4, 5], [1, 5]],
             HeisenbergCouplings(1.0, 0.7, -0.4))
         push!(terms, x_term(3, 0.5))
+        push!(terms, z_term(4, -0.2))
         ψ = randn(rng, ComplexF64, 1 << N)
         ψ ./= norm(ψ)
         total = hamiltonian_expectation(terms, ψ, N)
@@ -60,6 +62,7 @@ rbmag(ψ, N) = sum(abs2(ψ[b+1]) * (N - 2 * count_ones(b)) for b in 0:length(ψ)
         N = 4
         terms = heisenberg_terms([[1, 2], [2, 3], [3, 4]], HeisenbergCouplings(1.0, 0.7, -0.4))
         push!(terms, x_term(2, 0.5))
+        push!(terms, z_term(3, -0.2))
         φ = randn(rng, ComplexF64, 1 << N)
         ψ = randn(rng, ComplexF64, 1 << N)
         Hψ = similar(ψ); apply_terms!(Hψ, terms, ψ, N)
