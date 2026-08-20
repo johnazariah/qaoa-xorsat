@@ -72,7 +72,8 @@ export heisenberg_chain_state, heisenberg_edge_correlators, heisenberg_energy_de
 # Heisenberg (XYZ) cost — Stage 0.5 matrix-free Schrödinger evolver (RK4/Euler)
 include("sparse_qaoa.jl")
 export PauliTerm
-export z_term
+export x_term, y_term, z_term
+export xx_term, xy_term, xz_term, yx_term, yy_term, yz_term, zx_term, zy_term, zz_term
 export heisenberg_terms, x_mixer_terms, xy_mixer_terms, swap_mixer_terms
 export apply_terms!, hamiltonian_expectation
 export evolve_rk4!, evolve_euler!

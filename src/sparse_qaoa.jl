@@ -17,22 +17,60 @@ ever stored. See `.project/SPEC-heisenberg-cost.md` (Stage 0.5).
 """
     PauliTerm(kind, i, j, coeff)
 
-A single weighted Pauli term. `kind ∈ (:x, :z, :xx, :yy, :zz)`; `i`, `j` are
-1-indexed qubits (`j` ignored for one-body `:x` and `:z` terms); `coeff` is the
-real coefficient.
+A single weighted Hermitian Pauli term. One-body kinds are `:x`, `:y`, and `:z`;
+two-body kinds are every ordered product in `(:xx, :xy, :xz, :yx, :yy, :yz,
+:zx, :zy, :zz)`. The first axis acts on `i` and the second on `j`.
+
+Qubits are 1-indexed and two-body endpoints must be distinct. Terms are
+canonicalised to `i < j`; when endpoints are reversed, mixed kinds are reversed
+too (for example, `PauliTerm(:xy, 3, 1, c) == PauliTerm(:yx, 1, 3, c)`).
+Coefficients are stored as real `Float64` values.
 """
 struct PauliTerm
     kind::Symbol
     i::Int
     j::Int
     coeff::Float64
+
+    function PauliTerm(kind::Symbol, i::Int, j::Int, coeff::Float64)
+        isfinite(coeff) || throw(ArgumentError("PauliTerm coefficient must be finite"))
+        i > 0 || throw(ArgumentError("PauliTerm qubit indices must be positive"))
+        j > 0 || throw(ArgumentError("PauliTerm qubit indices must be positive"))
+
+        if kind in (:x, :y, :z)
+            return new(kind, i, i, coeff)
+        end
+        kind in (:xx, :xy, :xz, :yx, :yy, :yz, :zx, :zy, :zz) ||
+            throw(ArgumentError("unknown PauliTerm kind :$kind"))
+        i != j || throw(ArgumentError("two-body PauliTerm endpoints must be distinct"))
+        if i < j
+            return new(kind, i, j, coeff)
+        end
+        reversed = kind === :xy ? :yx :
+                   kind === :xz ? :zx :
+                   kind === :yx ? :xy :
+                   kind === :yz ? :zy :
+                   kind === :zx ? :xz :
+                   kind === :zy ? :yz : kind
+        new(reversed, j, i, coeff)
+    end
 end
 
-x_term(i::Int, coeff::Real=1.0) = PauliTerm(:x, i, i, Float64(coeff))
-z_term(i::Int, coeff::Real=1.0) = PauliTerm(:z, i, i, Float64(coeff))
-xx_term(i::Int, j::Int, coeff::Real=1.0) = PauliTerm(:xx, i, j, Float64(coeff))
-yy_term(i::Int, j::Int, coeff::Real=1.0) = PauliTerm(:yy, i, j, Float64(coeff))
-zz_term(i::Int, j::Int, coeff::Real=1.0) = PauliTerm(:zz, i, j, Float64(coeff))
+PauliTerm(kind::Symbol, i::Integer, j::Integer, coeff::Real) =
+    PauliTerm(kind, Int(i), Int(j), Float64(coeff))
+
+x_term(i::Integer, coeff::Real=1.0) = PauliTerm(:x, i, i, coeff)
+y_term(i::Integer, coeff::Real=1.0) = PauliTerm(:y, i, i, coeff)
+z_term(i::Integer, coeff::Real=1.0) = PauliTerm(:z, i, i, coeff)
+xx_term(i::Integer, j::Integer, coeff::Real=1.0) = PauliTerm(:xx, i, j, coeff)
+xy_term(i::Integer, j::Integer, coeff::Real=1.0) = PauliTerm(:xy, i, j, coeff)
+xz_term(i::Integer, j::Integer, coeff::Real=1.0) = PauliTerm(:xz, i, j, coeff)
+yx_term(i::Integer, j::Integer, coeff::Real=1.0) = PauliTerm(:yx, i, j, coeff)
+yy_term(i::Integer, j::Integer, coeff::Real=1.0) = PauliTerm(:yy, i, j, coeff)
+yz_term(i::Integer, j::Integer, coeff::Real=1.0) = PauliTerm(:yz, i, j, coeff)
+zx_term(i::Integer, j::Integer, coeff::Real=1.0) = PauliTerm(:zx, i, j, coeff)
+zy_term(i::Integer, j::Integer, coeff::Real=1.0) = PauliTerm(:zy, i, j, coeff)
+zz_term(i::Integer, j::Integer, coeff::Real=1.0) = PauliTerm(:zz, i, j, coeff)
 
 # ── Hamiltonian builders ─────────────────────────────────────────────────────
 
@@ -65,41 +103,56 @@ swap_mixer_terms(edges) =
 Compute `out = H·ψ` matrix-free, where `H = Σ terms`. Cost O(#terms · 2ᴺ).
 """
 function apply_terms!(out::Vector{ComplexF64}, terms, ψ::Vector{ComplexF64}, N::Int)
+    N >= 0 || throw(ArgumentError("N must be non-negative"))
+    length(ψ) == 1 << N ||
+        throw(DimensionMismatch("state length $(length(ψ)) does not equal 2^N = $(1 << N)"))
+    length(out) == length(ψ) ||
+        throw(DimensionMismatch("output and state vectors must have equal lengths"))
+    out === ψ && throw(ArgumentError("apply_terms! does not support aliased output and state vectors"))
+
+    for t in terms
+        t.kind in (:x, :y, :z, :xx, :xy, :xz, :yx, :yy, :yz, :zx, :zy, :zz) ||
+            throw(ArgumentError("unknown PauliTerm kind :$(t.kind)"))
+        t.i <= N || throw(ArgumentError("PauliTerm qubit $(t.i) exceeds N = $N"))
+        t.j <= N || throw(ArgumentError("PauliTerm qubit $(t.j) exceeds N = $N"))
+    end
+
     fill!(out, zero(ComplexF64))
     dim = length(ψ)
     for t in terms
         c = ComplexF64(t.coeff)
-        if t.kind === :z
-            @inbounds for b in 0:dim-1
-                zi = z_eigenvalue((b >> (t.i - 1)) & 1)
-                out[b+1] += c * zi * ψ[b+1]
-            end
-        elseif t.kind === :zz
-            @inbounds for b in 0:dim-1
-                zi = z_eigenvalue((b >> (t.i - 1)) & 1)
-                zj = z_eigenvalue((b >> (t.j - 1)) & 1)
-                out[b+1] += c * (zi * zj) * ψ[b+1]
-            end
-        elseif t.kind === :x
-            m = one(Int) << (t.i - 1)
-            @inbounds for b in 0:dim-1
-                out[b+1] += c * ψ[(b ⊻ m)+1]
-            end
+        mi = one(Int) << (t.i - 1)
+        mj = one(Int) << (t.j - 1)
+        flip, zmask, phase = if t.kind === :x
+            (mi, zero(Int), 1.0 + 0.0im)
+        elseif t.kind === :y
+            (mi, mi, -im)
+        elseif t.kind === :z
+            (zero(Int), mi, 1.0 + 0.0im)
         elseif t.kind === :xx
-            flip = (one(Int) << (t.i - 1)) | (one(Int) << (t.j - 1))
-            @inbounds for b in 0:dim-1
-                out[b+1] += c * ψ[(b ⊻ flip)+1]
-            end
+            (mi | mj, zero(Int), 1.0 + 0.0im)
+        elseif t.kind === :xy
+            (mi | mj, mj, -im)
+        elseif t.kind === :xz
+            (mi, mj, 1.0 + 0.0im)
+        elseif t.kind === :yx
+            (mi | mj, mi, -im)
         elseif t.kind === :yy
-            flip = (one(Int) << (t.i - 1)) | (one(Int) << (t.j - 1))
-            @inbounds for b in 0:dim-1
-                zi = z_eigenvalue((b >> (t.i - 1)) & 1)
-                zj = z_eigenvalue((b >> (t.j - 1)) & 1)
-                # (Yᵢ Yⱼ ψ)[b] = -zᵢ zⱼ · ψ[b ⊕ flip]
-                out[b+1] += c * (-(zi * zj)) * ψ[(b ⊻ flip)+1]
-            end
+            (mi | mj, mi | mj, -1.0 + 0.0im)
+        elseif t.kind === :yz
+            (mi, mi | mj, -im)
+        elseif t.kind === :zx
+            (mj, mi, 1.0 + 0.0im)
+        elseif t.kind === :zy
+            (mj, mi | mj, -im)
+        elseif t.kind === :zz
+            (zero(Int), mi | mj, 1.0 + 0.0im)
         else
             throw(ArgumentError("unknown PauliTerm kind :$(t.kind)"))
+        end
+        @inbounds for b in 0:dim-1
+            sign = isodd(count_ones(b & zmask)) ? -1.0 : 1.0
+            out[b+1] += c * phase * sign * ψ[(b ⊻ flip)+1]
         end
     end
     out

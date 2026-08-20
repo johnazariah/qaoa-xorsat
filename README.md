@@ -7,7 +7,7 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19211958.svg)](https://doi.org/10.5281/zenodo.19211958)
 [![CI](https://github.com/johnazariah/qaoa-xorsat/actions/workflows/ci.yml/badge.svg)](https://github.com/johnazariah/qaoa-xorsat/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-2153%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-2207%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 ![Julia](https://img.shields.io/badge/Julia-1.11+-purple)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -101,7 +101,7 @@ git clone https://github.com/johnazariah/qaoa-xorsat.git
 cd qaoa-xorsat
 julia --project=. -e 'using Pkg; Pkg.instantiate()'
 
-# Run tests (2153 tests, 100% coverage)
+# Run tests (2207 tests, 100% coverage)
 julia --project=. -t auto -e 'using Pkg; Pkg.test()'
 
 # Quick evaluation
@@ -113,6 +113,32 @@ println("k=3, D=4, p=1: $result")
 ```
 
 ## Usage
+
+### General Pauli-sum statevector API (v0.6.0)
+
+Version 0.6.0 extends the matrix-free `PauliTerm` engine to all one-site Pauli
+operators and all ordered two-site products. Constructors are `x_term`,
+`y_term`, `z_term`, and `xx_term` through `zz_term`, including the mixed-axis
+`xy_term`, `xz_term`, `yx_term`, `yz_term`, `zx_term`, and `zy_term`.
+
+Mixed terms preserve which axis acts on which qubit. Endpoint order is
+canonicalised without losing that association: `xy_term(3, 1)` is normalised to
+`yx_term(1, 3)`. Coefficients are finite real values, making every accepted term
+Hermitian. The public Pauli API is CPU statevector-only; it does not claim GPU
+dispatch.
+
+```julia
+using QaoaXorsat
+
+terms = [
+    y_term(1, 0.3),
+    xy_term(1, 2, -0.7),
+    zx_term(2, 3, 0.4),
+]
+state = ComplexF64[1, zeros(7)...]
+out = similar(state)
+apply_terms!(out, terms, state, 3)
+```
 
 ### Exact finite-N MaxCut statevector API (v0.5.0)
 
