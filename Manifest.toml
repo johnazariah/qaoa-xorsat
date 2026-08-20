@@ -716,7 +716,7 @@ version = "1.11.0"
 deps = ["ADTypes", "CUDA", "Dates", "DoubleFloats", "ForwardDiff", "GPUArrays", "KernelAbstractions", "Metal", "Optim", "Printf", "Random", "Serialization"]
 path = "."
 uuid = "f8a3c5e7-1b2d-4e6a-9c0f-3d8b7a5e2f14"
-version = "0.5.0"
+version = "0.6.0"
 
 [[deps.Quadmath]]
 deps = ["Compat", "Printf", "Random", "Requires"]

@@ -10,6 +10,7 @@ using Test
     include("test_qaoa.jl")
     include("test_maxcut_statevector.jl")
     include("test_heisenberg_statevector.jl")
+    include("test_pauli_terms.jl")
     include("test_sparse_qaoa.jl")
     include("test_sparse_qaoa_robustness.jl")
     include("test_optimization.jl")
