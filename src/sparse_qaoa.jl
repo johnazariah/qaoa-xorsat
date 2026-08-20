@@ -101,6 +101,7 @@ swap_mixer_terms(edges) =
     apply_terms!(out, terms, ψ, N)
 
 Compute `out = H·ψ` matrix-free, where `H = Σ terms`. Cost O(#terms · 2ᴺ).
+`terms` may be any iterable, including a single-pass iterator.
 """
 function apply_terms!(out::Vector{ComplexF64}, terms, ψ::Vector{ComplexF64}, N::Int)
     N >= 0 || throw(ArgumentError("N must be non-negative"))
@@ -110,7 +111,8 @@ function apply_terms!(out::Vector{ComplexF64}, terms, ψ::Vector{ComplexF64}, N:
         throw(DimensionMismatch("output and state vectors must have equal lengths"))
     out === ψ && throw(ArgumentError("apply_terms! does not support aliased output and state vectors"))
 
-    for t in terms
+    term_list = terms isa AbstractVector ? terms : collect(terms)
+    for t in term_list
         t.kind in (:x, :y, :z, :xx, :xy, :xz, :yx, :yy, :yz, :zx, :zy, :zz) ||
             throw(ArgumentError("unknown PauliTerm kind :$(t.kind)"))
         t.i <= N || throw(ArgumentError("PauliTerm qubit $(t.i) exceeds N = $N"))
@@ -119,40 +121,51 @@ function apply_terms!(out::Vector{ComplexF64}, terms, ψ::Vector{ComplexF64}, N:
 
     fill!(out, zero(ComplexF64))
     dim = length(ψ)
-    for t in terms
+    for t in term_list
         c = ComplexF64(t.coeff)
         mi = one(Int) << (t.i - 1)
         mj = one(Int) << (t.j - 1)
         flip, zmask, phase = if t.kind === :x
-            (mi, zero(Int), 1.0 + 0.0im)
+            (mi, zero(Int), one(ComplexF64))
         elseif t.kind === :y
-            (mi, mi, -im)
+            (mi, mi, ComplexF64(0, -1))
         elseif t.kind === :z
-            (zero(Int), mi, 1.0 + 0.0im)
+            (zero(Int), mi, one(ComplexF64))
         elseif t.kind === :xx
-            (mi | mj, zero(Int), 1.0 + 0.0im)
+            (mi | mj, zero(Int), one(ComplexF64))
         elseif t.kind === :xy
-            (mi | mj, mj, -im)
+            (mi | mj, mj, ComplexF64(0, -1))
         elseif t.kind === :xz
-            (mi, mj, 1.0 + 0.0im)
+            (mi, mj, one(ComplexF64))
         elseif t.kind === :yx
-            (mi | mj, mi, -im)
+            (mi | mj, mi, ComplexF64(0, -1))
         elseif t.kind === :yy
-            (mi | mj, mi | mj, -1.0 + 0.0im)
+            (mi | mj, mi | mj, -one(ComplexF64))
         elseif t.kind === :yz
-            (mi, mi | mj, -im)
+            (mi, mi | mj, ComplexF64(0, -1))
         elseif t.kind === :zx
-            (mj, mi, 1.0 + 0.0im)
+            (mj, mi, one(ComplexF64))
         elseif t.kind === :zy
-            (mj, mi | mj, -im)
+            (mj, mi | mj, ComplexF64(0, -1))
         elseif t.kind === :zz
-            (zero(Int), mi | mj, 1.0 + 0.0im)
+            (zero(Int), mi | mj, one(ComplexF64))
         else
             throw(ArgumentError("unknown PauliTerm kind :$(t.kind)"))
         end
-        @inbounds for b in 0:dim-1
-            sign = isodd(count_ones(b & zmask)) ? -1.0 : 1.0
-            out[b+1] += c * phase * sign * ψ[(b ⊻ flip)+1]
+        if iszero(zmask)
+            @inbounds for b in 0:dim-1
+                out[b+1] += c * ψ[(b ⊻ flip)+1]
+            end
+        elseif isone(phase)
+            @inbounds for b in 0:dim-1
+                sign = isodd(count_ones(b & zmask)) ? -1.0 : 1.0
+                out[b+1] += c * sign * ψ[(b ⊻ flip)+1]
+            end
+        else
+            @inbounds for b in 0:dim-1
+                sign = isodd(count_ones(b & zmask)) ? -1.0 : 1.0
+                out[b+1] += c * phase * sign * ψ[(b ⊻ flip)+1]
+            end
         end
     end
     out

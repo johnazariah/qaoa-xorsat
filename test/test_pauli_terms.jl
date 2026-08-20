@@ -115,6 +115,37 @@ end
         @test restored ≈ ψ atol=1e-11
     end
 
+    @testset "single-pass iterables and pure-X fast path" begin
+        rng = MersenneTwister(45)
+        N = 3
+        ψ = randn(rng, ComplexF64, 1 << N)
+
+        terms = [x_term(1, 0.2), xy_term(3, 1, -0.7), yz_term(2, 3, 0.4)]
+        expected = ptaction(terms, ψ, N)
+        single_pass = Iterators.Stateful((term for term in terms))
+        actual = similar(ψ)
+        apply_terms!(actual, single_pass, ψ, N)
+        @test actual == expected
+        @test isempty(single_pass)
+
+        invalid = Iterators.Stateful((term for term in (x_term(1), x_term(4))))
+        fill!(actual, 3)
+        @test_throws ArgumentError apply_terms!(actual, invalid, ψ, N)
+        @test all(==(3), actual)
+        @test isempty(invalid)
+
+        x_terms = x_mixer_terms(N)
+        expected_x = zeros(ComplexF64, 1 << N)
+        for term in x_terms
+            mask = one(Int) << (term.i - 1)
+            coefficient = ComplexF64(term.coeff)
+            @inbounds for b in 0:(1 << N)-1
+                expected_x[b+1] += coefficient * ψ[(b ⊻ mask)+1]
+            end
+        end
+        @test ptaction(x_terms, ψ, N) == expected_x
+    end
+
     @testset "normalisation, serialization, and validation" begin
         term = xy_term(3, 1, -0.25)
         @test term == yx_term(1, 3, -0.25)
