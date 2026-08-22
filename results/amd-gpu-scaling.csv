@@ -1,0 +1,26 @@
+# generated_utc=2026-08-22T00:55:29.924
+# device=AMD Radeon(TM) 860M Graphics
+# amdgpu_version=2.7.3
+# backend_compile_seconds=13.3423798
+# kernel_compile_warmup_seconds=17.5807039
+# warm_steady_seconds=0.005091
+# cpu_compile_warmup_seconds=0.0387217
+# cpu_warm_steady_seconds=4.09e-5
+# cpu_practical_limit_seconds=60.0
+# cpu_measurement_limit_seconds=180.0
+# cpu_memory_fraction_limit=0.6
+# gpu_memory_fraction_limit=0.8
+# host_memory_bytes=33979809792
+# hip_total_bytes=47102148608
+depth_p,configuration_count,physical_problem_n,state_bytes,cpu_adjoint_estimated_bytes,cpu_status,amd_status,cpu_first_seconds,cpu_seconds,amd_first_seconds,amd_seconds,speedup,reference_kind,value_abs_error,gamma_max_abs_error,beta_max_abs_error,amd_value,hip_pool_reserved_bytes
+3,64,not_applicable,1024,40960,measured,measured,8.64e-05,3.21e-05,0.0203324,0.0150223,0.00213682326,cpu_full_adjoint,0,0,0,0.66904115571045975,33554432
+4,256,not_applicable,4096,163840,measured,measured,0.0002177,0.0001191,1.9536751,0.0155155,0.00767619477,cpu_full_adjoint,0,0,0,0.65211587128623283,33554432
+5,1024,not_applicable,16384,655360,measured,measured,0.0007657,0.0007069,0.0349406,0.0222751,0.0317349866,cpu_full_adjoint,0,0,0,0.64949296232132481,33554432
+6,4096,not_applicable,65536,2621440,measured,measured,0.0046479,0.0052526,0.0548988,0.0435997,0.120473306,cpu_full_adjoint,1.99840144e-15,2.64788191e-14,1.17239551e-13,0.64205912888901562,33554432
+7,16384,not_applicable,262144,10485760,measured,measured,0.0153839,0.0155196,0.1208765,0.1226751,0.126509781,cpu_full_adjoint,1.36557432e-14,4.70838646e-14,1.84741111e-13,0.62629879875111372,100663296
+8,65536,not_applicable,1048576,41943040,measured,measured,0.0724066,0.0805865,2.2820527,0.2420347,0.332954324,cpu_full_adjoint,6.55031585e-15,3.87911925e-13,9.80548975e-13,0.61367133152055242,402653184
+9,262144,not_applicable,4194304,167772160,measured,measured,0.3718714,0.7172063,0.9222065,1.0267776,0.69850209,cpu_full_adjoint,4.04121181e-14,8.36934688e-13,3.80140364e-12,0.60498624760792941,1711276032
+10,1048576,not_applicable,16777216,671088640,measured,measured,2.2375795,2.0670476,2.6159939,2.0254417,1.02054164,cpu_full_adjoint,1.46549439e-14,4.41513492e-12,8.31335001e-12,0.59393057652121317,4227858432
+11,4194304,not_applicable,67108864,2684354560,measured,measured,7.5920734,7.0396726,9.5407752,8.7062088,0.808580722,cpu_full_adjoint,2.28705943e-14,9.23906958e-12,1.33724143e-11,0.58203683141240692,7147094016
+12,16777216,not_applicable,268435456,10737418240,measured_impractical_runtime,measured,79.2271159,89.570837,43.1754852,51.501809,1.73917846,cpu_full_adjoint,2.84217094e-14,4.64471066e-11,5.84066129e-11,0.57326110895431848,43117445120
+# measured_cpu_to_amd_crossover_p=10

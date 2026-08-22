@@ -1,14 +1,14 @@
 """
 GPU-accelerated Walsh-Hadamard Transform using KernelAbstractions.jl.
 
-Supports Metal (Apple Silicon) and CUDA (NVIDIA) backends via a
-portable kernel abstraction. Metal requires Float32; CUDA supports Float64.
+Supports Metal (Apple Silicon), CUDA (NVIDIA), and AMDGPU/ROCm backends via a
+portable kernel abstraction. Metal requires Float32; CUDA and AMDGPU use Float64.
 
 The GPU WHT uses a level-by-level butterfly approach: each level launches
 a kernel where each thread handles one butterfly pair independently.
 
 Usage:
-    using Metal  # or CUDA
+    using Metal  # or CUDA or AMDGPU
     x_gpu = MtlArray(ComplexF32.(x_cpu))
     gpu_wht!(x_gpu)              # in-place WHT on GPU
     x_hat = gpu_wht(x_gpu)       # out-of-place WHT on GPU

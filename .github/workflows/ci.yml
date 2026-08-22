@@ -167,3 +167,56 @@ jobs:
             using Test, QaoaXorsat, ForwardDiff, Random
             @testset verbose=true "Normalization" begin include("test/test_normalization.jl") end
           '
+      - name: "Provider-independent statevector route and memory admission"
+        run: |
+          julia --project=. -e '
+            using Test, QaoaXorsat
+            include("test/test_gpu_backend.jl")
+            include("test/test_gpu_statevector.jl")
+          '
+
+  extension-wiring:
+    name: "Optional extension — ${{ matrix.provider }}"
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - provider: AMDGPU
+            kind: amdgpu
+            extension: QaoaXorsatAMDGPUExt
+            os: ubuntu-latest
+          - provider: CUDA
+            kind: cuda
+            extension: QaoaXorsatCUDAExt
+            os: ubuntu-latest
+          - provider: Metal
+            kind: metal
+            extension: QaoaXorsatMetalExt
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with: { version: '1' }
+      - uses: julia-actions/cache@v2
+      - name: Install optional provider
+        run: |
+          julia --project=. -e 'using Pkg; Pkg.add("${{ matrix.provider }}"); Pkg.precompile()'
+      - name: Verify extension registration without claiming a live device
+        run: |
+          julia --project=. -e '
+            using Test, QaoaXorsat, ${{ matrix.provider }}
+            @test Base.get_extension(
+              QaoaXorsat,
+              :${{ matrix.extension }},
+            ) !== nothing
+            @test haskey(
+              QaoaXorsat._GPU_PROVIDER_FACTORIES,
+              :${{ matrix.kind }},
+            )
+            @test haskey(
+              QaoaXorsat._GPU_MEMORY_STATUS_FACTORIES,
+              :${{ matrix.kind }},
+            )
+          '

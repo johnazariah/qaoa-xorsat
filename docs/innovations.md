@@ -685,8 +685,8 @@ natural fit for GPU parallelism.
 ### The Solution
 
 GPU kernels written with [KernelAbstractions.jl](https://github.com/JuliaGPU/KernelAbstractions.jl)
-for portable execution on **CUDA** (NVIDIA) and **Metal** (Apple Silicon)
-backends. The GPU pipeline includes:
+for portable execution on **CUDA** (NVIDIA), **AMDGPU/ROCm/HIP** (AMD), and
+**Metal** (Apple Silicon) backends. The GPU pipeline includes:
 
 - **GPU WHT**: level-by-level butterfly with fused multi-level kernel launches.
   Each thread handles one butterfly pair; threads are independent within a
@@ -713,17 +713,25 @@ backends. The GPU pipeline includes:
 end
 ```
 
-Metal requires Float32 (no Float64 support on Apple GPUs), which limits
-precision but provides $\sim 10\times$ throughput over CPU at $p \leq 10$.
-CUDA supports Float64 natively.
+Metal requires Float32 (no Float64 support on Apple GPUs), so its tolerances
+are tested separately from CUDA and AMDGPU, which use Float64. No live Metal or
+CUDA performance result is claimed by the Radeon validation.
 
 ### Status
 
-The GPU pipeline is implemented and tested but **not wired into the production
-depth-sweep scripts**. The CPU checkpointed adjoint path is the workhorse for
-$p \geq 13$ results. GPU acceleration is most valuable for interactive
-exploration at $p \leq 10$ and for future $p \geq 14$ runs where CPU wall
-time becomes prohibitive.
+The GPU pipeline is wired into the public backend API and the optimizer's
+`gpu_evaluator` hook. CUDA, AMDGPU, and Metal are optional package extensions.
+The physical statevector route for diagonal Z/ZZ costs and the `sum(X)` mixer
+uses shared KernelAbstractions kernels, pre-allocation memory admission, and
+source-bound launch telemetry; live Radeon tests compare physical
+$N\in\{4,6,8\}$ and $p\in\{1,2,3\}$ directly with a ComplexF64 CPU oracle.
+Live Radeon 860M testing reaches the CPU-to-AMD crossover at $p=10$. The
+committed deterministic $p=12$ sweep runs in 51.50 seconds versus 89.57
+seconds on CPU, with maximum gradient error below $6\times10^{-11}$; a PFQE
+consumer case measured 42.54 seconds versus 124.99 seconds. At $p=13$, the
+forward-only AMD path completes, while the checkpointed gradient reaches the
+shared-UMA resource limit during its backward pass. See
+[AMD GPU support on Windows](amd-gpu-windows.md) for setup and resource limits.
 
 ---
 

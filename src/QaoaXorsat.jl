@@ -4,6 +4,12 @@ module QaoaXorsat
 include("diagnostics.jl")
 using .Diagnostics
 
+# Optional CUDA, AMDGPU, and Metal execution backends
+include("gpu_backend.jl")
+export GPUBackend, GPUBackendError, GPUMemoryStatus
+export gpu_backend, gpu_backend_available, validate_gpu_backend, detect_gpu_backend
+export gpu_array, gpu_memory_status, make_gpu_evaluator
+
 # Tree structure
 include("tree.jl")
 export TreeParams
@@ -78,6 +84,12 @@ export heisenberg_terms, x_mixer_terms, xy_mixer_terms, swap_mixer_terms
 export apply_terms!, hamiltonian_expectation
 export evolve_rk4!, evolve_euler!
 export sparse_qaoa_state, sparse_qaoa_energy
+
+# Exact diagonal-cost/X-mixer statevector evaluator on KernelAbstractions backends
+include("gpu_statevector.jl")
+export DeviceStatevectorEvaluator, StatevectorExecutionStats
+export StatevectorMemoryAdmission, statevector_memory_admission
+export make_statevector_evaluator, statevector_execution_stats, synchronize
 
 # Manual adjoint differentiation
 include("adjoint.jl")

@@ -8,7 +8,7 @@ phase args) is done on CPU; only the O(p² · 4^p) hot loop runs on GPU.
 The GPU forward pass computes c̃ only (no gradient). For gradient
 computation, see gpu_backward.jl (Phase 3).
 
-Metal backend uses Float32; CUDA uses Float64.
+Metal uses Float32; CUDA and AMDGPU use Float64.
 """
 
 include("gpu_wht.jl")
@@ -70,9 +70,9 @@ end
 Compute the QAOA satisfaction fraction c̃ using GPU-accelerated
 branch tensor iteration.
 
-`gpu_array_fn` converts a CPU array to GPU (e.g., MtlArray for Metal).
+`gpu_array_fn` converts a CPU array to a vendor device array.
 The element type is determined by the GPU backend (Float32 for Metal,
-Float64 for CUDA).
+Float64 for CUDA and AMDGPU).
 
 Returns the c̃ value as a Float64.
 """

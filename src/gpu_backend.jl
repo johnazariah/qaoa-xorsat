@@ -1,83 +1,334 @@
 """
-GPU backend auto-detection for the QAOA evaluation pipeline.
+Optional GPU backend selection for the QAOA evaluation pipeline.
 
-Picks the first available backend in order:
-
-    1. CUDA  (NVIDIA, ComplexF64) — Stephen's SLURM cluster
-    2. Metal (Apple Silicon, ComplexF32) — Mac Studio
-    3. nothing (CPU fallback)
-
-Loads the chosen backend lazily so the package can be used on machines
-that have neither GPU SDK installed.
-
-Usage:
-
-    include("src/gpu_backend.jl")
-    if GPU_BACKEND.kind != :cpu
-        eval = make_gpu_evaluator(GPU_BACKEND)
-        # pass `gpu_evaluator=eval` into swarm_optimize / optimize_angles
-    end
+CUDA, AMDGPU, and Metal are weak dependencies loaded through package
+extensions. Explicit backend selection throws `GPUBackendError` when the
+runtime, device, or validation kernel is unavailable. Automatic selection
+tries CUDA, AMDGPU, and Metal in that order before returning the CPU backend.
 """
+
+using KernelAbstractions
+using UUIDs
 
 struct GPUBackend
-    kind::Symbol                                # :cuda | :metal | :cpu
-    gpu_array_fn::Union{Function,Nothing}       # converts CPU array -> GPU array
-    complex_type::Type                          # ComplexF64 (CUDA) or ComplexF32 (Metal)
-    label::String                               # human-readable status string
+    kind::Symbol
+    gpu_array_fn::Union{Function,Nothing}
+    complex_type::Type
+    label::String
+    device::Union{String,Nothing}
 end
 
-const _CPU_BACKEND = GPUBackend(:cpu, nothing, ComplexF64, "off (CPU checkpointed path)")
+GPUBackend(kind::Symbol, gpu_array_fn::Union{Function,Nothing},
+    complex_type::Type, label::String) =
+    GPUBackend(kind, gpu_array_fn, complex_type, label, nothing)
 
-function detect_gpu_backend()
-    # ── CUDA (NVIDIA) ────────────────────────────────────────────────
-    try
-        @eval Main using CUDA
-        if Base.invokelatest(() -> Main.CUDA.functional())
-            fn(x) = Base.invokelatest(Main.CUDA.CuArray, x)
-            return GPUBackend(:cuda, fn, ComplexF64, "CUDA GPU (ComplexF64)")
-        end
-    catch
-        # CUDA not installed or not functional — fall through
-    end
-
-    # ── Metal (Apple Silicon) ────────────────────────────────────────
-    try
-        @eval Main using Metal
-        if Base.invokelatest(() -> Main.Metal.functional())
-            # Metal requires Float32; we narrow on the way to the GPU.
-            fn(x::AbstractArray{<:Complex}) = Base.invokelatest(Main.Metal.MtlArray, ComplexF32.(x))
-            fn(x::AbstractArray{<:Real})    = Base.invokelatest(Main.Metal.MtlArray, ComplexF32.(complex.(x)))
-            return GPUBackend(:metal, fn, ComplexF32, "Metal GPU (ComplexF32)")
-        end
-    catch
-        # Metal not installed or not functional — fall through
-    end
-
-    return _CPU_BACKEND
+struct GPUBackendError <: Exception
+    kind::Symbol
+    message::String
+    cause::Any
 end
 
-const GPU_BACKEND = detect_gpu_backend()
+struct GPUMemoryStatus
+    free_bytes::Int
+    total_bytes::Int
+    reserved_bytes::Int
+
+    function GPUMemoryStatus(free_bytes::Integer, total_bytes::Integer, reserved_bytes::Integer)
+        total = Int(total_bytes)
+        free = Int(free_bytes)
+        reserved = Int(reserved_bytes)
+        total > 0 || throw(ArgumentError("total GPU memory must be positive"))
+        0 <= free <= total || throw(ArgumentError("free GPU memory must be in 0:total"))
+        0 <= reserved <= total || throw(ArgumentError("reserved GPU memory must be in 0:total"))
+        new(free, total, reserved)
+    end
+end
+
+GPUBackendError(kind::Symbol, message::String) =
+    GPUBackendError(kind, message, nothing)
+
+function Base.showerror(io::IO, error::GPUBackendError)
+    print(io, "GPU backend ", repr(error.kind), ": ", error.message)
+    if error.cause !== nothing
+        print(io, "\nCaused by: ")
+        showerror(io, error.cause)
+    end
+end
+
+const _CPU_BACKEND = GPUBackend(
+    :cpu,
+    nothing,
+    ComplexF64,
+    "CPU checkpointed path",
+    nothing,
+)
+
+const _GPU_PROVIDER_IDS = Dict(
+    :cuda => Base.PkgId(UUID("052768ef-5323-5732-b1bb-66c8b64840ba"), "CUDA"),
+    :amdgpu => Base.PkgId(UUID("21141c5a-9bdb-4563-92ae-f87d6854732e"), "AMDGPU"),
+    :metal => Base.PkgId(UUID("dde4c033-4e86-420c-a63e-0dd931031962"), "Metal"),
+)
+const _GPU_PROVIDER_FACTORIES = Dict{Symbol,Function}()
+const _GPU_MEMORY_STATUS_FACTORIES = Dict{Symbol,Function}()
+const _GPU_KERNEL_TIMER_FACTORIES = Dict{Symbol,Function}()
+const _GPU_PROVIDER_PRIORITY = (:cuda, :amdgpu, :metal)
+
+function _canonical_gpu_kind(kind::Symbol)
+    kind in (:amd, :rocm, :hip) && return :amdgpu
+    kind in (:auto, :cpu, :cuda, :amdgpu, :metal) && return kind
+    throw(ArgumentError(
+        "unknown GPU backend $(repr(kind)); expected :auto, :cpu, :cuda, :amdgpu, or :metal",
+    ))
+end
+
+function _register_gpu_memory_status!(kind::Symbol, factory::Function)
+    canonical = _canonical_gpu_kind(kind)
+    canonical in _GPU_PROVIDER_PRIORITY || throw(ArgumentError(
+        "cannot register memory status for non-GPU backend $(repr(kind))",
+    ))
+    _GPU_MEMORY_STATUS_FACTORIES[canonical] = factory
+    nothing
+end
+
+function _register_gpu_kernel_timer!(kind::Symbol, timer::Function)
+    canonical = _canonical_gpu_kind(kind)
+    canonical in _GPU_PROVIDER_PRIORITY || throw(ArgumentError(
+        "cannot register a kernel timer for non-GPU backend $(repr(kind))",
+    ))
+    _GPU_KERNEL_TIMER_FACTORIES[canonical] = timer
+    nothing
+end
+
+function _gpu_kernel_timer(backend::GPUBackend)
+    get(_GPU_KERNEL_TIMER_FACTORIES, backend.kind, nothing)
+end
+
+function _register_gpu_backend!(kind::Symbol, factory::Function)
+    canonical = _canonical_gpu_kind(kind)
+    canonical in _GPU_PROVIDER_PRIORITY || throw(ArgumentError(
+        "cannot register non-GPU backend $(repr(kind))",
+    ))
+    _GPU_PROVIDER_FACTORIES[canonical] = factory
+    nothing
+end
+
+function _load_gpu_provider!(kind::Symbol)
+    haskey(_GPU_PROVIDER_FACTORIES, kind) && return
+    package = _GPU_PROVIDER_IDS[kind]
+    try
+        Base.require(package)
+    catch error
+        throw(GPUBackendError(
+            kind,
+            "$(package.name).jl is not available in the active environment; " *
+            "install it with `using Pkg; Pkg.add(\"$(package.name)\")`",
+            error,
+        ))
+    end
+    haskey(_GPU_PROVIDER_FACTORIES, kind) || throw(GPUBackendError(
+        kind,
+        "$(package.name).jl loaded, but the QaoaXorsat package extension did not activate",
+    ))
+end
+
+function _create_gpu_backend(kind::Symbol)
+    _load_gpu_provider!(kind)
+    try
+        backend = Base.invokelatest(_GPU_PROVIDER_FACTORIES[kind])
+        backend isa GPUBackend || throw(TypeError(
+            :_create_gpu_backend, GPUBackend, backend,
+        ))
+        backend.kind == kind || throw(ArgumentError(
+            "provider returned backend $(repr(backend.kind)) for $(repr(kind))",
+        ))
+        backend
+    catch error
+        error isa GPUBackendError && rethrow()
+        throw(GPUBackendError(kind, "runtime or device initialization failed", error))
+    end
+end
+
+@kernel function _gpu_validation_kernel!(output, @Const(input))
+    index = @index(Global)
+    @inbounds output[index] = input[index] + input[index]
+end
 
 """
-    make_gpu_evaluator(backend::GPUBackend; checkpoint_interval=0) -> Function or nothing
+    validate_gpu_backend(backend::GPUBackend) -> Bool
 
-Build a `gpu_evaluator(params, angles; clause_sign)` closure suitable for
-passing into `swarm_optimize` / `optimize_angles`. Returns `nothing` if no
-GPU backend is available, in which case callers should fall back to the
-CPU checkpointed path.
+Validate a backend by allocating an array, launching a KernelAbstractions
+kernel, synchronizing the device, and checking the host result. Returns `true`
+or throws `GPUBackendError`; it never silently substitutes another backend.
 """
-function make_gpu_evaluator(backend::GPUBackend=GPU_BACKEND; checkpoint_interval::Int=0)
+function validate_gpu_backend(backend::GPUBackend)
+    Base.invokelatest(_validate_gpu_backend_latest, backend)
+end
+
+function _validate_gpu_backend_latest(backend::GPUBackend)
+    backend.kind == :cpu && return true
+    backend.gpu_array_fn === nothing && throw(GPUBackendError(
+        backend.kind, "backend has no device-array constructor",
+    ))
+
+    try
+        input_cpu = backend.complex_type[complex(1, 2), complex(-3, 0.5)]
+        input = Base.invokelatest(backend.gpu_array_fn, input_cpu)
+        output = similar(input)
+        ka_backend = KernelAbstractions.get_backend(input)
+        ka_backend isa KernelAbstractions.CPU && throw(ErrorException(
+            "device-array constructor returned a CPU array",
+        ))
+        kernel! = _gpu_validation_kernel!(ka_backend)
+        kernel!(output, input; ndrange=length(input))
+        KernelAbstractions.synchronize(ka_backend)
+        Array(output) == input_cpu .+ input_cpu || throw(ErrorException(
+            "validation kernel returned an incorrect result",
+        ))
+        true
+    catch error
+        error isa GPUBackendError && rethrow()
+        throw(GPUBackendError(
+            backend.kind,
+            "device validation failed for $(backend.label)",
+            error,
+        ))
+    end
+end
+
+"""
+    gpu_backend(kind::Symbol=:auto; validate::Bool=true) -> GPUBackend
+
+Select a CPU, CUDA, AMDGPU/ROCm/HIP, or Metal backend. `:amd`, `:rocm`, and
+`:hip` are aliases for `:amdgpu`. An explicit vendor request throws when that
+backend is unavailable. `:auto` tries CUDA, AMDGPU, and Metal, then returns CPU.
+"""
+function gpu_backend(kind::Symbol=:auto; validate::Bool=true)
+    canonical = _canonical_gpu_kind(kind)
+    canonical == :cpu && return _CPU_BACKEND
+
+    if canonical == :auto
+        for candidate in _GPU_PROVIDER_PRIORITY
+            try
+                backend = _create_gpu_backend(candidate)
+                validate && Base.invokelatest(validate_gpu_backend, backend)
+                return backend
+            catch error
+                error isa GPUBackendError || rethrow()
+            end
+        end
+        return _CPU_BACKEND
+    end
+
+    backend = _create_gpu_backend(canonical)
+    validate && Base.invokelatest(validate_gpu_backend, backend)
+    backend
+end
+
+"""
+    gpu_backend_available(kind::Symbol; validate::Bool=true) -> Bool
+
+Return whether an explicit backend can be constructed and, by default,
+validated with a real device kernel. This query never throws for a known kind.
+"""
+function gpu_backend_available(kind::Symbol; validate::Bool=true)
+    canonical = _canonical_gpu_kind(kind)
+    canonical == :cpu && return true
+    canonical == :auto && return gpu_backend(:auto; validate).kind != :cpu
+    try
+        gpu_backend(canonical; validate)
+        true
+    catch error
+        error isa GPUBackendError || rethrow()
+        false
+    end
+end
+
+detect_gpu_backend(kind::Symbol=:auto; validate::Bool=true) =
+    gpu_backend(kind; validate)
+
+"""
+    gpu_memory_status(backend::GPUBackend) -> GPUMemoryStatus
+
+Return live free, total, and allocator-reserved bytes for admission control.
+Provider extensions supply the vendor-specific query. Missing telemetry is an
+error for vendor backends so callers fail closed.
+"""
+function gpu_memory_status(backend::GPUBackend)
+    if backend.kind == :cpu
+        total = Sys.total_memory()
+        return GPUMemoryStatus(Sys.free_memory(), total, 0)
+    end
+    factory = get(_GPU_MEMORY_STATUS_FACTORIES, backend.kind, nothing)
+    factory === nothing && throw(GPUBackendError(
+        backend.kind, "the backend does not provide required live memory telemetry",
+    ))
+    try
+        status = Base.invokelatest(factory)
+        status isa GPUMemoryStatus || throw(TypeError(
+            :gpu_memory_status, GPUMemoryStatus, status,
+        ))
+        status
+    catch error
+        error isa GPUBackendError && rethrow()
+        throw(GPUBackendError(backend.kind, "memory telemetry query failed", error))
+    end
+end
+
+"""
+    gpu_array(backend::GPUBackend, array)
+
+Copy an array to the selected GPU using the precision required by the backend.
+"""
+function gpu_array(backend::GPUBackend, array::AbstractArray)
+    backend.gpu_array_fn === nothing && throw(GPUBackendError(
+        backend.kind, "the CPU backend does not create GPU arrays",
+    ))
+    Base.invokelatest(backend.gpu_array_fn, array)
+end
+
+"""
+    make_gpu_evaluator(backend::GPUBackend=gpu_backend();
+                       checkpoint_interval::Int=0) -> Function or nothing
+
+Build a `gpu_evaluator(params, angles; clause_sign)` closure for
+`optimize_angles`, `optimize_depth_sequence`, or `swarm_optimize`. Returns
+`nothing` for the CPU backend.
+"""
+function make_gpu_evaluator(
+    backend::GPUBackend=gpu_backend();
+    checkpoint_interval::Int=0,
+)
+    Base.invokelatest(
+        _make_gpu_evaluator_latest,
+        backend;
+        checkpoint_interval,
+    )
+end
+
+function _make_gpu_evaluator_latest(
+    backend::GPUBackend;
+    checkpoint_interval::Int=0,
+)
     backend.kind == :cpu && return nothing
+    checkpoint_interval >= 0 || throw(ArgumentError(
+        "checkpoint_interval must be nonnegative, got $checkpoint_interval",
+    ))
+    validate_gpu_backend(backend)
 
-    # Lazy include: only loaded once, only when a GPU is present
     if !@isdefined(gpu_checkpointed_forward_backward)
         include(joinpath(@__DIR__, "gpu_checkpointed.jl"))
     end
 
-    fn = backend.gpu_array_fn
-    function gpu_eval(params, angles; clause_sign)
-        gpu_checkpointed_forward_backward(params, angles, fn;
-            clause_sign, checkpoint_interval)
+    array_fn = backend.gpu_array_fn
+    function gpu_evaluator(params, angles; clause_sign)
+        Base.invokelatest(
+            gpu_checkpointed_forward_backward,
+            params,
+            angles,
+            array_fn;
+            clause_sign,
+            checkpoint_interval,
+        )
     end
-    return gpu_eval
+    gpu_evaluator
 end
