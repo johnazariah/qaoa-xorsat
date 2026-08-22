@@ -273,7 +273,7 @@ src/
   spectral_analysis.jl   # Effective rank analysis
   transfer_oracles.jl    # Raw transfer matrix oracles
   maxcut_transfer.jl     # MaxCut-specific transfer recursion
-  gpu_*.jl               # GPU acceleration (Metal/CUDA, auto-detected)
+  gpu_*.jl               # GPU acceleration (CUDA/AMDGPU/Metal, auto-detected)
 
 test/                    # 21 test files, 1741 tests, 100% coverage
 
@@ -308,6 +308,9 @@ julia --project=. -t auto -e 'using Pkg; Pkg.test()'
 - Exact finite-N MaxCut state, objective, success probability, and gradient
 - Overflow protection and normalization
 - GPU kernels (forward, backward, WHT, checkpointed)
+
+See [AMD GPU support on Windows](docs/amd-gpu-windows.md) for optional package
+setup, explicit backend selection, live Radeon validation, and scaling results.
 
 ## Key Design Decisions
 
