@@ -88,6 +88,7 @@ export sparse_qaoa_state, sparse_qaoa_energy
 # Exact diagonal-cost/X-mixer statevector evaluator on KernelAbstractions backends
 include("gpu_statevector.jl")
 export DeviceStatevectorEvaluator, StatevectorExecutionStats
+export StatevectorMemoryAdmission, statevector_memory_admission
 export make_statevector_evaluator, statevector_execution_stats, synchronize
 
 # Manual adjoint differentiation

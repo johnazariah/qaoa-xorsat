@@ -148,6 +148,7 @@ share one exact statevector implementation for diagonal Z/ZZ costs and the
 
 ```julia
 backend = gpu_backend(:amdgpu)
+admission = statevector_memory_admission(backend, N)
 evaluator = make_statevector_evaluator(backend, N, diagonal)
 value, gamma_gradient, beta_gradient = evaluator(angles)
 stats = statevector_execution_stats(evaluator)
@@ -157,7 +158,9 @@ The initial state is normalized `|+>^N`. Evaluator calls synchronize before
 returning and expose source-bound kernel-launch, device, dtype, memory, and
 timing telemetry. Construction admits memory before device state allocation,
 uses at most 80% of reported memory by default, and never falls back to CPU
-after an explicit provider request.
+after an explicit provider request. On AMD unified memory the cap uses the
+lesser of the HIP aperture and physical host RAM. Call
+`statevector_memory_admission` before constructing a large host diagonal.
 
 ### Exact finite-N MaxCut statevector API (v0.5.0)
 

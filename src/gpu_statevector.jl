@@ -37,6 +37,20 @@ struct StatevectorExecutionStats
     verification_seconds::Float64
 end
 
+struct StatevectorMemoryAdmission
+    backend::Symbol
+    N::Int
+    dimension::Int
+    complex_type::Type
+    predicted_live_bytes::Int
+    free_bytes::Int
+    reported_total_bytes::Int
+    admission_total_bytes::Int
+    reserved_bytes::Int
+    memory_cap_bytes::Int
+    memory_fraction::Float64
+end
+
 mutable struct _StatevectorRouteCounter
     kernel_launches::Int
     reservation_after::Int
@@ -188,8 +202,15 @@ function _admit_statevector_memory(
     status::GPUMemoryStatus,
     predicted_live_bytes::Int,
     memory_fraction::Float64,
+    ;
+    host_total_bytes::Integer=Sys.total_memory(),
 )
-    cap = floor(Int, memory_fraction * status.total_bytes)
+    admission_total = _statevector_admission_total(
+        backend,
+        status,
+        host_total_bytes,
+    )
+    cap = floor(Int, memory_fraction * admission_total)
     status.reserved_bytes <= cap || throw(GPUBackendError(
         backend.kind,
         "allocator reservation $(status.reserved_bytes) bytes already exceeds " *
@@ -209,6 +230,18 @@ function _admit_statevector_memory(
         "$(status.free_bytes) bytes",
     ))
     cap
+end
+
+function _statevector_admission_total(
+    backend::GPUBackend,
+    status::GPUMemoryStatus,
+    host_total_bytes::Integer,
+)
+    host_total = Int(host_total_bytes)
+    host_total > 0 || throw(ArgumentError("host total memory must be positive"))
+    backend.kind == :amdgpu ?
+        min(status.total_bytes, host_total) :
+        status.total_bytes
 end
 
 function _statevector_postcheck!(ev::DeviceStatevectorEvaluator)
@@ -251,6 +284,56 @@ function _validate_statevector_size(N::Int, diagonal)
 end
 
 """
+    statevector_memory_admission(
+        backend::GPUBackend,
+        N::Int;
+        memory_fraction=0.8,
+    ) -> StatevectorMemoryAdmission
+
+Check statevector memory admission without allocating any `O(2^N)` arrays.
+For AMD unified memory, the admission total is the lesser of the HIP-reported
+aperture and physical host RAM. Throws `GPUBackendError` when inadmissible.
+"""
+function statevector_memory_admission(
+    backend::GPUBackend,
+    N::Int;
+    memory_fraction::Real=_STATEVECTOR_MAX_MEMORY_FRACTION,
+)
+    fraction = _validate_memory_fraction(memory_fraction)
+    dimension = _statevector_dimension(N)
+    CT = backend.complex_type
+    CT in (ComplexF32, ComplexF64) || throw(ArgumentError(
+        "statevector backend requires ComplexF32 or ComplexF64, got $CT",
+    ))
+    predicted = _statevector_memory_bytes(dimension, CT)
+    status = gpu_memory_status(backend)
+    admission_total = _statevector_admission_total(
+        backend,
+        status,
+        Sys.total_memory(),
+    )
+    cap = _admit_statevector_memory(
+        backend,
+        status,
+        predicted,
+        fraction,
+    )
+    StatevectorMemoryAdmission(
+        backend.kind,
+        N,
+        dimension,
+        CT,
+        predicted,
+        status.free_bytes,
+        status.total_bytes,
+        admission_total,
+        status.reserved_bytes,
+        cap,
+        fraction,
+    )
+end
+
+"""
     make_statevector_evaluator(
         backend::GPUBackend,
         N::Int,
@@ -269,16 +352,19 @@ function make_statevector_evaluator(
     diagonal::AbstractVector{<:Real};
     memory_fraction::Real=_STATEVECTOR_MAX_MEMORY_FRACTION,
 )
-    fraction = _validate_memory_fraction(memory_fraction)
-    dimension = _validate_statevector_size(N, diagonal)
-    CT = backend.complex_type
-    CT in (ComplexF32, ComplexF64) || throw(ArgumentError(
-        "statevector backend requires ComplexF32 or ComplexF64, got $CT",
+    dimension = _statevector_dimension(N)
+    length(diagonal) == dimension || throw(DimensionMismatch(
+        "diagonal length $(length(diagonal)) does not equal 2^N = $dimension",
     ))
+    admission = statevector_memory_admission(
+        backend,
+        N;
+        memory_fraction,
+    )
+    all(isfinite, diagonal) || throw(ArgumentError("cost diagonal must be finite"))
+    fraction = admission.memory_fraction
+    CT = admission.complex_type
     RT = real(CT)
-    predicted = _statevector_memory_bytes(dimension, CT)
-    status = gpu_memory_status(backend)
-    cap = _admit_statevector_memory(backend, status, predicted, fraction)
     backend.kind == :cpu || validate_gpu_backend(backend)
 
     to_backend = backend.kind == :cpu ? copy :
@@ -309,12 +395,12 @@ function make_statevector_evaluator(
             scratch,
             Float64[],
             fraction,
-            predicted,
-            status.reserved_bytes,
-            cap,
+            admission.predicted_live_bytes,
+            admission.reserved_bytes,
+            admission.memory_cap_bytes,
             _StatevectorRouteCounter(
                 0,
-                status.reserved_bytes,
+                admission.reserved_bytes,
                 0,
                 nothing,
                 0.0,
@@ -399,24 +485,16 @@ function make_statevector_evaluator(
     terms::AbstractVector{PauliTerm};
     memory_fraction::Real=_STATEVECTOR_MAX_MEMORY_FRACTION,
 )
-    fraction = _validate_memory_fraction(memory_fraction)
-    dimension = _statevector_dimension(N)
-    CT = backend.complex_type
-    CT in (ComplexF32, ComplexF64) || throw(ArgumentError(
-        "statevector backend requires ComplexF32 or ComplexF64, got $CT",
-    ))
-    predicted = _statevector_memory_bytes(dimension, CT)
-    _admit_statevector_memory(
+    admission = statevector_memory_admission(
         backend,
-        gpu_memory_status(backend),
-        predicted,
-        fraction,
+        N;
+        memory_fraction,
     )
     make_statevector_evaluator(
         backend,
         N,
         _diagonal_from_pauli_terms(N, terms);
-        memory_fraction=fraction,
+        memory_fraction=admission.memory_fraction,
     )
 end
 

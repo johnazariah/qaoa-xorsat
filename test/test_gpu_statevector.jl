@@ -65,6 +65,13 @@ include("statevector_test_utils.jl")
     end
 
     @testset "admission and fail-closed behavior" begin
+        cpu_admission = statevector_memory_admission(cpu_backend, 4)
+        @test cpu_admission.backend == :cpu
+        @test cpu_admission.dimension == 16
+        @test cpu_admission.predicted_live_bytes == 120 * 16
+        @test cpu_admission.admission_total_bytes ==
+            cpu_admission.reported_total_bytes
+
         telemetry = GPUMemoryStatus(
             47_102_148_608 - 43_117_445_120,
             47_102_148_608,
@@ -85,6 +92,42 @@ include("statevector_test_utils.jl")
             120 * 256
         @test QaoaXorsat._statevector_memory_bytes(256, ComplexF32) ==
             60 * 256
+
+        amd_backend = GPUBackend(
+            :amdgpu,
+            identity,
+            ComplexF64,
+            "AMD UMA regression",
+            "test",
+        )
+        device_total = 47_102_148_608
+        host_total = 33_981_000_000
+        uma_status = GPUMemoryStatus(device_total, device_total, 0)
+        @test QaoaXorsat._statevector_admission_total(
+            amd_backend,
+            uma_status,
+            host_total,
+        ) == host_total
+        @test QaoaXorsat._admit_statevector_memory(
+            amd_backend,
+            uma_status,
+            0,
+            0.8;
+            host_total_bytes=host_total,
+        ) == floor(Int, 0.8 * host_total)
+        n28_predicted = QaoaXorsat._statevector_memory_bytes(
+            1 << 28,
+            ComplexF64,
+        )
+        @test n28_predicted == 32_212_254_720
+        @test_throws GPUBackendError QaoaXorsat._admit_statevector_memory(
+            amd_backend,
+            uma_status,
+            n28_predicted,
+            0.8;
+            host_total_bytes=host_total,
+        )
+
         @test_throws ArgumentError make_statevector_evaluator(
             cpu_backend,
             4,

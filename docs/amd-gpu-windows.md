@@ -60,6 +60,11 @@ gpu_backend(kind::Symbol=:auto; validate::Bool=true)::GPUBackend
 gpu_backend_available(kind::Symbol; validate::Bool=true)::Bool
 validate_gpu_backend(backend::GPUBackend)::Bool
 gpu_array(backend::GPUBackend, array::AbstractArray)
+statevector_memory_admission(
+    backend::GPUBackend,
+    N::Int;
+    memory_fraction=0.8,
+)::StatevectorMemoryAdmission
 make_gpu_evaluator(backend::GPUBackend=gpu_backend();
                    checkpoint_interval::Int=0)
 make_statevector_evaluator(
@@ -95,6 +100,11 @@ beta_gradient::Vector{Float64})`. Gradient ordering is
 explicitly. Calls synchronize before returning; the explicit `synchronize`
 method is also available.
 
+Call `statevector_memory_admission(backend, N)` before materializing a large
+`2^N` host diagonal. It performs no `O(2^N)` allocation and returns immutable
+predicted, free, reserved, reported-total, admission-total, and cap telemetry,
+or throws `GPUBackendError`.
+
 `statevector_execution_stats` is immutable telemetry containing backend kind,
 device, complex dtype, actual KA kernel-launch count, predicted live bytes,
 allocator reservation before/after, memory cap, source revision, evaluation
@@ -111,14 +121,20 @@ Admission happens before validation or device-state allocation. For
 device diagonal, one complex host initial-state copy, one real host diagonal,
 and 25% transient headroom: `120 * dimension` bytes. ComplexF32 predicts
 `60 * dimension` bytes. Construction requires both
-`reserved + predicted <= memory_fraction * total` and `predicted <= free`,
-where `memory_fraction` defaults to and cannot exceed 0.8. The observed
-allocator reservation is checked again after allocation and every evaluation.
+`reserved + predicted <= memory_fraction * admission_total` and
+`predicted <= free`, where `memory_fraction` defaults to and cannot exceed 0.8.
+For AMD shared/unified memory, `admission_total` is
+`min(HIP reported total, Sys.total_memory())`, preventing a large GPU aperture
+from consuming OS and Julia headroom. The observed allocator reservation is
+checked again after allocation and every evaluation.
 Telemetry failures and allocation failures throw `GPUBackendError`; there is
 no CPU fallback.
 
 The retained regression telemetry `43,117,445,120 / 47,102,148,608` bytes is
 91.54% reserved and is rejected by the 80% cap before state allocation.
+The N=28 ComplexF64 prediction is 32,212,254,720 bytes; on the validated host
+it is rejected against 80% of physical RAM even though it fits within 80% of
+the larger 47,102,148,608-byte HIP aperture.
 
 The mutually compatible provider floors are AMDGPU 2.7.3, CUDA 6.3, and Metal
 1.10.1. CUDA 6.0-6.2 require GPUCompiler 1.x and cannot share an environment
