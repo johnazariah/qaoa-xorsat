@@ -251,6 +251,7 @@ done
 ## Documentation
 
 - **[Ten innovations](docs/innovations.md)** — the full technical story: WHT factorisation, manual adjoint, normalisation, cost algebra, swarm optimizer, gradient checkpointing, and the correctness framework that makes the results trustworthy
+- [AMD GPU support and evidence](docs/amd-gpu.md) — Windows ROCm setup, strict live-device validation, and retained scaling measurements
 - [Computational limits](docs/computational-limits.md) — what drives the cost, what the WHT fixed, what still blows up
 - [Reproducing results](docs/reproducing-results.md) — step-by-step guide for all paper tables
 
@@ -273,7 +274,7 @@ src/
   spectral_analysis.jl   # Effective rank analysis
   transfer_oracles.jl    # Raw transfer matrix oracles
   maxcut_transfer.jl     # MaxCut-specific transfer recursion
-  gpu_*.jl               # GPU acceleration (Metal/CUDA, auto-detected)
+  gpu_*.jl               # GPU acceleration (AMDGPU/CUDA/Metal, auto-detected)
 
 test/                    # 21 test files, 1741 tests, 100% coverage
 

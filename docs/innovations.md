@@ -685,8 +685,8 @@ natural fit for GPU parallelism.
 ### The Solution
 
 GPU kernels written with [KernelAbstractions.jl](https://github.com/JuliaGPU/KernelAbstractions.jl)
-for portable execution on **CUDA** (NVIDIA) and **Metal** (Apple Silicon)
-backends. The GPU pipeline includes:
+for portable execution on **AMDGPU/ROCm**, **CUDA** (NVIDIA), and **Metal**
+(Apple Silicon) backends. The GPU pipeline includes:
 
 - **GPU WHT**: level-by-level butterfly with fused multi-level kernel launches.
   Each thread handles one butterfly pair; threads are independent within a
@@ -713,17 +713,17 @@ backends. The GPU pipeline includes:
 end
 ```
 
-Metal requires Float32 (no Float64 support on Apple GPUs), which limits
-precision but provides $\sim 10\times$ throughput over CPU at $p \leq 10$.
-CUDA supports Float64 natively.
+Metal uses ComplexF32 because Apple GPUs do not support Float64. CUDA and
+AMDGPU use ComplexF64 on supported hardware.
 
 ### Status
 
-The GPU pipeline is implemented and tested but **not wired into the production
-depth-sweep scripts**. The CPU checkpointed adjoint path is the workhorse for
-$p \geq 13$ results. GPU acceleration is most valuable for interactive
-exploration at $p \leq 10$ and for future $p \geq 14$ runs where CPU wall
-time becomes prohibitive.
+The public backend API is wired for explicit or automatic provider selection
+and for optimizer evaluator injection. Live AMD hardware validation and retained
+scaling evidence are documented in [AMD GPU support and evidence](amd-gpu.md).
+CUDA and Metal compatibility is supported by the shared kernels, unified
+resolver, and existing golden tests; no live CUDA or Metal hardware run is
+claimed there.
 
 ---
 
