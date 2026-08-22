@@ -123,9 +123,9 @@ operators and all ordered two-site products. Constructors are `x_term`,
 
 Mixed terms preserve which axis acts on which qubit. Endpoint order is
 canonicalised without losing that association: `xy_term(3, 1)` is normalised to
-`yx_term(1, 3)`. Coefficients are finite real values, making every accepted term
-Hermitian. The public Pauli API is CPU statevector-only; it does not claim GPU
-dispatch.
+`yx_term(1, 3)`. Coefficients are finite real values, making every accepted term Hermitian. The
+general non-diagonal evolution API remains CPU-only. Diagonal `:z`/`:zz` costs
+can also use the exact device-statevector API below.
 
 ```julia
 using QaoaXorsat
@@ -139,6 +139,25 @@ state = ComplexF64[1, zeros(7)...]
 out = similar(state)
 apply_terms!(out, terms, state, 3)
 ```
+
+### Exact diagonal-cost GPU statevector API (v0.7.0)
+
+CUDA, AMDGPU, Metal, and provider-independent KernelAbstractions CPU execution
+share one exact statevector implementation for diagonal Z/ZZ costs and the
+`sum(X)` mixer:
+
+```julia
+backend = gpu_backend(:amdgpu)
+evaluator = make_statevector_evaluator(backend, N, diagonal)
+value, gamma_gradient, beta_gradient = evaluator(angles)
+stats = statevector_execution_stats(evaluator)
+```
+
+The initial state is normalized `|+>^N`. Evaluator calls synchronize before
+returning and expose source-bound kernel-launch, device, dtype, memory, and
+timing telemetry. Construction admits memory before device state allocation,
+uses at most 80% of reported memory by default, and never falls back to CPU
+after an explicit provider request.
 
 ### Exact finite-N MaxCut statevector API (v0.5.0)
 

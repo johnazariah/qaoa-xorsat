@@ -62,6 +62,22 @@ validate_gpu_backend(backend::GPUBackend)::Bool
 gpu_array(backend::GPUBackend, array::AbstractArray)
 make_gpu_evaluator(backend::GPUBackend=gpu_backend();
                    checkpoint_interval::Int=0)
+make_statevector_evaluator(
+    backend::GPUBackend,
+    N::Int,
+    diagonal::AbstractVector{<:Real};
+    memory_fraction=0.8,
+)::DeviceStatevectorEvaluator
+make_statevector_evaluator(
+    backend::GPUBackend,
+    N::Int,
+    terms::AbstractVector{PauliTerm};
+    memory_fraction=0.8,
+)::DeviceStatevectorEvaluator
+statevector_execution_stats(
+    evaluator::DeviceStatevectorEvaluator,
+)::StatevectorExecutionStats
+synchronize(evaluator::DeviceStatevectorEvaluator)
 ```
 
 Explicit `:amdgpu` selection, including aliases `:amd`, `:rocm`, and `:hip`,
@@ -69,6 +85,40 @@ throws `GPUBackendError` if AMDGPU, HIP, the device libraries, the device, or
 the validation kernel is unavailable. It never substitutes CPU. `:auto` tries
 CUDA, AMDGPU, and Metal in that order, then returns the CPU backend. AMDGPU and
 CUDA use `ComplexF64`; Metal uses `ComplexF32`.
+
+The statevector evaluator accepts a real diagonal or Z/ZZ `PauliTerm`s, starts
+from normalized `|+>^N`, applies exact cost phases and `sum(X)` mixer
+butterflies, and returns
+`(value::Float64, gamma_gradient::Vector{Float64},
+beta_gradient::Vector{Float64})`. Gradient ordering is
+`[gamma_1, ..., gamma_p, beta_1, ..., beta_p]`. Non-diagonal costs fail
+explicitly. Calls synchronize before returning; the explicit `synchronize`
+method is also available.
+
+`statevector_execution_stats` is immutable telemetry containing backend kind,
+device, complex dtype, actual KA kernel-launch count, predicted live bytes,
+allocator reservation before/after, memory cap, source revision, evaluation
+counts, first-evaluation and steady-state wall times, allocation/transfer and
+verification wall times, synchronized-launch wall time, and pure kernel time
+when available. AMD kernel time uses HIP events. Portable compile-only and
+launch-only times are reported as unavailable rather than inferred; the first
+evaluation is the reproducible compile/warmup measurement.
+
+### Statevector memory admission
+
+Admission happens before validation or device-state allocation. For
+`dimension = 2^N`, ComplexF64 predicts four complex device buffers, one real
+device diagonal, one complex host initial-state copy, one real host diagonal,
+and 25% transient headroom: `120 * dimension` bytes. ComplexF32 predicts
+`60 * dimension` bytes. Construction requires both
+`reserved + predicted <= memory_fraction * total` and `predicted <= free`,
+where `memory_fraction` defaults to and cannot exceed 0.8. The observed
+allocator reservation is checked again after allocation and every evaluation.
+Telemetry failures and allocation failures throw `GPUBackendError`; there is
+no CPU fallback.
+
+The retained regression telemetry `43,117,445,120 / 47,102,148,608` bytes is
+91.54% reserved and is rejected by the 80% cap before state allocation.
 
 The mutually compatible provider floors are AMDGPU 2.7.3, CUDA 6.3, and Metal
 1.10.1. CUDA 6.0-6.2 require GPUCompiler 1.x and cannot share an environment
@@ -82,8 +132,11 @@ Run the live compatibility test in an environment containing AMDGPU:
 & $julia --project=@amd-qaoa test\test_gpu_amdgpu.jl
 ```
 
-The test checks the WHT and MaxCut/XORSAT forward and adjoint paths against
-CPU `ComplexF64` references. On the Radeon 860M all 18 tests passed. At `p=12`,
+The test checks the WHT and MaxCut/XORSAT forward and adjoint paths plus the
+physical statevector matrix `N={4,6,8}`, `p={1,2,3}` against CPU `ComplexF64`
+references. On the Radeon 860M all 126 current assertions pass, including
+source-bound kernel launches, HIP-event timing, and the `1e-10` absolute and
+relative statevector tolerances. At Basso depth `p=12`,
 the measured absolute errors were `2.84e-14` for the value, `4.64e-11` for the
 gamma gradient, and `5.84e-11` for the beta gradient. The live tolerance is
 `rtol=2e-9`, reflecting accumulated floating-point reordering rather than a

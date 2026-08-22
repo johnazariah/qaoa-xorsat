@@ -24,8 +24,23 @@ function amdgpu_backend()
     )
 end
 
+function amdgpu_memory_status()
+    free_bytes, total_bytes = AMDGPU.info()
+    QaoaXorsat.GPUMemoryStatus(
+        free_bytes,
+        total_bytes,
+        AMDGPU.cached_memory(),
+    )
+end
+
+function amdgpu_timed_launch(launch::Function)
+    AMDGPU.@elapsed Base.invokelatest(launch)
+end
+
 function __init__()
     QaoaXorsat._register_gpu_backend!(:amdgpu, amdgpu_backend)
+    QaoaXorsat._register_gpu_memory_status!(:amdgpu, amdgpu_memory_status)
+    QaoaXorsat._register_gpu_kernel_timer!(:amdgpu, amdgpu_timed_launch)
 end
 
 end

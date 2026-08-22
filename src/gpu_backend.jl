@@ -28,6 +28,22 @@ struct GPUBackendError <: Exception
     cause::Any
 end
 
+struct GPUMemoryStatus
+    free_bytes::Int
+    total_bytes::Int
+    reserved_bytes::Int
+
+    function GPUMemoryStatus(free_bytes::Integer, total_bytes::Integer, reserved_bytes::Integer)
+        total = Int(total_bytes)
+        free = Int(free_bytes)
+        reserved = Int(reserved_bytes)
+        total > 0 || throw(ArgumentError("total GPU memory must be positive"))
+        0 <= free <= total || throw(ArgumentError("free GPU memory must be in 0:total"))
+        0 <= reserved <= total || throw(ArgumentError("reserved GPU memory must be in 0:total"))
+        new(free, total, reserved)
+    end
+end
+
 GPUBackendError(kind::Symbol, message::String) =
     GPUBackendError(kind, message, nothing)
 
@@ -53,6 +69,8 @@ const _GPU_PROVIDER_IDS = Dict(
     :metal => Base.PkgId(UUID("dde4c033-4e86-420c-a63e-0dd931031962"), "Metal"),
 )
 const _GPU_PROVIDER_FACTORIES = Dict{Symbol,Function}()
+const _GPU_MEMORY_STATUS_FACTORIES = Dict{Symbol,Function}()
+const _GPU_KERNEL_TIMER_FACTORIES = Dict{Symbol,Function}()
 const _GPU_PROVIDER_PRIORITY = (:cuda, :amdgpu, :metal)
 
 function _canonical_gpu_kind(kind::Symbol)
@@ -61,6 +79,28 @@ function _canonical_gpu_kind(kind::Symbol)
     throw(ArgumentError(
         "unknown GPU backend $(repr(kind)); expected :auto, :cpu, :cuda, :amdgpu, or :metal",
     ))
+end
+
+function _register_gpu_memory_status!(kind::Symbol, factory::Function)
+    canonical = _canonical_gpu_kind(kind)
+    canonical in _GPU_PROVIDER_PRIORITY || throw(ArgumentError(
+        "cannot register memory status for non-GPU backend $(repr(kind))",
+    ))
+    _GPU_MEMORY_STATUS_FACTORIES[canonical] = factory
+    nothing
+end
+
+function _register_gpu_kernel_timer!(kind::Symbol, timer::Function)
+    canonical = _canonical_gpu_kind(kind)
+    canonical in _GPU_PROVIDER_PRIORITY || throw(ArgumentError(
+        "cannot register a kernel timer for non-GPU backend $(repr(kind))",
+    ))
+    _GPU_KERNEL_TIMER_FACTORIES[canonical] = timer
+    nothing
+end
+
+function _gpu_kernel_timer(backend::GPUBackend)
+    get(_GPU_KERNEL_TIMER_FACTORIES, backend.kind, nothing)
 end
 
 function _register_gpu_backend!(kind::Symbol, factory::Function)
@@ -205,6 +245,34 @@ end
 
 detect_gpu_backend(kind::Symbol=:auto; validate::Bool=true) =
     gpu_backend(kind; validate)
+
+"""
+    gpu_memory_status(backend::GPUBackend) -> GPUMemoryStatus
+
+Return live free, total, and allocator-reserved bytes for admission control.
+Provider extensions supply the vendor-specific query. Missing telemetry is an
+error for vendor backends so callers fail closed.
+"""
+function gpu_memory_status(backend::GPUBackend)
+    if backend.kind == :cpu
+        total = Sys.total_memory()
+        return GPUMemoryStatus(Sys.free_memory(), total, 0)
+    end
+    factory = get(_GPU_MEMORY_STATUS_FACTORIES, backend.kind, nothing)
+    factory === nothing && throw(GPUBackendError(
+        backend.kind, "the backend does not provide required live memory telemetry",
+    ))
+    try
+        status = Base.invokelatest(factory)
+        status isa GPUMemoryStatus || throw(TypeError(
+            :gpu_memory_status, GPUMemoryStatus, status,
+        ))
+        status
+    catch error
+        error isa GPUBackendError && rethrow()
+        throw(GPUBackendError(backend.kind, "memory telemetry query failed", error))
+    end
+end
 
 """
     gpu_array(backend::GPUBackend, array)

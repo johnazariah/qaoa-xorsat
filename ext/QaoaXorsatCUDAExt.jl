@@ -17,8 +17,17 @@ function cuda_backend()
     )
 end
 
+function cuda_memory_status()
+    QaoaXorsat.GPUMemoryStatus(
+        CUDA.free_memory(),
+        CUDA.total_memory(),
+        CUDA.cached_memory(),
+    )
+end
+
 function __init__()
     QaoaXorsat._register_gpu_backend!(:cuda, cuda_backend)
+    QaoaXorsat._register_gpu_memory_status!(:cuda, cuda_memory_status)
 end
 
 end
