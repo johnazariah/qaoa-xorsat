@@ -4,6 +4,12 @@ module QaoaXorsat
 include("diagnostics.jl")
 using .Diagnostics
 
+# Optional CUDA, AMDGPU, and Metal execution backends
+include("gpu_backend.jl")
+export GPUBackend, GPUBackendError
+export gpu_backend, gpu_backend_available, validate_gpu_backend, detect_gpu_backend
+export gpu_array, make_gpu_evaluator
+
 # Tree structure
 include("tree.jl")
 export TreeParams

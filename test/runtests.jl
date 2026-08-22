@@ -23,4 +23,5 @@ using Test
     include("test_normalization.jl")
     include("test_charge.jl")
     include("test_charge_adjoint.jl")
+    include("test_gpu_backend.jl")
 end

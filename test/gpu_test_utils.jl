@@ -1,5 +1,5 @@
 """
-Shared GPU test utilities — auto-detects CUDA or Metal backend.
+Shared GPU test utilities — auto-detects CUDA, AMDGPU, or Metal backend.
 
 Include this before GPU test code:
 
@@ -7,10 +7,10 @@ Include this before GPU test code:
 
 Provides:
     GPU_OK::Bool          — true if any GPU backend is functional
-    GPU_LABEL::String     — "CUDA" or "Metal" or "none"
-    GPU_CT::Type          — ComplexF64 (CUDA) or ComplexF32 (Metal)
-    GPU_RT::Type          — Float64 (CUDA) or Float32 (Metal)
-    GPU_ARRAY_TYPE        — CuArray or MtlArray or nothing
+    GPU_LABEL::String     — backend label or "none"
+    GPU_CT::Type          — ComplexF64 (CUDA/AMDGPU) or ComplexF32 (Metal)
+    GPU_RT::Type          — Float64 (CUDA/AMDGPU) or Float32 (Metal)
+    GPU_ARRAY_TYPE        — vendor array type or nothing
     gpu_array(x)          — convert CPU array to GPU array
     to_gpu(x)             — alias for gpu_array
     from_gpu(x)           — convert GPU array back to CPU
@@ -41,6 +41,22 @@ const _GPU_DETECT = let
                 rt = Float64
                 arr_type = Main.CUDA.CuArray
                 arr_fn = (x) -> Base.invokelatest(Main.CUDA.CuArray, x)
+            end
+        catch; end
+    end
+
+    # Try AMDGPU (AMD ROCm/HIP — ComplexF64)
+    if !ok
+        try
+            @eval Main using AMDGPU
+            if Base.invokelatest(() -> Main.AMDGPU.functional()) &&
+               !isempty(Base.invokelatest(Main.AMDGPU.devices))
+                ok = true
+                label = "AMDGPU"
+                ct = ComplexF64
+                rt = Float64
+                arr_type = Main.AMDGPU.ROCArray
+                arr_fn = (x) -> Base.invokelatest(Main.AMDGPU.ROCArray, x)
             end
         catch; end
     end
